@@ -1,0 +1,125 @@
+//Presentation
+
+Hi Good evening all,
+
+Today the presentation is about Exploration with API Client
+
+As a... Consultants/BI developer, you know the business inside out. You understand the data, you understand the client, and most importantly — you know exactly what the client need.
+But sometimes, you get an idea, which may involves pulling data from a service, automating a process, or building something that your client need.
+
+You may need backend help to make it work. So you write up the idea, raise a ticket, and then... you wait. You wait for someone else to work on that while your idea losing momentum.
+
+What if you didn't have to wait?
+What if you could take that idea, test it yourself, validate it yourself, and prove it works?
+
+That's exactly what we're going to explore today.
+
+So how do we stop waiting? The answer is an API client.
+
+What is API Client?
+
+Think of an API client as a personal gateway to any service. It lets you communicate directly with any system — send a request, get a response.
+You've probably used or heard of some of them: Postman, Bruno or cURL
+
+Postman — the most popular one. An application with a clean UI where you can build, test, and organize your API calls. It even lets you visualize responses, chain requests together, and share collections with your team.
+Bruno — a newer, lightweight alternative to Postman. Completely offline, open source, and stores your collections as files on your local machine. Great if you prefer simplicity and privacy.
+cURL — the most basic form of an API client. It's just a command line tool — no UI, no buttons — just you typing a request directly into your terminal.
+
+For today's demo, I'll be using Postman — but everything works the same way in Bruno or even cURL.
+
+Now, there are countless scenarios where an API client can help you.
+I want to show you how you can validate an idea and prove it works — all by yourself, before involving anyone else.
+And we're going to do that using Qlik Cloud APIs.
+Now here's something most Qlik developers don't realize — Qlik Cloud is not just what you see in the UI. The UI gives you access to a certain set of features. But underneath, there are APIs that go far beyond what the interface exposes. Almost everything that happens inside your Qlik tenant — every action, every event, every interaction — has an API behind it.
+
+***automation points***
+Now you might think why would I need API client, Qlik already have automations. but here's the thing about automation
+
+Not every tenant has Automation enabled, and also Automation has limited connectors.
+
+Let me give you a perfect example of what I mean.
+If you've worked with Qlik Cloud, you know there is absolutely no option in the Qlik Cloud UI to download an extension that's already deployed in your tenant.
+But with API you can able to download the extensions.
+First there is a GET method to get the list of extensions - GET /api/v1/extensions
+This will list all the extensions. From here you can able to get the ID/qextFilename. Then you can call an API to download the extension - GET /api/v1/extensions/{id}/file - here you can either include id/qextFilename, both of them will work.
+
+This is exactly the kind of scenario I'm talking about.
+
+Alright, let's dive in.
+The very first thing we need is authentication. To talk to any Qlik Cloud API, we need an access token.
+Qlik has recently revoked the option to create API keys for users. So instead, we are going to use OAuth configuration with Machine to Machine impersonation.
+What this means is — we create a Client ID and a Client Secret inside Qlik Cloud.
+Using these two values, we make a POST request to get an access token. This access token is what we actually use to authenticate our API calls. The only catch — it has an expiration time. So periodically, we need to hit the request.
+
+We need to save this access token in the collection variable. There are different kinds of variables like collection, environment and global in postman, but storing as collection variables will travel along with collection when you share it to the team.
+If you store your variables in the Environment or Global scope — those don't get shared when you export the collection.
+
+Now, this is where Postman makes things really elegant.
+In Postman, under the Scripts tab, you have two options — Pre-request and Post-response.
+We can use the Post-response script to automatically save the access token into a collection variable the moment we receive it. So every time we get a new token — it's saved automatically. No manual copy pasting.
+
+You don't have to worry about the script. Postman has a built-in AI chat that writes these scripts for you. You just explain the scenario and Postman generates the script automatically. Otherwise you can use the LLM's of your choice to generate the script by providing the response.
+
+But here's the thing — we don't want to hit the token request unnecessarily while the previous token is still valid, why waste a request?
+
+So we use the Pre-request script to check — is the existing token still valid? If yes — skip the request entirely. If no — it will allow to make a request.
+The scripting part is same as above, just explain the concept that you want and get it done with AI.
+
+***the access token should be created by now***
+
+You can able to see the request details in the console. If you open you may see the POST request which we already called. If I hit this request again... you might see the log written on the console which means the request is skipped.
+
+Now let's get to the topic of today's demo — the Audit API.
+
+The Audit API is one of the most powerful and underutilized APIs in Qlik Cloud. It gives you access to everything that happens inside your tenant. Every action, every event, every interaction — all logged and accessible. This makes it incredibly valuable for governance.
+
+Now, the Audit API lets you query events in two ways — either by source or by event type. And these two are connected — every event type belongs to a specific source.
+
+***show it in the postman***
+
+For today's demo, we are going to focus on a specific source — the reporting-service.
+This source captures everything related to downloads inside your Qlik apps. Every time someone downloads a chart or data from an app — it's logged here.
+And the details it gives you are very specific — the app ID, the download type, the user ID, the timestamp, and the download status.
+
+Now — here's a small challenge.
+The response gives you an app ID and a user ID. Just raw IDs. Not user friendly if you're trying to understand who did what.
+So to make this truly useful, we'll make two additional API calls — one to get the user details and another to get the app details.
+Using the Post-response script, we save these details into collection variables — essentially to create a map of ID to name.
+
+Then when we come back to the reporting-service request — in the Post-response script, we write the logic to map those IDs to their actual names. So instead of seeing a cryptic ID, you see the real user name and the real app name.
+And on top of that — Postman gives you the ability to visualize this data however you want. You're not limited to see at raw JSON. You can render it as a table, add summary cards, build a gauge chart — a proper dashboard, right inside Postman.
+
+And once again — every single script we use here was generated by Postman's built-in AI.
+
+Now, what we just saw works perfectly for a single request or a small set of calls. But what if your idea involves multiple API calls that need to happen in a specific order? You can't hit send on each one manually every single time.
+
+That's where Collection Runner comes in.
+Collection Runner lets you automate all your API requests in one go. You simply select which requests you want to run, define the order, configure any additional options you need — and then hit Start Run.
+It fires each request in sequence, runs the Pre-request and Post-response scripts automatically for each one, and gives you a clean summary of what passed and what failed.
+
+Now there's one thing to keep in mind — the Visualizer won't render during a Collection Run. The scripts run, the data gets processed, the variables get saved — all of that happens. But the visual output? That's only available when you open the individual request directly.
+
+You can click on any request from the run results and it will navigate you directly to that request in your collection. From there, you hit Send once more and your Visualizer renders with all the data already mapped and ready.
+So Collection Runner handles the heavy lifting — and the individual request visualize the output.
+
+But there is also another way to make it work together — Postman Flows.
+
+Postman Flows is a visual workflow builder built right inside Postman. Instead of writing everything in scripts, you build your logic by connecting blocks together on a canvas. It's drag and drop, it's visual, and it makes your entire API workflow easy to understand at a glance.
+
+The blocks are simple and intuitive. You have a block to send a request, a block to process the output, a block to store data, and a block to display the result in whatever format you need.
+
+Now there is one small but important difference between working in collections and working in Flows.
+
+In collections, we stored everything in collection variables. But in Flows, collection variables are not accessible. This is because Flows runs in its own isolated execution context.
+-------it doesn't share the same runtime environment as your collection scripts. They are two separate engines running independently inside Postman.
+So in Flows, we use environment variables instead.
+-------Environment variables are accessible across both your collection scripts and your Flows — making them the right choice when you need to share data between the two.
+
+Everything else remains exactly the same as what we did in the collection.
+We fetch the users, we fetch the apps, we fetch the audit events — each step in its own dedicated block. We map the IDs to names. And finally, we pass everything into a Display block that renders a complete dashboard — KPI cards, a gauge chart, and a detailed table — all inside Postman Flows.
+
+----------------------------
+
+I hope this presentation empowers you to explore the full potential of Qlik Cloud APIs and revolutionize your integration workflows.
+
+Thank you

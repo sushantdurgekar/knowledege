@@ -1,0 +1,95 @@
+# ─────────────────────────────────────────────────────────────
+# Knowledge vault .gitignore  — policy: git tracks NOTES ONLY
+# (markdown notes, READMEs, SRS deck, journals, small text).
+# Code repos, course material, binaries, media and anything
+# work-related or secret stay on disk but are never committed.
+# ─────────────────────────────────────────────────────────────
+
+# 1. Work / employer material (Gain Insights) — sensitive, never commit
+/work/
+
+# 2. Bulky learning material: whole repos, courses, samples, datasets, media
+technical/**/courses/
+technical/**/projects/
+technical/**/examples/
+technical/**/datasets/
+technical/**/media/
+softskills/**/courses/
+softskills/**/media/
+
+# 3. Secrets anywhere
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.*
+credentials*.json
+
+# 4. Binary documents (kept on disk, not in git)
+*.pdf
+*.ppt
+*.pptx
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.xlsm
+*.qvf
+*.qvd
+*.pbix
+
+# 5. Archives, media, images, models
+*.zip
+*.7z
+*.rar
+*.tar
+*.gz
+*.mp4
+*.mkv
+*.mov
+*.avi
+*.mp3
+*.wav
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bin
+*.sqlite3
+*.db
+*.pkl
+*.h5
+
+# 6. Dependencies, envs, caches, build output
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.mypy_cache/
+.pytest_cache/
+.idea/
+.next/
+build/
+dist/
+*.log
+logs/
+
+# 7. OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+__MACOSX/
+*.tmp
+~$*
+
+# 8. Vault tooling
+_resume-pack.md
+.inbox/
+
+# 9. Local-only audit / tenant-specific links (mention work paths or tenant IDs)
+_meta/restructure-log.tsv
+technical/data-ai/anomaly-detection/docs/fabric-kql-mvad-onelake-links.txt

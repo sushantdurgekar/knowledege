@@ -1,0 +1,16 @@
+Crawlers: 
+Systematically browse the internet to discover new & updated pages. 
+Process: Starts with known URL follow hyperlinks on these pages to find new content download these pages for indexing Challenges: handling duplicate content, identifying changes, avoiding overloading the servers. 
+
+Indexing: 
+the process of storing & organizing information to make it searchable in a massive database for quick retrieval. extract text, keywords & metadata and may include alt text from images, videos or pdfs maps how pages links to each other to create a structure 
+
+Ranking: 
+Algorithms determine the order in which search results appear. key ranking factors: Relevance, authority, user experience, content quality, engagement metrics, geographical location 
+
+Query understanding: 
+helps to understand the user intent using Natural language processing like recognizing synonyms, spelling error, colloquialisms disambiguate context like ‘apple’ as fruit vs company semantic search (focus on meaning rather that keyword matching) 
+
+Personalize the result based on history, location, user preference and device 
+
+Anti-span measures: keyword stuffing, link schemes, plagiarized content

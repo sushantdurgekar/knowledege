@@ -1,0 +1,7 @@
+https://learn.microsoft.com/en-us/credentials/certifications/azure-data-fundamentals/?practice-assessment-type=certification
+ 
+Video for it - https://learn.microsoft.com/en-us/shows/on-demand-instructor-led-training-series/?terms=DP-900
+ 
+Make sure to take practice exam 2-3 time and review it thoroughly 
+ 
+https://github.com/in28minutes/course-material/blob/main/16-dp-900-azure-data-fundamentals/downloads.md
