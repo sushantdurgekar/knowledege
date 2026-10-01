@@ -1,0 +1,293 @@
+---
+title: 100 Days of Code™: The Complete Python Pro Bootcamp — resources
+track: technical
+updated: 2026-10-01
+sources:
+  - url: https://www.udemy.com/course/100-days-of-code/
+    accessed: 2026-10-01
+---
+
+# Resources · 100 Days of Code™: The Complete Python Pro Bootcamp
+
+External links attached to lectures (262 unique, collected 2026-10-01; quiz/feedback forms and Udemy-internal links left out). `§` = section, `L` = lecture.
+
+
+## Code repositories
+
+- [Completed Example Code for Day 10](https://gist.github.com/TheMuellenator/e7e5b21c1314743accfde03c3d239581) · §10 L74
+- [Challenge 1 - Draw a Square - Starting Code (gist)](https://gist.github.com/TheMuellenator/e621ba144a16058f0493c50d066c5f4f) · §18 L129
+- [Solution to Challenge 1 (gist)](https://gist.github.com/TheMuellenator/b605d31e68728e25a072da5d7ccc918e) · §18 L129
+- [Challenge 2 - Draw a Dashed Line - Starting Code (gist)](https://gist.github.com/TheMuellenator/3402f6c777a72fa0571c5f10ab2b549d) · §18 L131
+- [Solution to Challenge 2 (gist)](https://gist.github.com/TheMuellenator/a8b54854b1a1bd71325e61d94b351f3c) · §18 L131
+- [Challenge 3 - Drawing Different Shapes - Starting Code (gist)](https://gist.github.com/TheMuellenator/878e4b0dd16a4de442423fd090afb509) · §18 L132
+- [Solution to Challenge 3 (gist)](https://gist.github.com/TheMuellenator/b42a2f953606b8ba2fd715811177a91a) · §18 L132
+- [Solution to Challenge 4 (gist)](https://gist.github.com/TheMuellenator/692114a84d9e02c1747d4c4a133d4b50) · §18 L133
+- [Challenge 4 - Generate a Random Walk - Starting Code (gist)](https://gist.github.com/TheMuellenator/5ed23749a6a6b1c98d23210acca80cd7) · §18 L133
+- [Challenge 5 - Create a Spirograph - Starting Code (gist)](https://gist.github.com/TheMuellenator/c951a4437c0d9000f582af889dbca320) · §18 L135
+- [Solution to Challenge 5 (Day 18 Ending Code Gist)](https://gist.github.com/TheMuellenator/8c1c4504638c99c73d9b3ca616769779) · §18 L135
+- [Piano Keys List Slicing Gist](https://gist.github.com/TheMuellenator/aee681f44520e2cc51bb1b972e7e664e) · §21 L158
+- [Day 24 Ending Code](https://gist.github.com/TheMuellenator/4e9e3bdd2ec792c23a63985207290a24) · §24 L185
+- [Day 26 Ending Code](https://gist.github.com/TheMuellenator/77d3a52703814568b1d186e18d4e9de6) · §26 L200
+- [Playground.py Completed Code (gist)](https://gist.github.com/TheMuellenator/fe5f25e5a8d8b1add7b6f87b2a260664) · §27 L208
+- [Day 27 Ending Code](https://gist.github.com/TheMuellenator/839d37a07447c564949011259aa6a42c) · §27 L211
+- [Completed Day 30 Practice Code](https://gist.github.com/TheMuellenator/8dd1669c28e5344573b6b4410ec16416) · §30 L229
+- [2018 Frequency Lists from Hermit Dave](https://github.com/hermitdave/FrequencyWords/tree/master/content/2018) · §31 L234
+- [Day 32 Starting Code](https://gist.github.com/TheMuellenator/f76776c4edd3fe6c306ba1c240ee8a59) · §32 L247
+- [Day 32 Ending Code](https://gist.github.com/TheMuellenator/fb00c8ed7cd4876f8eddefe725c80a93) · §32 L247
+- [Schedule your code to run with Github Actions](https://github.com/appbrewery/scheduled-tasks/) · §32 L250
+- [Solution - Weather & Twilio](https://gist.github.com/TheMuellenator/895e0a508727aea2156a9a5d63dcfb28) · §35 L275
+- [Solution - incl. code for PythonAnywhere Deployment](https://gist.github.com/TheMuellenator/26127612aad5015a09ba3f4579048dd4) · §35 L275
+- [Solution 2: Live Site Scraping](https://gist.github.com/TheMuellenator/941a8d6bfc555dbc7c939d2c3720a87d) · §45 L334
+- [Solution 1: Static Site Scraping](https://gist.github.com/TheMuellenator/181821980a1788aec82c254f39da63ac) · §45 L334
+- [Day 48 Completed code from the lessons](https://gist.github.com/TheMuellenator/48649eb4f1482387d94b6c92ae7e4cdf) · §48 L355
+- [Cookie Clicker Game (Github Pages)](https://github.com/ozh/cookieclicker) · §48 L356
+- [Mac/Linux Terminal Cheat Sheet](https://github.com/appbrewery/terminal-mac-cheatsheet) · §54 L390
+- [SOLUTION](https://gist.github.com/angelabauer/202d58a295c516931a7056c995110596) · §55 L397
+- [Useful .gitignore templates](https://github.com/github/gitignore) · §70 L506
+- [Beginner friendly repos](https://github.com/MunGell/awesome-for-beginners) · §70 L507
+- [Wordle-Game in Python (ritik48)](https://github.com/ritik48/Wordle-Game) · §70 L507
+
+## Official documentation
+
+- [Floating Point Arithmetic](https://docs.python.org/3/tutorial/floatingpoint.html) · §2 L18
+- [Random Function Documentation](https://docs.python.org/3/library/random.html) · §4 L31
+- [Things that lists can do in Python](https://docs.python.org/3/tutorial/datastructures.html) · §4 L32
+- [Built-in Python Functions](https://docs.python.org/3/library/functions.html) · §6 L44
+- [PEP 8 - The Python Style Guide](https://www.python.org/dev/peps/pep-0008/) · §6 L46
+- [Python sum() Function](https://docs.python.org/3/library/functions.html#sum) · §11 L81
+- [Turtle Graphics Documentation](https://docs.python.org/3/library/turtle.html) · §16 L110
+- [The listen() method](https://docs.python.org/3/library/turtle.html#turtle.listen) · §19 L140
+- [Turtle .textinput() documentation](https://docs.python.org/3.1/library/turtle.html#turtle.textinput) · §19 L143
+- [The tracer() method](https://docs.python.org/3.3/library/turtle.html?highlight=turtle#turtle.tracer) · §20 L148
+- [The shape() and shapesize() methods](https://docs.python.org/3/library/turtle.html#turtle.shape) · §21 L154
+- [The write() method](https://docs.python.org/3/library/turtle.html#turtle.write) · §21 L155
+- [The open() method](https://docs.python.org/3/tutorial/inputoutput.html#reading-and-writing-files) · §24 L183
+- [Pandas Documentation](https://pandas.pydata.org/docs/) · §25 L190
+- [Pandas API Reference](https://pandas.pydata.org/docs/reference/index.html) · §25 L190
+- [Google Sheet - Weather Data](https://docs.google.com/spreadsheets/d/1Rs1CKjiagTeXa53212JkjRSDu-tx77_YxEgGdkv5zRY/edit?usp=sharing) · §25 L190
+- [Python Docs: The Packer](https://docs.python.org/3/library/tkinter.html#the-packer) · §27 L205
+- [TCL tk Docs: pack()](https://www.tcl-lang.org/man/tcl8.6/TkCmd/pack.htm) · §27 L205
+- [TCL tk Docs: Entry()](https://www.tcl-lang.org/man/tcl8.6/TkCmd/entry.htm) · §27 L209
+- [TCL tk Docs: after()](http://tcl.tk/man/tcl8.6/TclCmd/after.htm) · §28 L216
+- [Canvas Documentation on tkdocs.com](https://tkdocs.com/tutorial/canvas.html) · §29 L221
+- [Entry Widget Docs on tkdocs.com](https://tkdocs.com/tutorial/widgets.html#entry) · §29 L224
+- [Python JSON Module Documentation](https://docs.python.org/3/library/json.html) · §30 L231
+- [Python smtplib Documentation](https://docs.python.org/3/library/smtplib.html) · §32 L245
+- [Python datetime Documentation](https://docs.python.org/3/library/datetime.html) · §32 L246
+- [Python Requests Module Documentation](https://docs.python-requests.org/en/latest/) · §33 L255
+- [Pixela API Documentation](https://docs.pixe.la/) · §37 L283
+- [Requests Module Documentation](https://requests.readthedocs.io/en/latest/api/) · §37 L283
+- [Project Inspiration: Jack's Flight Club](https://jacksflightclub.com/) · §40 L302
+- [MDN Docs - Headings](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/Heading_Elements) · §41 L312
+- [Named Colours](https://developer.mozilla.org/en-US/docs/Web/CSS/named-color) · §44 L326
+- [Selenium Documentation](https://selenium-python.readthedocs.io/) · §48 L352
+- [Python.org](https://www.python.org/) · §48 L353
+- [Flask Quickstart Docs](https://flask.palletsprojects.com/en/3.0.x/quickstart/) · §54 L389
+- [Python Built In Attributes e.g. __name__](https://docs.python.org/3/library/stdtypes.html?highlight=__name__#special-attributes) · §54 L391
+- [What is __main__?](https://docs.python.org/3/library/__main__.html) · §54 L391
+- [Flask Docs: Routing](https://flask.palletsprojects.com/en/1.1.x/quickstart/#routing) · §55 L395
+- [Flask Docs: Variable Rules](https://flask.palletsprojects.com/en/1.1.x/quickstart/#variable-rules) · §55 L395
+- [Flask Docs: Rendering Templates](https://flask.palletsprojects.com/en/1.1.x/quickstart/#rendering-templates) · §56 L401
+- [Jinja Documentation](https://jinja.palletsprojects.com/en/2.11.x/templates/) · §57 L407
+
+## Interactive sandboxes & demos
+
+- [Press "Run" to see the final project](https://appbrewery.github.io/python-day1-demo/) · §1 L4
+- [Press "Run" to see the final project](https://appbrewery.github.io/python-day2-demo/) · §2 L13
+- [Press "Run" to see the final project](https://appbrewery.github.io/python-day3-demo/) · §3 L20
+- [Click "Run" to see the final project](https://appbrewery.github.io/python-day4-demo/) · §4 L30
+- [Click "Run" to see the final project](https://appbrewery.github.io/python-day5-demo/) · §5 L37
+- [Day 7 Goal: Click "Run" to see the final project](https://appbrewery.github.io/python-day7-demo/) · §7 L52
+- [Click "Run" to see the final project](https://appbrewery.github.io/python-day8-demo/) · §8 L60
+- [Click "Run" to see the final project in action.](https://appbrewery.github.io/python-day9-demo/) · §9 L67
+- [Click "Run" to see the final project](https://appbrewery.github.io/python-day10-demo/) · §10 L72
+- [Click "Run" to see the final project](https://appbrewery.github.io/python-day11-demo/) · §11 L78
+- [Click "Run" to see the final project.](https://appbrewery.github.io/python-day12-demo/) · §12 L86
+- [Using Python Tutor to Step Through your Code](http://www.pythontutor.com/visualize.html#mode=edit) · §12 L92
+- [Click "Run" to see the final project.](https://appbrewery.github.io/python-day14-demo/) · §14 L102
+- [Day 17 Goal: Click "Run" to see the final project](https://appbrewery.github.io/python-day17-demo/) · §17 L116
+- [Trinket Turtle Colours](https://trinket.io/docs/colors) · §18 L128
+- [Piano Keys List Slicing Repl.it](https://repl.it/@appbrewery/slicing) · §21 L158
+- [Inspect Me site](https://appbrewery.github.io/css-inspection/) · §44 L328
+- [(static) Y Combinator Hacker News](https://appbrewery.github.io/news.ycombinator.com/) · §45 L334
+- [Amazon Practice Site](https://appbrewery.github.io/instant_pot/) · §47 L346
+- [Challenge URL: Form Sign Up (fake newsletter)](https://appbrewery.github.io/fake-newsletter-signup/) · §48 L355
+- [Gym Site](https://appbrewery.github.io/gym/) · §49 L358
+- [Zillow Clone Site](https://appbrewery.github.io/Zillow-Clone/) · §53 L385
+- [Python Decorators Repl.it Code](https://repl.it/@appbrewery/python-decorators#main.py) · §54 L392
+- [Visualising Nested Function Return on PythonTutor](http://www.pythontutor.com/visualize.html#mode=display) · §54 L392
+- [Advanced Python Decorators Repl.it Code](https://repl.it/@appbrewery/python-advanced-decorators#main.py) · §55 L398
+- [Bootstrap Layout Exercises](https://appbrewery.github.io/bootstrap-layout/) · §58 L414
+
+## Tools & services
+
+- [Ticketing Flow Chart Version 1 - if else statements](https://www.draw.io/?lightbox=1&target=blank&highlight=0000ff&edit=_blank&layers=1&nav=1&title=Rollercoaster%201#R1VfbcpswEP0apk%2FJAAJfHmM7aR%2FSjlt3ps2jYm1ArUCukC%2Fk67sywqDgJM7Eub0w6Ggl7Z49uwKPjLPNZ0UX6VfJQHihzzYemXhhOIhCfBqgrICIkApIFGcVFDTAjN%2BCBX2LLjmDwjHUUgrNFy44l3kOc%2B1gVCm5ds1upHBPXdAEOsBsTkUX%2FcWZTm1YYb%2FBvwBP0vrkoDesZjJaG9tIipQyuW5B5NwjYyWlrt6yzRiE4a7mpVp3cc%2FszjEFuT5kwTQf3Pz8rmYwjVc%2FVmxzyf%2FJExtGocs6YGAYvx1KpVOZyJyK8wYdKbnMGZhdfRw1NpdSLhAMEPwDWpc2mXSpJUKpzoSdRYdV%2BdusP%2B2RsAauEDjxT%2F1%2BXCOTjT2jGpXt0RQUz0CDsmAVh3H%2BXnosVMilmsMDnNQyoyoB%2FYBdvEsiih8keqNKXKdAUM1Xrh%2FUyjDZ2dmlZ0rRsmWwkDzXRWvnqQHQwBYUIbagbD0FcdzOOr5UO9ajlmsNtFXGE1QyfGOVREHUVon%2FQQQSHUMgHQUEkSuAoe%2FuULllFzXKeKrQer3X15nlYkXF0rJje6tpbT2aoXBGid4m0w%2Bw52ceuehIU6Uyu15ilKN1yjXMFnSbzDVeT67A7GGgNGwe1kQ3h%2FWCoO%2ByVF9b6%2BauCHoWS1v3xN2ktdPe4vjpFJK3KNUj1lZ4YG3dk5eDa%2BtZJIcdnc7QYd2V4o7Y4HE53nAhxlJItV1LWAwDZtpeoZX8C62ZQXhNsDqPI2DiCjjco99wj36jl9Jv1KF2TPNPpgPg5yE8j%2BEj8EV8l6499T7ovyJd8T663gtZYb%2F%2Fvtiqz2%2FR9U12aMKAtcsFFTzJ8X2OgZsPipGhheNPwpmdyDhjVSuFgt%2FS6%2B1WppnaWxb3jUdePDF7YfcsqkZ6JJoHd%2B4gMuywTPaUcPhiLHev8SsoPjzN%2BC%2F7KM%2FRcXjGYfNfWH1cNT%2FX5Pw%2F) · §3 L22
+- [Ticketing Flow Chart Version 3 - if-elif-else statements](https://www.draw.io/?lightbox=1&target=blank&highlight=0000ff&edit=_blank&layers=1&nav=1&title=Rollercoaster%202#Uhttps%3A%2F%2Fdrive.google.com%2Fuc%3Fid%3D1XaUDMIKOxCUzJbsuZevgHZmgKr7rICbI%26export%3Ddownload) · §3 L24
+- [Ticketing Flow Chart Version 4 - Multiple if statements](https://www.draw.io/?lightbox=1&target=blank&highlight=0000ff&edit=_blank&layers=1&nav=1&title=Rollercoaster%204#Uhttps%3A%2F%2Fdrive.google.com%2Fuc%3Fid%3D1aoRTeFOb2SJO7ofMnhTCneCEboHowF2A%26export%3Ddownload) · §3 L25
+- [Ticketing Flow Chart Version 5 - with Midlife Crisis](https://viewer.diagrams.net/?highlight=0000ff&edit=_blank&layers=1&nav=1&title=Day%203%20Logical%20Operators.drawio#R7VtZc9o6FP41zH2iY0teH0uWZpqkQy%2BZ29CXOwYrthNjUVkQyK%2BvjGWwLbEFL6HTzCSxjyVhfec7myQ68GKy%2BEKcqX%2BPXRR2gOIuOvCyA4CqAYP9SyTLVGJqXOCRwOWNNoJB8Ia4UOHSWeCiuNCQYhzSYFoUjnEUoTEtyBxC8Gux2RMOi586dTwkCAZjJxSlPwKX%2BqnUAuZGfoMCz88%2BWTXs9MnEyRrzmcS%2B4%2BLXnAhedeAFwZimV5PFBQoT8DJc0n7XW56uX4ygiB7SoR9ZTw%2FfyQD19fm%2Fc3dxF%2FzCXT6NmC6zCSOXzZ%2FfYkJ97OHICa820h7Bs8hFyagKu9u0ucN4yoQqEz4jSpdcmc6MYiby6STkT9kLk%2BVj0v%2BTAUEmGDJBV%2FmkmHomuVzwz0jvlvm7PiLBBFFEuFBEgwMU4xkZox0QZKxyiIfojnZ62i7BJ%2FcBHOsvCLO3IUvWgKDQocG8yB%2BH09Bbt%2BNdPxPiLHMNpjiIaJwbuZ8IWANuUZABthqR25Oq63mts4t0xOwu92ob0YoZR7DEbpklmqrlWaJ8TIJotRBEYICqFQlgK8UR0vfknTbMOJZohtE8zzgWcyeccXS4b01cm%2BFMGHF6Hl0pU1GZz5904LVATeLjyWjGZtl79QOKBlNnpd1XFp%2BKBNvKiDkiFC126jB7qppFlLKw9bqJFarBZX4uTpSVlld7DuPjIYRtmOr7bQscaFtq1bZ1EshA4OmAzYCKVFwDq%2B6n41MQhhc4xGTVF7o6stzE7cWU4BeUe2KBEWTWWQ2BYZHAQMJfIOGvVhd%2FNQHaCyf6J%2FEALD1EpyFcAV5QKcIlsXfLrAeuy682%2BL%2F%2FzaXPLvk%2BvOl71zdexsRzMXddNHfptD6WuesyTn4URgKzZMENUlLuqhUBrm9YgInNjhaxcMLAi9j1mGGRZG29BIOAVWKf%2BYNJ4LopgVEcvDmj1VAJhXkqw8bVex39MhmLcTZO6VsRzFYp0ENbQBlK%2FCSoDWUxVxqi%2BOxhBpa2F2etJpylnkiMR2143FwttK6OD6mEDvLUuzzwXk9tVO2p5dUIUJKZ55kBgV4cZEvd847aRA6I8lfx%2BXZWWyFa%2FtZ%2FzbLQzm4tgVKGP3%2B8PfT6PwfImj8%2BPAS9STtZKloE9DF3Pdzoid1tNJPcFFaO2laoFMLWMuJdb52LiskyepsrMcASAoQiSYQlqYNeW23Wsk9qhsD1JADHrlaqsKh8zSpthpTzCRvual9c3tzbWy8XUzXnIoYkKWUq1HTRBBuuRu3i%2Bgi0RBu0a1pOkiJlCkjdoThOHK6%2FKuElecO5lUxqGfMD%2FV5tJRNoJVN%2BvwerPJPdsnMHyhFKL6ugZrdhbXEb4iZw84tYejl6t%2B051vRpJ3qrzUTvyuuEd0VvXTkuekPNOiF6l3s3Hb3tLWYoiUVN26FmfLD4LVnmVEFXtc4%2BakNV8Hi6iLXeZNxWoYg1A1rBJPnDpnb%2BoB%2BQKpmNpkqyTH6rD1D2%2BwBhs9gYW2j0VNpejnCUqMB1Yn%2FtXCqAVzeL8AKJ91Bl%2BK6PSJwCsH3%2F%2BGI8erfgFvwKlvfPN8v%2BfVekdBtR%2FaD4vGvZJ7885M%2FnXfx0iYKv9n%2Bz5a06uDNesnnWncPqalHDh2awRx8%2BsuSZcmWnj3ZgLcRlsZxpOiwbWnthWQqVaFafPYYHUJIlCKXLfnVxLeLcooVuvm9BsYpoITXyViqSg3zXLp%2B013dVfrD2JJBbCRDZXkW2IXHkXgWofrPiJI2aH0qjorN6dSJ%2BpjRMPNKIZbbG6lzp1MfMi5x0qlTIwJTVjzwDq8BLlQ%2FqrkNyPulSbNFNWXW5Ka1VC1pbzTD3pIXdvl2u7swMSDz%2FliZG4lnjoxKjpi0FlnZtDNlhbaWmNEoKrFj9%2FQlnuMo4r9fXGjjDtcuacjA%2F%2BCgxQ0ydpPMoSMeIVzFBW5wXrVmeWoDblKSpKrCz1aZGiC3uNPwBR0ABLEVaCa8rOgPKbjdfDEzr283XK%2BHVbw%3D%3D) · §3 L27
+- [Treasure Island Flowchart (website)](https://viewer.diagrams.net/index.html?highlight=0000ff&edit=_blank&layers=1&nav=1&title=Treasure%20Island%20Conditional.drawio#Uhttps%3A%2F%2Fdrive.google.com%2Fuc%3Fid%3D1oDe4ehjWZipYRsVfeAx2HyB7LCQ8_Fvi%26export%3Ddownload) · §3 L28
+- [Hint - Flow Chart for Hangman](https://app.diagrams.net/?lightbox=1&highlight=0000ff&edit=_blank&layers=1&nav=1&title=Step%205#R7VtdW6M4FP41ffZqfcpn62XrOOqszjrq6nq1TywpMALphrS28%2Bs3gYSPBBUtFLR7VXJIgJw35z0fSQfGUbg%2BwWDhXSAHBgN96KwHxpeBrmtDbUh%2FmGSTSiz7MBW42Hd4p1xw7f%2BCYiSXLn0HxqWOBKGA%2BIuycIaiCM5ISQYwRk%2FlbnMUlN%2B6AC5UBNczEKjSO98hXiod66Ncfgp91xNv1sT8QiA685nEHnDQU0FkHA%2BMI4wQSa%2FC9REMmPKEXu7ONnfB%2BaN98u1H%2FC%2F4a%2FrHzffb39OHfX3LkGwKGEbk3Y%2BGehTa4Ofq8ZKsVtduPNXWG%2FHoFQiWXF98rmQjFAgdqk%2FeRJh4yEURCI5z6RSjZeRA9pohbeV9zhFaUKFGhT8hIRu%2BOMCSICrySBjwuzXnxz82Rks8gy%2F0M%2FgyA9iF5IXJc1zZBAtrhWvvBKIQEryhHTAMAPFX5QUF%2BLp0s3657ukFV%2F8bUDYUKK5vJlc3Ch65tpnqnjyfwOsFSBTyRE24rNk5ighXu0anNnUDEMccqJhg9JgZBeudrfDhm0FZQUzg%2BkU1irs21zsnFIM3n3Lr1ITJeQXLNIfbK75yGaiK%2F1g28NLaftUG9K5soJqO9hoLrTMwfujfkHexml4g78dkeTY2rm7X2fR2qnq49snfbPiBxVv3hTtf1vzJSWMjGhGdbmEQa94X7%2BXDkpYYV6ntdnGvVPRwS5T50Evk08%2FOeDaLWzjPaiOJQNPv4qOktZJ9xvtteaiY8gmMIAYEsm9g8wORg0LG%2FAg7LLTDScsDkRuC6B8mjQ8Wm84c4NwPgiMUIJy81nAAHM9n2bDCHXs2hg%2FzHbpMTevaZwqqegbdOImfIzaFhwBEj7EQBtT4IWZXfpQh%2F9kCHKuMVoZCES1zl2hZvfCq29F0Y6ys1%2FTGdtPOuB5Nm0ZrNF3pfIyP4uXb9tb6TuA17N16YZWnJ%2FEjW%2F4eI%2BplDHFSkEkKNTCOuWtOafrzMbOcenbuR8f%2FM7PCuK8y82E3zGxZ9Ux3gjHYFLotWIf4%2BfdosgewhtK6Sp%2FYKC9o4y55Xyuwfu4D2sjudr44tVHTq3MrgrEVgjmLM%2FpPKB%2By3Gug2wGd1fSBkr7tsivhAtJAPe2fhOvGV9UveCh8WMav%2B4TWiF0Kuc0qYq8KucdtEbtufZS4qif2dVjTvnSzV%2FZ1qNjXFVwEbP0Lo0kS4GQp0pUohE0EWG0ZkxQkWXWDJDlxaa7YoOav9zBWlEenR8oaKldqIhRBqazDRSDw3Yg2Z1STFBVjypTlz0Aw4TdC33ESC62CpGy1baEylhjOVlGpIji9NYLbk%2FJwYwQnAoPXGa6zfcnKAoG9Hzi3V1ioAr5S02aXjkx8ZYFkz1EsavWBP08uIxYsLnCav%2FBK%2FUAp3QNMti%2Fc96b6LjtE87CmQ5TzxeawUqOO72jP%2FKEhZ82dO8QPU0ntiUMUSLzuEPVehfxGNzW6bUonWgnmHPW%2BAd0rnMVnF1j2FKx4Ypd8xjKqLJ2gJfOOaJ74zRU7%2FNjDkokulUzs7ksm6l7FyeTimEr%2BvD2%2B2i6aaEuL8o7CqGqvd6c7Cnqnhd23b%2Bg1xzKNF4bqbQuMZChb3tEzuk283%2BN%2BskY37sf8mO7HVOhwgpMkLBmb1BFtEDKiix7iRaI32RNlh29YkA%2F7WbuXy42jmgzanh9Ss6v9KzfKm5J21%2BmVoUZj%2B4eKXAUeDbtGRT2wvX%2BViHHfTEX1HHsHiilhou8Ok%2BfPeJcgueRV1NOsihrQmGzQq2Kqou%2B6UNVOmLRxTXffxO5iJTJq1nkD8whLHJHz5zzv%2F22VxmAYAofNKz9DQTzA8Gzk7Fx%2F8DKtEl5GBbllpy92gpdKblV4lbfZRcVm5qVbGj6LiSPE4JKOtxx8FuBkBrSqgLOrgLPeDBxt5n%2BDTfPc%2FM%2FExvF%2F) · §7 L58
+- [Hint - Flowchart of Secret Auction](https://app.diagrams.net/?lightbox=1&highlight=0000ff&edit=_blank&layers=1&nav=1&title=Blind%20Auction%20Flow%20Chart#R3VnbcpswEP0aPzYDCLB5tHNrZ9pMpu6kzaMMilEDiBHyLV%2FfFYirHMdp7JD4JUGrXV3Ont2V5AE6j9fXHKfhDxaQaGAZwXqALgaWZRqmAf%2BkZFNIHM8qBHNOA6VUC6b0iZSWSrqgAclaioKxSNC0LfRZkhBftGSYc7Zqqz2wqD1riudEE0x9HOnS3zQQoZK6jl13fCV0HpZTm65X9MS41FZbyUIcsFVDhC4H6JwzJoqveH1OIoleCUxhd%2FVMb7UyThKxj8Hs4R5fx%2BMlu%2F52dxPepdM7H31BxShLHC3UjtVixaaEgASAiGoyLkI2ZwmOLmvphLNFEhA5jQGtWuc7YykITRD%2BJUJslHvxQjAQhSKOVG8xp5zo2b0pUcYW3Cc7NlSSBPM5ETv0rMoDwF3CYiL4Buw4ibCgy%2FY6sCLRvNKrYYYPhfQrUDc11Ke%2Fxj9%2FadDXwEqUViEVZJrifP8riLdtIC4JF2S9G0Z928rAHimuqmi1VXNVU99TorBBemQcCSfn1Nhp7clOu092Wjo7Q0hclhEBcDKJchbn6VWcpZsPx1mvZ84OT42z9p6cdfvkrK2hPs4e84LP4e8NjokcIUkXon%2FCOk6LsKajM9a0t1DWPhZlvVOjrLsnZUd9UtbdSdkJ2FrGLaew0Y%2FG2OpI2xtjTf0E9ckp%2B1YqKtNbRmHmynOO1fYcGnU8UoSIsuo4pVrG%2F%2FtppHM8COqEjJOgojqsQB4usLwsUl9QcESOAKwUIjmU6o9kUxnlQ54NLBfHkvDJLEsrh%2FQZKmh41gmWLQcSc%2BjoweIcLVhGfcQGWVPxR5nL7%2FuG%2FGLd6LjYlI0EdpubAISqed%2Fsq83yVml3wCg00Z6VwxweIl7HnONNQyGVcZg9H872yGxxy%2B5e%2BTv6yHN26cNHsYKDxnwFdi90Mxt0Uzw6CcI1noz6eLDQ34mKwwp9KLIzz9N5%2FpfJ5kCu141gR5MZNNy5%2FFpkhMtsvgplpl%2FhnKp51p%2FJEtBN3SGLZ4usp7RdVcqX0na3oh4Oc%2F2AeE8yDSbYtGjjgSM6T%2BDbh82DJ9BEQkN9HI1VR0yDoIg6ktEnPMuHksRW%2BQfGdSYD50KOBYGWFTF3IKiRZ7dzkmFrQG87S1pHw9nrtTxWOeo1BbKVrerk9Q75arhnvnrrC9b2gmZ1HnvQcL%2Fz7GsLbbdwOvbuQttd12v1zeE7FGZTf5o6jwjm1fk68zkhiZ6I3%2FkMjZzOK%2FSWVLztSe9ot80y9TSAu6L5LaTALYQ1kEyUdQyuMlVX%2ByqT2wTEj4pKCSpx%2B4azokkii2fPHnCGL3vA9LYUQ%2FdoLrA0F9ywT18LXdTB2dBxRoephdCsf2osMkr9iy26%2FAc%3D) · §9 L70
+- [Python Package Index](https://pypi.org/) · §16 L111
+- [PrettyTable Package](https://pypi.org/project/PrettyTable/) · §16 L111
+- [Colorgram Package](https://pypi.org/project/colorgram.py/) · §18 L136
+- [Use Color Hunt to Choose a Nice Colour](https://colorhunt.co/) · §28 L214
+- [Pyperclip documentation on PyPi](https://pypi.org/project/pyperclip/) · §29 L226
+- [Create a free account on OpenWeatherMap](https://home.openweathermap.org/users/sign_up) · §35 L269
+- [OpenWeatherMap Current Weather API Documentation](https://openweathermap.org/current) · §35 L270
+- [Link to Your OpenWeatherMap API Key req. login](https://home.openweathermap.org/api_keys) · §35 L270
+- [OpenWeatherMap Forecast API Documentation](https://openweathermap.org/forecast5) · §35 L270
+- [OpenWeatherMap Condition IDs and Condition Codes](https://openweathermap.org/weather-conditions#Weather-Condition-Codes-2) · §35 L271
+- [Signup for Twilio](https://www.twilio.com/try-twilio) · §35 L272
+- [Twilio SMS Quickstart Documentation for Python](https://www.twilio.com/docs/sms/quickstart/python) · §35 L272
+- [Other APIs to Explore](https://apilist.fun/) · §35 L275
+- [Stock Price API](https://www.alphavantage.co/) · §36 L278
+- [News API](https://newsapi.org/) · §36 L278
+- [Twilio API](https://www.twilio.com/) · §36 L278
+- [Pixela Website](https://pixe.la/) · §37 L283
+- [Sheety API](https://sheety.co/) · §38 L291
+- [Flask Package on PyPi](https://pypi.org/project/Flask/) · §54 L389
+- [unsplash.com - beautiful images](https://unsplash.com/) · §56 L405
+- [Build a design using canva.com](https://www.canva.com/) · §65 L463
+
+## Articles & videos
+
+- [Windows 11 - Install Python, PyCharm and Course Material](https://www.youtube.com/watch?v=beZbc4XQ0qk) · §1 L5
+- [Trouble installing? - Manual Installation](https://youtu.be/sNGzpE5By74) · §1 L5
+- [For the Curious: The Mersenne Twister](https://en.wikipedia.org/wiki/Mersenne_Twister) · §4 L31
+- [How the Hangman Game works](https://en.wikipedia.org/wiki/Hangman_(game)) · §7 L53
+- [How to Convert Strings to Title Case](https://stackoverflow.com/questions/8347048/how-to-convert-string-to-title-case-in-python) · §10 L73
+- [Search Stack Overflow for Errors](https://stackoverflow.com/questions/tagged/python) · §13 L100
+- [What is a Random Walk?](https://en.wikipedia.org/wiki/Random_walk) · §18 L133
+- [Python as a Strongly and Dynamically Typed Programming Language](https://stackoverflow.com/questions/11328920/is-python-strongly-typed) · §28 L217
+- [101 Monday Motivational Quotes from the Positivity Blog](https://www.positivityblog.com/monday-motivation-quotes/) · §32 L247
+- [What is the ISS?](https://en.wikipedia.org/wiki/International_Space_Station) · §33 L252
+- [Application Programming Interface Wikipedia Entry](https://en.wikipedia.org/wiki/Application_programming_interface) · §33 L253
+- [StackOverflow Answer on Unescaping HTML Entities in Python](https://stackoverflow.com/questions/2087370/decode-html-entities-in-python-string) · §34 L262
+- [Python Slice Operator with Square Brackets](https://stackoverflow.com/questions/509211/understanding-slice-notation) · §35 L271
+- [Environment Variables Wikipedia Entry](https://en.wikipedia.org/wiki/Environment_variable) · §35 L275
+- ["requests_cache" in Python is Awesome](https://www.youtube.com/watch?v=sLevPEjvpsU) · §36 L278
+- [Wikipedia Main Page](https://en.wikipedia.org/wiki/Main_Page) · §48 L354
+- [NY Times Tinder Article](https://www.nytimes.com/2014/10/30/fashion/tinder-the-fast-growing-dating-app-taps-an-age-old-truth.html) · §50 L368
+- [The Flask Mega-Tutorial, Part IV: Database](https://blog.miguelgrinberg.com/post/the-flask-mega-tutorial-part-iv-database) · §63 L448
+- [How the Enigma Machine Works](https://www.youtube.com/watch?v=G2_Q9FoD-oQ&ab_channel=Numberphile) · §68 L487
+- [The Flaw in the Enigma Machine](https://www.youtube.com/watch?v=V4V2bpZlqx8&ab_channel=Numberphile) · §68 L487
+- [Most Common Passwords](https://en.wikipedia.org/wiki/List_of_the_most_common_passwords) · §68 L488
+
+## Other
+
+- [Add your own ASCII art](https://ascii.co.uk/art) · §3 L28
+- [For the Curious: Random vs Pseudorandom Numbers](https://www.khanacademy.org/computing/computer-science/cryptography/crypt/v/random-vs-pseudorandom-number-generators) · §4 L31
+- [For the Curious: The Dirty Dozen](https://www.delish.com/food-news/a26872638/dirty-dozen-foods-list-2019/) · §4 L34
+- [The World Rock Paper Scissors Association](https://www.wrpsa.com/) · §4 L35
+- [Have I been pwned?](https://haveibeenpwned.com/) · §5 L37
+- [Learn Python with Reeborg!](https://reeborg.ca/docs/en/#) · §6 L44
+- [Reeborg's World Start](https://reeborg.ca/reeborg.html?lang=en&mode=python&menu=worlds%2Fmenus%2Freeborg_intro_en.json&name=Alone&url=worlds%2Ftutorial_en%2Falone.json) · §6 L44
+- [Reeborg's World Hurdles Challenge](https://reeborg.ca/reeborg.html?lang=en&mode=python&menu=worlds%2Fmenus%2Freeborg_intro_en.json&name=Hurdle%201&url=worlds%2Ftutorial_en%2Fhurdle1.json) · §6 L45
+- [Reeborg's World Hurdles 2 Challenge](https://reeborg.ca/reeborg.html?lang=en&mode=python&menu=worlds%2Fmenus%2Freeborg_intro_en.json&name=Hurdle%202&url=worlds%2Ftutorial_en%2Fhurdle2.json) · §6 L47
+- [Reeborg's World Hurdles 3 Challenge](https://reeborg.ca/reeborg.html?lang=en&mode=python&menu=worlds%2Fmenus%2Freeborg_intro_en.json&name=Hurdle%203&url=worlds%2Ftutorial_en%2Fhurdle3.json) · §6 L48
+- [Reeborg's World Hurdles 4 Challenge](https://reeborg.ca/reeborg.html?lang=en&mode=python&menu=worlds%2Fmenus%2Freeborg_intro_en.json&name=Hurdle%204&url=worlds%2Ftutorial_en%2Fhurdle4.json) · §6 L49
+- [Reeborg's World Maze Challenge](https://reeborg.ca/reeborg.html?lang=en&mode=python&menu=worlds%2Fmenus%2Freeborg_intro_en.json&name=Maze&url=worlds%2Ftutorial_en%2Fmaze1.json) · §6 L50
+- [Play Hangman with Friends Online](https://hangmanwordgame.com/?fca=1&success=0#/) · §7 L53
+- [Hint: Python List Documentation](https://developers.google.com/edu/python/lists#for-and-in) · §7 L54
+- [Hint - Python Lists and Range()](https://developers.google.com/edu/python/lists#range) · §7 L55
+- [Hint - Importing Modules](https://www.askpython.com/python/python-import-statement) · §7 L58
+- [Python List index() Method](https://www.w3schools.com/python/ref_list_index.asp) · §8 L63
+- [Try out an online Blackjack game](https://games.washingtonpost.com/games/blackjack/) · §11 L78
+- [Starting Project (see PyCharm Plugin)](https://plugins.jetbrains.com/plugin/25212-100-days-of-code--the-complete-python-pro-bootcamp?noRedirect=true) · §11 L79
+- [Python list methods](https://developers.google.com/edu/python/lists#list-methods) · §11 L81
+- [Get your own ASCII Text from Patorjk](http://patorjk.com/software/taag/#p=display&f=Graffiti&t=Type%20Something%20) · §12 L91
+- [Try out the Online Higher Lower Game](http://www.higherlowergame.com/) · §14 L102
+- [PyCharm Keyboard Shortcuts](https://www.jetbrains.com/help/pycharm/running-and-debugging-shortcuts.html?keymap=secondary_windows) · §15 L105
+- [Add a Coffee Emoji from Emojipedia.org](https://emojipedia.org/hot-beverage/) · §15 L105
+- [How to bring up the Emoji Keyboard on Windows 10](https://support.microsoft.com/en-gb/help/4534547/windows-10-keyboard-tips-and-tricks) · §15 L105
+- [How to bring up the Emoji Keyboard on Mac](https://support.apple.com/en-gb/guide/mac-help/mchlp1560/mac) · §15 L105
+- [Turtle Colours (cs111.wellesley.edu)](https://cs111.wellesley.edu/reference/colors) · §16 L110
+- [Pokemon Pokedex](https://pokemondb.net/pokedex/game/x-y) · §16 L111
+- [PrettyTable Package Documentation](https://code.google.com/archive/p/prettytable/wikis/Tutorial.wiki) · §16 L111
+- [Steve Jobs on Object Oriented Programming](https://www.rollingstone.com/culture/culture-news/steve-jobs-in-1994-the-rolling-stone-interview-231132/) · §16 L113
+- [Open Trivia Database](https://opentdb.com/) · §17 L125
+- [RGB Tool from W3Schools](https://www.w3schools.com/colors/colors_rgb.asp) · §18 L134
+- [Hint 1](https://www.w3schools.com/python/ref_file_readlines.asp) · §24 L186
+- [Hint 2](https://www.w3schools.com/python/ref_string_replace.asp) · §24 L186
+- [Hint 3](https://www.w3schools.com/python/ref_string_strip.asp) · §24 L186
+- [Central Park Squirrel Census Data](https://data.cityofnewyork.us/Environment/2018-Central-Park-Squirrel-Census-Squirrel-Data/vfnx-vebw) · §25 L192
+- [Sporcle's Name the States Game](https://www.sporcle.com/games/g/states) · §25 L193
+- [Effbot Archive - The Tkinter Canvas Widget](https://web.archive.org/web/20201108093851/effbot.org/tkinterbook/canvas.htm) · §29 L221
+- [w3schools Python Writing to File Documentation](https://www.w3schools.com/python/python_file_write.asp) · §29 L224
+- [w3schools Python join() method Documentation](https://www.w3schools.com/python/ref_string_join.asp) · §29 L226
+- [Wiktionary Frequency Lists](https://en.wiktionary.org/wiki/Wiktionary:Frequency_lists) · §31 L234
+- [Google Sheets](https://www.google.co.uk/sheets/about/) · §31 L234
+- [Open Subtitles](https://www.opensubtitles.org/en/search/subs) · §31 L234
+- [Google Translate for Google Sheets](https://support.google.com/docs/answer/3093331?hl=en-GB) · §31 L234
+- [Google Translate Language Codes](https://cloud.google.com/translate/docs/languages?hl=en) · §31 L234
+- [Host your Code in the Cloud with pythonanywhere](https://www.pythonanywhere.com/) · §32 L251
+- [ISS Current Location API Documentation](http://open-notify.org/Open-Notify-API/ISS-Location-Now/) · §33 L254
+- [JSON Viewer Extension](https://chrome.google.com/webstore/detail/json-viewer/gbmdgpbipfallnflgajpaliibnhdgobh) · §33 L254
+- [or just use Firefox to view JSON =)](https://www.mozilla.org/en-GB/exp/firefox/new/) · §33 L254
+- [HTTP Status Codes](https://httpstatuses.com/) · §33 L255
+- [Latitude and Longitude to Address Tool](https://www.latlong.net/Show-Latitude-Longitude.html) · §33 L255
+- [Kanye Quotes API](https://kanye.rest/) · §33 L256
+- [Sunrise and Sunset Times API](https://sunrise-sunset.org/api) · §33 L257
+- [w3schools Python split() method Documentation](https://www.w3schools.com/python/ref_string_split.asp) · §33 L257
+- [Find Your Current Latitude and Longitude Tool](https://www.latlong.net) · §33 L258
+- [Documentation on HTML Entities](https://www.w3schools.com/html/html_entities.asp) · §34 L262
+- [FreeFormatter - HTML Unescape Tool](https://www.freeformatter.com/html-escape.html) · §34 L262
+- [How to Get TKinter Canvas Text to Wrap](https://www.google.com/search?q=how+to+get+tkinter+text+in+canvas+to+wrap&oq=how+to+get+tkinter+text+in+canvas+to+wrap&aqs=chrome..69i57j33.7303j0j1&sourceid=chrome&ie=UTF-8) · §34 L264
+- [How to Disable Tkinter Buttons](https://www.google.com/search?q=how+to+disable+tkinter+buttons&oq=how+to+disable+tkinter+buttons&aqs=chrome..69i57j0l2.3868j0j4&sourceid=chrome&ie=UTF-8) · §34 L267
+- [Find Your Latitude/longitude](https://www.latlong.net/) · §35 L270
+- [Online JSON Viewer](http://jsonviewer.stack.hu/) · §35 L270
+- [Find a Place that's raining using Ventusky](https://www.ventusky.com/) · §35 L271
+- [How to Get Twilio to Work on PythonAnywhere Free Accounts](https://help.pythonanywhere.com/pages/TwilioBehindTheProxy/) · §35 L274
+- [TSLA Stock Price](https://uk.tradingview.com/symbols/NASDAQ-TSLA/) · §36 L277
+- [w3schools Python Date Formatting with strftime](https://www.w3schools.com/python/python_datetime.asp) · §37 L286
+- [OpenAi GPT-3](https://openai.com/blog/openai-api/) · §38 L288
+- [Exercise Practice API](https://app.100daysofpython.dev/) · §38 L289
+- [Nutrition & Exercise API Docs](https://app.100daysofpython.dev/services/nutrition/docs) · §38 L290
+- [Submarine Cable Map](https://www.submarinecablemap.com/) · §41 L308
+- [Unzip in Windows](https://pureinfotech.com/extract-zip-file-windows-11-10/) · §41 L312
+- [Unzip on Mac](https://support.apple.com/en-gb/guide/mac-help/mchlp2528/mac) · §41 L312
+- [Diff Checker](https://www.diffchecker.com/) · §41 L314
+- [RGB Colour Mixer](https://www.csfieldguide.org.nz/en/interactives/rgb-mixer/) · §44 L326
+- [Pesticide](https://chrome.google.com/webstore/detail/pesticide-for-chrome/bakpbgckdnepkmkeaiomhmfcnejndkbi) · §44 L328
+- [Beautiful Soup Documentation](https://www.crummy.com/software/BeautifulSoup/bs4/doc/) · §45 L332
+- [(live) Y Combinator Hacker News](https://news.ycombinator.com/news) · §45 L334
+- [Empire's Top 100 Movies of All Time (from Web Archive)](https://web.archive.org/web/20200518073855/https://www.empireonline.com/movies/features/best-movies-2/) · §45 L336
+- [Addiction Warning: The Cookie Clicker Game](https://orteil.dashnet.org/cookieclicker/) · §48 L350
+- [GitHub Pages (no Captcha): The Cookie Clicker Game](https://ozh.github.io/cookieclicker/) · §48 L350
+- [Download and Install the Chrome Browser](https://www.google.com/intl/en_uk/chrome/) · §48 L351
+- [w3schools XPath Tutorial](https://www.w3schools.com/xml/xpath_intro.asp) · §48 L352
+- [Locator Strategies](https://www.selenium.dev/documentation/webdriver/elements/locators/) · §48 L353
+- [Our actual newsletter](https://www.appbrewery.com/p/newsletter) · §48 L355
+- [Tinder](https://tinder.com/) · §50 L368
+- [Machine Learning Generated Profile Pictures](https://www.thispersondoesnotexist.com/) · §50 L368
+- [Time: Does Tweeting at Companies Really Work?](https://time.com/4894182/twitter-company-complaints/) · §51 L374
+- [Huffington Post: Comcast Call from Hell](https://www.huffingtonpost.co.uk/2014/07/15/comcast-call-from-hell_n_5586679.html) · §51 L374
+- [Internet Speed Checker](https://www.speedtest.net/) · §51 L374
+- [Comcast Twitter Bot](https://www.vice.com/en_us/article/yp3vzj/this-bot-will-tweet-at-comcast-whenever-your-internet-is-slower-than-advertised) · §51 L374
+- [Instagram](https://www.instagram.com/) · §52 L379
+- [Follow your competitor's followers to grow your instagram account (Archive)](https://web.archive.org/web/20210119044627/https://hypeplanner.com/blogs/instagram-follow-unfollow-strategy-for-instagram-growth/) · §52 L379
+- [Data Entry Jobs on Indeed](https://www.indeed.com/jobs?q=data%20entry&l=remote) · §53 L385
+- [Automating Your Job Reddit](https://www.reddit.com/r/Python/comments/8uxifv/has_anyone_automated_their_job_completely/) · §53 L385
+- [Automated Job Story](https://workplace.stackexchange.com/questions/93696/is-it-unethical-for-me-to-not-tell-my-employer-i-ve-automated-my-job) · §53 L385
+- [Zillow Property search](https://www.zillow.com/homes/for_rent/1-_beds/?searchQueryState=%7B%22pagination%22%3A%7B%7D%2C%22usersSearchTerm%22%3Anull%2C%22mapBounds%22%3A%7B%22west%22%3A-122.69219435644531%2C%22east%22%3A-122.17446364355469%2C%22south%22%3A37.703343724016136%2C%22north%22%3A37.847169233586946%7D%2C%22isMapVisible%22%3Atrue%2C%22filterState%22%3A%7B%22fr%22%3A%7B%22value%22%3Atrue%7D%2C%22fsba%22%3A%7B%22value%22%3Afalse%7D%2C%22fsbo%22%3A%7B%22value%22%3Afalse%7D%2C%22nc%22%3A%7B%22value%22%3Afalse%7D%2C%22cmsn%22%3A%7B%22value%22%3Afalse%7D%2C%22auc%22%3A%7B%22value%22%3Afalse%7D%2C%22fore%22%3A%7B%22value%22%3Afalse%7D%2C%22pmf%22%3A%7B%22value%22%3Afalse%7D%2C%22pf%22%3A%7B%22value%22%3Afalse%7D%2C%22mp%22%3A%7B%22max%22%3A3000%7D%2C%22price%22%3A%7B%22max%22%3A872627%7D%2C%22beds%22%3A%7B%22min%22%3A1%7D%7D%2C%22isListVisible%22%3Atrue%2C%22mapZoom%22%3A11%7D) · §53 L385
+- [Windows Command Prompt Cheat Sheet](http://www.cs.columbia.edu/~sedwards/classes/2015/1102-fall/Command%20Prompt%20Cheatsheet.pdf) · §54 L390
+- [giphy.com](https://giphy.com/) · §55 L396
+- [My CV Website Hosted on GitHub](https://angelabauer.github.io/cv/) · §56 L401
+- [HTML5 UP Website Templates](https://html5up.net/) · §56 L403
+- [Update Your Footer](http://updateyourfooter.com/) · §57 L407
+- [Genderize API](https://genderize.io/) · §57 L408
+- [Agify API](https://agify.io/) · §57 L408
+- [npoint example blog data](https://www.npoint.io/docs/c790b4d5cab58020d391) · §57 L409
+- [Create your own bin with npoint.io](https://www.npoint.io/) · §57 L409
+- [Penny Juice's Website](https://www.pennyjuice.com/) · §65 L458
+- [Penny Juice Rebranded](https://www.behance.net/gallery/40393701/Penny-Juice-Rebrand) · §65 L458
+- [Adobe Color Wheel](https://color.adobe.com/create/color-wheel) · §65 L459
+- [Design Challenges on Daily UI](https://www.dailyui.co/) · §65 L463
+- [Page inspirations on Collect UI](https://collectui.com/) · §65 L463
+- [Cryptii: Online Encryption](https://cryptii.com/) · §68 L487
+- [';--have i been pwned?](https://haveibeenpwned.com/Passwords) · §68 L488
+- [Password Complexity Checker](http://password-checker.online-domain-tools.com/) · §68 L488
+- [Plain Text Offenders Archive](https://web.archive.org/web/20260219055458/https://plaintextoffenders.com/) · §68 L488
+- [Git for Windows (incl. Bash)](https://gitforwindows.org/) · §70 L502
+- [Get the course](https://udemy-angela.short.gy/age-of-ai) · §102 L604

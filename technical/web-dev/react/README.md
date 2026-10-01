@@ -17,3 +17,7 @@ React fundamentals to Redux and routing.
 
 ## Learning files (pro-instructor)
 - `concepts/` notes, `resources.md`, `misconceptions.md`, `interview.md` are created here as you study.
+
+## Udemy courses
+- `courses/udemy-react-complete-guide/`: React Complete Guide. `official-repo/` has every code snapshot plus the course slides, and `roadmap.md` has all 40 sections
+- Learning order: `_meta/learning-paths.md`

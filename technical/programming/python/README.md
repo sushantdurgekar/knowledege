@@ -18,3 +18,7 @@ Course: `courses/100-days-of-python` (Day 1…17, CoffeeMachine). Cheat sheet + 
 
 ## Learning files (pro-instructor)
 - `concepts/` notes, `resources.md`, `misconceptions.md`, `interview.md` are created here as you study.
+
+## Udemy courses
+- `courses/udemy-100-days-of-code/`: official Udemy resources for all 100 days (starter and solution code, datasets, notebooks), plus `roadmap.md`
+- Learning order: `_meta/learning-paths.md`

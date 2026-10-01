@@ -46,9 +46,15 @@ Legend: **concepts/notes** = your notes Â· **docs** = PDFs/slides/cheat-sheets Â
 - [claude-code/](<technical/data-ai/claude-code>)
   - **courses/** (1): [claude-code-in-action/](<technical/data-ai/claude-code/courses/claude-code-in-action>)
   - [README.md](<technical/data-ai/claude-code/README.md>)
+- [data-science/](<technical/data-ai/data-science>)
+  - **courses/** (1): [udemy-intro-data-science-python/](<technical/data-ai/data-science/courses/udemy-intro-data-science-python>)
+  - [README.md](<technical/data-ai/data-science/README.md>)
 - [genai/](<technical/data-ai/genai>)
-  - **courses/** (1): [genai-python/](<technical/data-ai/genai/courses/genai-python>)
+  - **courses/** (2): [genai-python/](<technical/data-ai/genai/courses/genai-python>), [udemy-genai-langchain-huggingface/](<technical/data-ai/genai/courses/udemy-genai-langchain-huggingface>)
   - [README.md](<technical/data-ai/genai/README.md>)
+- [machine-learning/](<technical/data-ai/machine-learning>)
+  - **courses/** (1): [udemy-ds-ml-dl-nlp-bootcamp/](<technical/data-ai/machine-learning/courses/udemy-ds-ml-dl-nlp-bootcamp>)
+  - [README.md](<technical/data-ai/machine-learning/README.md>)
 - [rag/](<technical/data-ai/rag>)
   - **examples/** (1): [ollama-local-rag/](<technical/data-ai/rag/examples/ollama-local-rag>)
   - [README.md](<technical/data-ai/rag/README.md>)
@@ -60,13 +66,16 @@ Legend: **concepts/notes** = your notes Â· **docs** = PDFs/slides/cheat-sheets Â
 
 ### technical/programming
 - [python/](<technical/programming/python>)
-  - **courses/** (1): [100-days-of-python/](<technical/programming/python/courses/100-days-of-python>)
+  - **courses/** (2): [100-days-of-python/](<technical/programming/python/courses/100-days-of-python>), [udemy-100-days-of-code/](<technical/programming/python/courses/udemy-100-days-of-code>)
   - **docs/** (8): [100-days-check-off-posters.pdf](<technical/programming/python/docs/100-days-check-off-posters.pdf>), [100-days-of-python-syllabus.pdf](<technical/programming/python/docs/100-days-of-python-syllabus.pdf>), [12-rules-to-learn-to-code-ebook.pdf](<technical/programming/python/docs/12-rules-to-learn-to-code-ebook.pdf>), [coding-notebook-sheets.pdf](<technical/programming/python/docs/coding-notebook-sheets.pdf>), [coffee-machine-classes-documentation.pdf](<technical/programming/python/docs/coffee-machine-classes-documentation.pdf>), [coffee-machine-program-requirements.pdf](<technical/programming/python/docs/coffee-machine-program-requirements.pdf>), [course-pledge.pdf](<technical/programming/python/docs/course-pledge.pdf>), [python-syntax-cheat-sheet.pdf](<technical/programming/python/docs/python-syntax-cheat-sheet.pdf>)
   - [README.md](<technical/programming/python/README.md>)
 
 ### technical/security
 
 ### technical/software-engineering
+- [competitive-programming/](<technical/software-engineering/competitive-programming>)
+  - **courses/** (2): [udemy-cp-game-theory/](<technical/software-engineering/competitive-programming/courses/udemy-cp-game-theory>), [udemy-cp-maths-puzzles-1/](<technical/software-engineering/competitive-programming/courses/udemy-cp-maths-puzzles-1>)
+  - [README.md](<technical/software-engineering/competitive-programming/README.md>)
 - [dsa/](<technical/software-engineering/dsa>)
   - **docs/** (2): [dsa-complete-reference.xlsx](<technical/software-engineering/dsa/docs/dsa-complete-reference.xlsx>), [dsa-ultimate-reference.xlsx](<technical/software-engineering/dsa/docs/dsa-ultimate-reference.xlsx>)
   - [README.md](<technical/software-engineering/dsa/README.md>)
@@ -79,11 +88,14 @@ Legend: **concepts/notes** = your notes Â· **docs** = PDFs/slides/cheat-sheets Â
   - [README.md](<technical/software-engineering/system-design/README.md>)
 
 ### technical/web-dev
+- [fundamentals/](<technical/web-dev/fundamentals>)
+  - **courses/** (1): [udemy-complete-web-dev-15-projects/](<technical/web-dev/fundamentals/courses/udemy-complete-web-dev-15-projects>)
+  - [README.md](<technical/web-dev/fundamentals/README.md>)
 - [nextjs/](<technical/web-dev/nextjs>)
   - **examples/** (1): [todo-list/](<technical/web-dev/nextjs/examples/todo-list>)
   - [README.md](<technical/web-dev/nextjs/README.md>)
 - [react/](<technical/web-dev/react>)
-  - **courses/** (1): [react-learning-projects/](<technical/web-dev/react/courses/react-learning-projects>)
+  - **courses/** (2): [react-learning-projects/](<technical/web-dev/react/courses/react-learning-projects>), [udemy-react-complete-guide/](<technical/web-dev/react/courses/udemy-react-complete-guide>)
   - [README.md](<technical/web-dev/react/README.md>)
 - [seo/](<technical/web-dev/seo>)
   - **notes/** (1): [seo-basics.txt](<technical/web-dev/seo/notes/seo-basics.txt>)

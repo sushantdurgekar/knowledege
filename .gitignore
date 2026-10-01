@@ -9,7 +9,10 @@
 /work/
 
 # 2. Bulky learning material: whole repos, courses, samples, datasets, media
-technical/**/courses/
+technical/**/courses/**
+# ...but keep the docs I write for Udemy courses (README, roadmap, resources, skipped list)
+!technical/**/courses/udemy-*/
+!technical/**/courses/udemy-*/*.md
 technical/**/projects/
 technical/**/examples/
 technical/**/datasets/

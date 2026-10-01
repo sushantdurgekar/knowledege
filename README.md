@@ -3,6 +3,8 @@
 Sushant's git-tracked learning memory, run with the **pro-instructor** skill
 (installed for this folder only in `.claude/skills/pro-instructor/`; see `CLAUDE.md`).
 
+**Study order for all courses:** [`_meta/learning-paths.md`](_meta/learning-paths.md)
+
 **Find anything fast:** open [`INDEX.md`](INDEX.md) (auto-generated map of every subject),
 then the subject's `README.md` → *Start here*.
 
@@ -25,11 +27,11 @@ then the subject's `README.md` → *Start here*.
 ## Subjects
 | Domain | Subjects |
 |---|---|
-| data-ai | agentic-ai · anomaly-detection · rag · genai · claude-code |
+| data-ai | machine-learning · data-science · genai · agentic-ai · rag · anomaly-detection · claude-code |
 | bi-analytics | qlik-sense · thoughtspot |
 | certifications | ai-901 · dp-900 |
-| software-engineering | full-stack · system-design · dsa |
-| web-dev | react · nextjs · seo |
+| software-engineering | full-stack · system-design · dsa · competitive-programming |
+| web-dev | fundamentals · react · nextjs · seo |
 | programming | python |
 | devops | docker |
 | cloud, security | _(empty, ready)_ |

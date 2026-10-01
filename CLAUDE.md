@@ -45,3 +45,8 @@ Domains in use: `data-ai`, `bi-analytics`, `cloud`, `devops`, `programming`,
 - Commit with the skill's convention: `<type>(<scope>): <summary>`
   (research | plan | learn | practice | lab | mock | soft | checkpoint | chore).
 - Remote `origin` is GitHub; push only when Sushant asks.
+
+## Udemy courses
+- Each course folder (`technical/**/courses/udemy-*/`) has `README.md`, `roadmap.md` (section checklist), `resources.md` and `skipped-resources.md`. Only these .md files are in git.
+- Downloaded lecture files are in `resources/NN-section/`. `_manifest.json` maps each file to its lecture URL.
+- Regenerate the docs with `python _meta/tools/make_course_docs.py` (source: `_meta/sources/udemy-course-outlines.json`). Study order: `_meta/learning-paths.md`.

@@ -17,3 +17,7 @@ GenAI with Python (Streamlit apps etc.).
 
 ## Learning files (pro-instructor)
 - `concepts/` notes, `resources.md`, `misconceptions.md`, `interview.md` are created here as you study.
+
+## Udemy courses
+- `courses/udemy-genai-langchain-huggingface/`: LangChain, Hugging Face, RAG, LangGraph, fine-tuning, MCP (start at §21; see the README)
+- Learning order: `_meta/learning-paths.md`
