@@ -29,7 +29,7 @@ then the subject's `README.md` → *Start here*.
 |---|---|
 | data-ai | machine-learning · data-science · genai · agentic-ai · rag · anomaly-detection · claude-code |
 | bi-analytics | qlik-sense · thoughtspot |
-| certifications | ai-901 · dp-900 |
+| certifications | ai-901 · ai-103 · ab-620 · ai-500 · dp-900 |
 | software-engineering | full-stack · system-design · dsa · competitive-programming |
 | web-dev | fundamentals · react · nextjs · seo |
 | programming | python |
@@ -39,6 +39,10 @@ then the subject's `README.md` → *Start here*.
 ## Progress
 | Track | Goal | Target date | Readiness | Status |
 |---|---|---|---|---|
+| AI-901 Azure AI Fundamentals | Pass AI-901 | ~2026-10-05 | not measured | active |
+| AI-103 Azure AI Apps and Agents Developer | Pass AI-103 | TBD | not assessed | planned (next) |
+| AB-620 AI Agent Builder | Pass AB-620 | TBD | not assessed | planned (optional) |
+| AI-500 Multi-Agent AI Solutions Expert | Pass AI-500 (needs AI-103) | TBD | not assessed | planned |
 
 ## Daily loop
 1. "Use pro-instructor, resume my learning" (Claude reads `_meta/resume.md`, runs due cards).
