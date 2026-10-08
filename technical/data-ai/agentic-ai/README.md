@@ -8,6 +8,8 @@ updated: 2026-10-01
 AI agents: OpenAI Agents SDK, CrewAI, LangGraph, AutoGen, MCP, Google ADK, LangChain.
 
 ## Start here
+**Folded into the AI Engineering L1–L4 plan:** [../ai-engineering/plan/README.md](../ai-engineering/plan/README.md).
+
 Main course: `courses/ai-engineer-agentic-track` (folders 1_foundations → 6_mcp). Your own lab work: `projects/agentic-track-my-labs` (the *_own notebooks). Also `courses/langchain-langgraph-agents`, `courses/ibm-building-ai-agents`, `examples/google-adk-hello`, `examples/perplexity-clone`, `projects/docs-ai-agent`.
 
 ## What's in this folder

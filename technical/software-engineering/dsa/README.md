@@ -8,6 +8,8 @@ updated: 2026-10-01
 DSA reference sheets.
 
 ## Start here
+**L1–L4 plan (2026-10-08):** [`plan/README.md`](plan/README.md) — levels, certifications, capstones, hub build checklist.
+
 `docs/dsa-ultimate-reference.xlsx`, `docs/dsa-complete-reference.xlsx`. Practice tasks are in the full-stack roadmap (`dsa/` folders).
 
 ## What's in this folder

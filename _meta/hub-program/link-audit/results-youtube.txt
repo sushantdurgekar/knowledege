@@ -1,0 +1,305 @@
+# YouTube oEmbed check, 2026-10-08, via the desktop app browser. Format: id|status|channel|title (title truncated at 70 chars)
+-L-WgKMFuhE|200|Sebastian Lague|A* Pathfinding (E01: algorithm explanation)
+-bt_y4Loofg|200|Fireship|MongoDB in 100 Seconds
+-SuTGoFYjZs|200|Cube Drone|Cube Drone - Bloom Filters
+-W9F__D3oY4|200|George Schott|CS75 (Summer 2012) Lecture 9 Scalability Harvard Web Development David
+09E-tVAUqQw|200|Arpit Bhayani|Why do databases store data in B+ trees?
+0LTXCcVRQi0|200|Interview Pen|Design a Basic Search Engine (Google or Bing) | System Design Intervie
+0M_kIqhwbFo|200|MIT OpenCourseWare|Lecture 8: Hashing with Chaining
+0OrmKCB0UrQ|200|Hussein Nasser|Hyper Text Transfer Protocol Crash Course - HTTP 1.0, 1.1, HTTP/2, HTT
+0PSB9y8ehbk|200|take U forward|Imlement LFU Cache | Leetcode(Hard)
+0buKQHokLK8|200|Simply Explained|How do NoSQL databases work? Simply Explained!
+0oJyNmEbS4w|200|Abdul Bari|2.9 Strassens Matrix Multiplication
+0jWeUdxrGm4|200|Errichto Algorithms|Sparse Table & RMQ (Range Minimum Query)
+16fgzklcF7Y|200|TechWorld with Nana|Istio & Service Mesh - simply explained in 15 mins
+1BfCnjr_Vjg|200|Fireship|WebSockets in 100 Seconds & Beyond with Socket.io
+27r4Bzuj5NQ|200|ByteByteGo|Everything You Need to Know About DNS: Crash Course System Design #4
+1mh2vilbZMg|200|Back To Back SWE|Counting Sort: An Exploration of Sorting Special Input In Linear Time
+2E54GqF0H4s|200|WilliamFiset|Hash table hash function
+2Nt-ZrNP22A|200|Hussein Nasser|WebSockets Crash Course - Handshake, Use-cases, Pros & Cons and more
+2g9OSRKJuzM|200|MIT OpenCourseWare|7. Randomization: Skip Lists
+3Kq1MIfTWCE|200|freeCodeCamp.org|Full Ethical Hacking Course - Network Penetration Testing for Beginner
+3MpzavN3Mco|200|MIT OpenCourseWare|5. Amortization: Amortized Analysis
+3OamzN90kPg|200|NeetCode|Contains Duplicate - Leetcode 217 - Python
+3c-iBn73dDE|200|TechWorld with Nana|Docker Tutorial for Beginners [FULL COURSE in 3 Hours]
+44H3cEC2fFM|200|NeetCode|Merge Intervals - Sorting - Leetcode 56
+4HlNv1qpZFY|200|Hussein Nasser|Server-Sent Events Crash Course
+4NB0NDtOwIQ|200|ByteByteGo|Proxy vs Reverse Proxy (Real-world Examples)
+4NQ3HnhyNfQ|200|WilliamFiset|Floyd Warshall All Pairs Shortest Path Algorithm | Graph Theory | Dyna
+4Uya_I_Oxjk|200|Erik Wilde|Role-Based Access Control (RBAC) Explained: How it works and when to u
+4Xyhb72LCX4|200|Ben Langmead|ADS1: Boyer-Moore basics
+4X0WLg05ASw|200|Tech Primers|What is ELK? | Centralized Log Management | Elasticsearch Logstash Kib
+4vLxWqE94l4|200|ByteByteGo|Top 6 Most Popular API Architecture Styles
+4ZlRH0eK-qQ|200|Abdul Bari|3.5 Prims and Kruskals Algorithms - Greedy Method
+5Km3utixwZs|200|NeetCode|Number of 1 Bits - Leetcode 191 - Python
+5WZl3MMT0Eg|200|NeetCode|Maximum Subarray - Amazon Coding Interview Question - Leetcode 53 - Py
+5faMjKuB9bc|200|Gaurav Sen|What is DATABASE SHARDING?
+5dRGRueKU3M|200|Abdul Bari|4 Principle  of Optimality  - Dynamic Programming introduction
+5cNrTU6o3Fw|200|TechWorld with Nana|Pods and Containers - Kubernetes Networking | Container Communication
+64Zp3tzNbpE|200|MIT 6.824: Distributed Systems|Lecture 6: Fault Tolerance: Raft (1)
+6JxvKfSV9Ns|200|SithDev|Fibonacci Heaps or "How to invent an extremely clever data structure"
+6ULyxuHKxg8|200|ByteByteGo|What is API Gateway?
+6WZ6S-qmtqY|200|ByteByteGo|Top 12 Tips For API Security
+6x0UlIBLRsc|200|SecondThread|AlgorithmsThread 9: Treaps!
+7ABFKPK2hD4|200|NeetCode|LRU Cache - Twitch Interview Question - Leetcode 146
+73r3KWiEvyk|200|NeetCode|House Robber -  Leetcode 198 - Python Dynamic Programming
+7FgU1D4EnpQ|200|Arpit Bhayani|Distributed Transactions: Two-Phase Commit Protocol
+7pJo_rM0z_s|200|Mike the Coder|Prefix Sum Array Explained
+8JKjvY4etTY|200|GOTO Conferences|Event Sourcing • Greg Young • GOTO 2014
+7zuGmKfUt7s|200|GeeksforGeeks|Counting Sort | GeeksforGeeks
+7rkeORD4jSw|200|IBM Technology|What is RabbitMQ?
+8RRo6Ti9d0U|200|Spoonful of Maths|Math Skills: How to find Factorial, Permutation and Combination (Choos
+996OiexHze0|200|OktaDev|OAuth 2.0 and OpenID Connect (in plain English)
+A3jvoE0jGdE|200|Bogdan Stashchuk|MongoDB Aggregation Framework Tutorial
+A80YzvNwqXA|200|freeCodeCamp.org|Solve Coding Interview Backtracking Problems - Crash Course
+ADHcBxEXvFA|200|Defog Tech|Circuit Breaker Pattern - Fault Tolerant Microservices
+AQDCe585Lnc|200|Simply Explained|Asymmetric Encryption - Simply explained
+ARvQcqJ_-NY|200|Abdul Bari|3. Greedy Method -  Introduction
+AWVTKBUnoIg|200|ByteByteGo|Top 5 Most-Used Deployment Strategies
+AXjmTQ8LEoI|200|Tushar Roy - Coding Made Simple|Trie Data Structure
+AYdF7b3nMto|200|CodeAI|The Internet: Packets, Routing & Reliability
+AcqtAEzuoj0|200|Computer Science Lessons|Database Transactions (ACID)
+B-QCq79-Vfw|200|NeetCode|Last Stone Weight - Priority Queue - Leetcode 1046 - Python
+B2AJoQSZf4M|200|Stable Sort|Convex Hull Algorithm - Graham Scan and Jarvis March tutorial
+B7hVxCmfPtM|200|MIT OpenCourseWare|Lecture 4: Heaps and Heap Sort
+AlE5X1NlHgg|200|Hussein Nasser|Transport Layer Security, TLS 1.2 and 1.3 (Explained by Example)
+BDVYtuWXgXE|200|Techdose|Exponential Search - better than Binary search? (Explained)
+BHqjEjzAicA|200|ByteByteGo|CAP Theorem Simplified
+BKZxZwUgL3Y|200|Tech Dummies - Narendra Lakshmana Gowda|System Design distributed web crawler to crawl Billions of web pages |
+BQ9E-2umSWc|200|Techdose|Rolling hash | Rabin karp algorithm | Pattern searching
+BO761Fj6HH8|200|Devoxx Poland|Four Distributed Systems Architectural Patterns by Tim Berglund
+Bay3X9PAX5k|200|Tech Dummies - Narendra Lakshmana Gowda|Bloom filter for System Design | Bloom filter applications | learn blo
+Bj9Mx_Lx3q4|200|Coding with John|Java Strings are Immutable - Here's What That Actually Means
+CZ3wIuvmHeM|200|InfoQ|Mastering Chaos - A Netflix Guide to Microservices
+CpZh4eF8QBw|200|Tushar Roy - Coding Made Simple|Z Algorithm Z values
+CeGtqouT8eA|200|Tech Dummies - Narendra Lakshmana Gowda|How Google searches one document among Billions of documents quickly?
+DKCbsiDBN6c|200|Abdul Bari|6 Introduction to Backtracking - Brute Force Approach
+DEcwa68f-jY|200|dotconferences|dotJS 2019 - James Long - CRDTs for Mortals
+DUbEgNw-F9c|200|Tech Dummies - Narendra Lakshmana Gowda|Redis system design | Distributed cache System design
+DfljaUwZsOk|200|NeetCode|Sliding Window Maximum - Monotonic Queue - Leetcode 239
+DgXR2OWQnLc|200|WilliamFiset|Graph Theory Algorithms
+Dq_ObZwTY_Q|200|AlgoMonster|Monotonic Stack Data Structure Explained
+DXTHb9TqJOs|200|Hussein Nasser|Publish-Subscribe Pattern vs Message Queues vs Request Response (Detai
+EgI5nU9etnU|200|NeetCode|Course Schedule - Graph Adjacency List - Leetcode 207
+F1F2imiOJfk|200|mycodeschool|Data structures: Introduction to stack
+F8pyaR4uQ2g|200|edureka!|Apache Spark Full Course - Learn Apache Spark in 8 Hours | Apache Spar
+FMhbR_kQeHw|200|Gaurav Sen|What is the Publisher Subscriber Model?
+FU4WlwfS3G0|200|System Design Interview|System Design Interview - Rate Limiting (local and distributed)
+FZR0rG3HKIk|200|IBM Technology|Virtualization Explained
+FjliV5u2IVw|200|Socratica|Diophantine Equation: ax+by=gcd(a,b) ← Number Theory
+FtN3BYH2Zes|200|Abdul Bari|4.4 Bellman Ford Algorithm - Single Source Shortest Path - Dynamic Pro
+GU7DpgHINWQ|200|Errichto Algorithms|Binary Search tutorial (C++ and Python)
+G1rOthIU-uo|200|Fireship|Redis in 100 Seconds
+GUDLRan2DWM|200|mycodeschool|Selection sort algorithm
+GhjwOiJ4SqU|200|WilliamFiset|Unweighted Bipartite Matching | Network Flow | Graph Theory
+GhrvZ5nUWNg|200|Valentin Despa|Difference between cookies, session and tokens
+GiN3jRdgxU4|200|Tushar Roy - Coding Made Simple|Ford Fulkerson Algorithm Edmonds Karp Algorithm For Max Flow
+Gjnup-PuquQ|200|Fireship|Docker in 100 Seconds
+H4VrKHVG5qI|200|Tushar Roy - Coding Made Simple|Rabin Karp Substring Search Pattern Matching
+H9bfqozjoqs|200|NeetCode|Coin Change - Dynamic Programming Bottom Up - Leetcode 322
+HaEPXoXVf2k|200|Amazon Web Services|AWS re:Invent 2018: Amazon DynamoDB Deep Dive: Advanced Design Pattern
+HqPJF2L5h9U|200|Abdul Bari|2.6.3 Heap - Heap Sort - Heapify - Priority Queues
+Hr5cWUld4vU|200|NeetCode|Binary Tree Maximum Path Sum - DFS - Leetcode 124 - Python
+I6jB0nM9SKU|200|ByteByteGo|The Secret Sauce Behind NoSQL: LSM Tree
+I08syTslan8|200|Be A Better Dev|What is API Idempotency and Why Is It Important?
+I7j0F7AHpb8|200|NeetCode|Best Time to Buy and Sell Stock with Cooldown - Leetcode 309 - Python
+IP-rGJKSZ3s|200|Tom Scott|The Two Generals' Problem
+IlEsdxuD4lY|200|NeetCode|Unique Paths - Dynamic Programming - Leetcode 62
+JZBQLXgSGfs|200|WilliamFiset|Union Find Kruskal's Algorithm
+IsvocB5BJhw|200|NeetCode|Partition Equal Subset Sum - Dynamic Programming - Leetcode 416 - Pyth
+K0Ta65OqQkY|200|Gaurav Sen|What is LOAD BALANCING?
+L-Wzglnm4dM|200|Errichto Algorithms|Binary Exponentiation
+L7LtmfFYjc4|200|Tech Dummies - Narendra Lakshmana Gowda|Whatsapp System design or software architecture
+M4lR_Va97cQ|200|ByteByteGo|FAANG System Design Interview: Design A Location Based Service (Yelp,
+LdOnanfc5TM|200|WilliamFiset|Max Flow Ford Fulkerson | Network Flow | Graph Theory
+M6cm8UeeziI|200|WilliamFiset|Dinic's Algorithm | Network Flow | Graph Theory
+MK-NZ4hN7rs|200|Ryan Schachte|Sliding Window Technique - Algorithmic Mental Models
+MeU5_k9ssrs|200|TechWorld with Nana|ArgoCD Tutorial for Beginners | GitOps CD for Kubernetes
+Mv9NEXX1VHc|200|Computerphile|What on Earth is Recursion? - Computerphile
+NLKQEOgBAnw|200|HackerRank|Algorithms: Bit Manipulation
+MtQL_ll5KhQ|200|GeeksforGeeks|HEAP SORT | Sorting Algorithms | DSA | GeeksforGeeks
+NdeTGlZ__Do|200|Alex Hyett|Monolithic vs Microservice Architecture: Which To Use and When?
+NobHlGUjV3g|200|mycodeschool|Introduction to linked list
+NuY7szYSXSw|200|MIT OpenCourseWare|Lec 4 | MIT 6.042J Mathematics for Computer Science, Fall 2010
+O3hI9FdxFOM|200|MIT OpenCourseWare|Lec 10 | MIT 6.046J / 18.410J Introduction to Algorithms (SMA 5503), F
+O7_w001f58c|200|Niema Moshiri|Advanced Data Structures: Aho-Corasick Automaton
+OnSn2XEQ4MY|200|NeetCode|Invert Binary Tree - Depth First Search - Leetcode 226
+On03HWe2tZM|200|Josh's DevBox|Visual introduction Two Pointer Algorithm | Data Structure and Algorit
+OtDxDvCpPL4|200|CrashCourse|Compression: Crash Course Computer Science #21
+PE4gwstWhmc|200|Stanford|How We've Scaled Dropbox
+Ph95IHmRp5M|200|NeetCode|N-Queens - Backtracking - Leetcode 51 - Python
+PziYflu8cB8|200|Fireship|Kubernetes Explained in 100 Seconds
+Q-BpqyOT3a8|200|Traversy Media|What Is A RESTful API? Explanation of REST & HTTP
+QdkS6ZjeR7Q|200|Strange Loop Conference|"Jepsen II: Linearizable Boogaloo" by Kyle Kingsbury
+R8_veQiYBjI|200|TechWorld with Nana|GitHub Actions Tutorial - Basic Concepts and CI/CD Pipeline with Docke
+REOH22Xwdkk|200|NeetCode|Subsets - Backtracking - Leetcode 78
+REVkXVxvMQE|200|Neo4j|What is a graph database? (in 10 minutes)
+RI9np1LWzqw|200|ByteByteGo|What Is A CDN? How Does It Work?
+RSXM9bgqxJM|200|Inside code|Checking if a point is inside a polygon is RIDICULOUSLY simple (Ray ca
+RppuJYwlcI8|200|WilliamFiset|Edmonds Karp Algorithm | Network Flow | Graph Theory
+RgITNht_f4Q|200|WilliamFiset|Fenwick Tree range queries
+Rs6DXyWpWrI|200|Techdose|Kosaraju Algorithm | Strongly connected components in a graph
+RynPj8C0BXA|200|Tejas Patel|Sharding & Database Partitioning  | System Design Basics
+SSo-z16wEnc|200|Going Headless with John|What Is A Backend For A Frontend (BFF) Architecture Pattern
+STKCRSUsyP0|200|GOTO Conferences|The Many Meanings of Event-Driven Architecture • Martin Fowler • GOTO
+SqqrOspasag|200|Hussein Nasser|Proxy vs Reverse Proxy Server Explained
+T6L9EoBy8Zk|200|Fireship|Neo4j in 100 Seconds
+TzeBrDU-JaY|200|mycodeschool|Merge sort algorithm
+U0xTu6E2CT8|200|Tech Dummies - Narendra Lakshmana Gowda|Dropbox system design | Google drive system design | System design fil
+U2SozAs9RzA|200|NeetCode|Koko Eating Bananas - Binary Search - Leetcode 875 - Python
+UBUNrFtufWo|200|Fireship|Session vs Token Authentication in 100 Seconds
+UF9Iqmg94tk|200|ByteByteGo|Consistent Hashing | Algorithms You Should Know #1
+V3pzxngeLqw|200|ByteByteGo|Bloom Filters | Algorithms You Should Know #2 | Real-world Examples
+V-sEwsca1ak|200|Tushar Roy - Coding Made Simple|Longest Palindromic Substring Manacher's Algorithm
+Ua0GhsJSlWM|200|NeetCode|Longest Common Subsequence - Dynamic Programming - Leetcode 1143
+V5-7GzOfADQ|200|Abdul Bari|9.1 Knuth-Morris-Pratt KMP String Matching Algorithm
+UGaOXaXAM5M|200|Shusen Wang|2-3: Skip List
+V6H1qAeB-l4|200|take U forward|G-32. Dijkstra's Algorithm - Using Priority Queue - C++ and Java - Par
+VFskby7lUbw|200|NeetCode|Burst Baloons - Dynamic Programming - Leetcode 312 - Python
+VOpjAHCee7c|200|Jacob Sorber|Understanding and implementing a Linked List in C and Java
+VOQNf1VxU3Q|200|mycodeschool|Doubly Linked List - Implementation in C/C++
+VYZGlgzr_As|200|MIT OpenCourseWare|13. Incremental Improvement: Max Flow, Min Cut
+W2Z7fbCLSTw|200|Fireship|7 Database Paradigms
+W_VV2Fx32_Y|200|Fireship|Serverless Computing in 100 Seconds
+We3YDTzNXEk|200|Tushar Roy - Coding Made Simple|Minimum Edit Distance Dynamic Programming
+Wf4QhpdVFQo|200|NeetCodeIO|Design Linked List - Leetcode 707 - Python
+X48VuDVv0do|200|TechWorld with Nana|Kubernetes Tutorial for Beginners [FULL COURSE in 4 Hours]
+XEmy13g1Qxc|200|NeetCode|Kth Largest Element in an Array - Quick Select - Leetcode 215 - Python
+VmogG01IjYc|200|HackerRank|Data Structures: Solve 'Find the Running Median' Using Heaps
+XYQecbcd6_c|200|NeetCode|Longest Palindromic Substring - Python - Leetcode 5
+XYi2-LPrwm4|200|NeetCode|Edit Distance - Dynamic Programming - Leetcode 72 - Python
+Y-Gl4HEyeUQ|200|the roadmap|System Design 101
+Y40bRyPQQr0|200|GeeksforGeeks|Depth First Traversal for a Graph | GeeksforGeeks
+Yan0cv2cLy8|200|NeetCode|Jump Game - Greedy - Leetcode 55
+YXFI4osELGU|200|Yusuf Shakeel|Sorting Algorithm | Radix Sort - step by step guide
+Yw4rkaTc0f8|200|Hussein Nasser|gRPC Crash Course - Modes, Examples, Pros & Cons and more
+ZBHKZF5w4YU|200|Tushar Roy - Coding Made Simple|Segment Tree Range Minimum Query
+ZBM28ZPlin8|200|Be A Better Dev|Short Polling vs Long Polling vs WebSockets - System Design
+_5mu7lZz5X4|200|Jordan has no life|Kafka vs. RabbitMQ - who wins and why? | Systems Design Interview 0 to
+_Ss42Vb1SU4|200|Aced (formerly Exponent)|SQL vs. NoSQL Explained (in 4 Minutes)
+a-sBfyiXysI|200|ByteByteGo|HTTP/1 to HTTP/2 to HTTP/3
+a4yX7RUgTxI|200|ByteByteGo|Top 5 Redis Use Cases
+a9__D53WsUs|200|Amazon Web Services|What is AWS? | Amazon Web Services
+aZjYr87r1b8|200|Abdul Bari|10.2  B Trees and B+ Trees. How they are useful in Databases
+aycn9KO8_Ls|200|Aditya Verma|13 Unbounded Knapsack
+apIw0Opq5nk|200|IDeserve|Detect a loop in a linked list
+aBbsfn863oA|200|NeetCode|Design Circular Queue - Leetcode 622 - Python
+bBTPZ9NdSk8|200|System Design Interview|System Design Interview - Notification Service
+bNvIQI2wAjk|200|NeetCode|Product of Array Except Self - Leetcode 238 - Python
+bbTqI0oqL5U|200|Techdose|Check if two line segments intersect
+bxRVz8zklWM|200|Jenny's Lectures CS IT|3.1 Stack in Data Structure | Introduction to Stack | Data Structures
+cJZw5mrxryA|200|AWS Events|Disaster Recovery of Workloads on AWS | AWS Events
+cQP8WApzIQQ|200|MIT 6.824: Distributed Systems|Lecture 1: Introduction
+ciGAVER_erw|200|Jordan has no life|LSM Tree + SSTable Database Indexes | Systems Design Interview: 0 to 1
+cY4HiiFHO1o|200|WilliamFiset|Traveling Salesman Problem | Dynamic Programming | Graph Theory
+co4_ahEDCho|200|Abdul Bari|3.4 Huffman Coding - Greedy Method
+d0rlrRZc-0s|200|BoulderComputerScience|Treaps
+cjWnW0hdF1Y|200|NeetCode|Longest Increasing Subsequence - Dynamic Programming - Leetcode 300
+dGAgxozNWFE|200|ByteByteGo|Cache Systems Every Developer Should Know
+d2wn_E1jxn4|200|GOTO Conferences|Site Reliability Engineering (SRE) at Google • Christof Leng • GOTO 20
+dn01XST9-bI|200|Jenny's Lectures CS IT|4.4 Circular Queue in Data Structure | Circular Queue using Arrays in
+dpw9EHDh2bM|200|React Conf|React Today and Tomorrow and  90% Cleaner React With Hooks
+eIQh02xuVw4|200|Fireship|GraphQL Explained in 100 Seconds
+ed8SzALpx1Q|200|freeCodeCamp.org|GraphQL Full Course - Novice to Expert
+f2xi3c1S95M|200|Keep On Coding|Learn Dynamic Programming (Memoization & Tabulation)
+f5EpcWp0THw|200|TechWorld with Nana|What is GitOps, How GitOps works and Why it's so useful
+fMZMm_0ZhK4|200|Tushar Roy - Coding Made Simple|System Design : Design a service like TinyUrl
+fMSJSS7eO1w|200|NeetCode|Rotate Image - Matrix - Leetcode 48
+fNzpcB7ODxQ|200|The Cyber Mentors|Ethical Hacking in 12 Hours - Full Course - Learn to Hack!
+g0npyaQtAQM|200|NeetCode|Target Sum - Dynamic Programming - Leetcode 494 - Python
+fV-TF4OvZpk|200|Back To Back SWE|Find The Longest Increasing Subsequence - Dynamic Programming Fundamen
+g4y2h70D6Nk|200|WilliamFiset|AVL tree removals
+gs2LMfuOR9k|200|NeetCode|Lowest Common Ancestor of a Binary Search Tree - Leetcode 235 - Python
+h4Sl21AKiDg|200|TechWorld with Nana|How Prometheus Monitoring works | Prometheus Architecture explained
+heUFId6Qd1A|200|Kartik Arora|Introduction to Digit Dynamic Programming
+ibjEGG7ylHk|200|WilliamFiset|Union Find Introduction
+i-SKeOcBwko|200|mycodeschool|Insertion sort algorithm
+gBTe7lFR3vc|200|NeetCode|Linked List Cycle - Floyd's Tortoise and Hare - Leetcode 141 - Python
+itmhHWaHupI|200|NeetCode|Find Median from Data Stream - Heap & Priority Queue - Leetcode 295
+j9QmMEWmcfo|200|ByteByteGo|SSL, TLS, HTTPS Explained
+jDM6_TnYIqE|200|Abdul Bari|10.1 AVL Tree - Insertion and Rotations
+jM2dhDPYMQM|200|QuanticDev|Sliding Window Technique + 4 Questions - Algorithms
+jPKTo1iGQiE|200|NeetCode|Design Youtube - System Design Interview
+jsmMtJpPnhU|200|WilliamFiset|Prim's Minimum Spanning Tree Algorithm | Graph Theory
+k-Yaq8AHlFA|200|Distributed Systems Course|L16: The CAP Theorem
+k9TUPpGqYTo|200|Corey Schafer|Python Tutorial for Beginners 2: Strings - Working with Textual Data
+kHi1DUhp9kM|200|Aditya Verma|Recursion Introduction and Identification
+ktWL3nN38ZA|200|CS50|Algorithms Summary - CS50 Shorts
+lILY8eSspEo|200|Moss|Grafana Explained in Under 5 Minutes
+l5k1ai_GBDE|200|TechWorld with Nana|Terraform explained in 15 mins | Terraform Tutorial for Beginners
+lJwbPZGo05A|200|NeetCode|Gas Station - Greedy - Leetcode 134 - Python
+lJ3CD9M3nEQ|200|Zach Star|This completely changed the way I see numbers | Modular Arithmetic Vis
+lsKU38RKQSo|200|Hello Interview|Design Uber w/ a Ex-Meta Staff Engineer: System Design Interview break
+lyw4FaxrwHg|200|WilliamFiset|Bellman Ford Algorithm | Shortest path & Negative cycles | Graph Theor
+mB5HXBb_HY8|200|Abdul Bari|2.7.2.  Merge Sort Algorithm
+mQeF6bN8hMk|200|NeetCode|Clone Graph - Depth First Search - Leetcode 133
+mhUQe4BKZXs|200|Tech Dummies - Narendra Lakshmana Gowda|Rate Limiting system design | TOKEN BUCKET, Leaky Bucket, Sliding Logs
+mesu75PTDC8|200|Programming with Mosh|JavaScript Bitwise Operators
+nLmhmB6NzcM|200|Abdul Bari|4.5 0/1 Knapsack - Two Methods - Dynamic Programming
+oBt53YbR9Kk|200|freeCodeCamp.org|Dynamic Programming - Learn to Solve Algorithmic Problems & Coding Cha
+nONCGxWoUfM|200|NeetCode|Non-Overlapping Intervals - Leetcode 435 - Python
+noUNH3jDLC0|200|Martin Kleppmann|Distributed Systems 7.2: Linearizability
+nvlt0dA7rsQ|200|Google Cloud Tech|Spanner Internals Part 1: What Makes Spanner Tick? (Cloud Next '19)
+oNI0rf2P9gE|200|Abdul Bari|4.2 All Pairs Shortest Path (Floyd-Warshall) - Dynamic Programming
+oP2-8ysT3QQ|200|Tushar Roy - Coding Made Simple|Prim's Algorithm Minimum Spanning Tree Graph Algorithm
+oTTzNMHM05I|200|Abdul Bari|3.1 Knapsack Problem - Greedy Method
+olfaBgJrUBI|200|Code with Lucian|Design a Payment System - System Design Interview
+pSqmAO-m7Lk|200|WilliamFiset|Dijkstra's Shortest Path Algorithm | Graph Theory
+oobqoCJlHA0|200|NeetCode|Implement Trie (Prefix Tree) - Leetcode 208
+pV2kpPD66nE|200|NeetCode|NUMBER OF ISLANDS - Leetcode 200 - Python
+p__ETf2CKY4|200|MomoJoy Kids|Bubble Sort By Abdul Bari
+pcKY4hjDrxk|200|Abdul Bari|5.1 Graph Traversals - BFS & DFS -Breadth First Search and Depth First
+pkkFqlG0Hds|200|mycodeschool|Introduction to sorting algorithms
+pomxJOFVcQs|200|Hussein Nasser|Relational Database ACID Transactions (Explained by Example)
+prx1psByp7U|200|Abdul Bari|4.3 Matrix Chain Multiplication - Dynamic Programming
+q5a5OiGbT6Q|200|NeetCode|Merge K Sorted Lists - Leetcode 23 - Python
+q6IEA26hvXc|200|NeetCode|Median of Two Sorted Arrays - Binary Search - Leetcode 4
+q0QOYtSsTg4|200|Osiris Salazar|11   4   Interval Search Trees 1347
+qH6yxkw0u78|200|mycodeschool|Data structures: Introduction to Trees
+qHMLy5JjbjQ|200|Gaurav Sen|Merkle Tree with real world examples
+qkLl7nAwDPo|200|NeetCode|Design Min Stack - Amazon Interview Question - Leetcode 155 - Python
+qTb1sZX74K0|200|CodeSignal|Static Arrays vs. Dynamic Arrays
+qvZGUFHWChY|200|Michael Sambol|Red-black trees in 4 minutes — Intro
+rI2EBUEMfTk|200|NeetCode|K Closest Points to Origin - Heap / Priority Queue - Leetcode 973 - Py
+rpqsSkTIdAw|200|the roadmap|What is Eventual Consistency? | System Design
+ru7mWZJlRQg|200|RH|The Chinese Remainder Theorem made easy
+rv4LlmLmVWk|200|TechWorld with Nana|Microservices explained - the What, Why and How?
+s4DPM8ct1pI|200|NeetCode|Binary Search - Leetcode 704 - Python
+rlTkd4yOQpE|200|Algorithms Live!|Episode 20 - Bitmask Dynamic Programming
+s8JqcZtvnsM|200|Computerphile|Paxos Agreement - Computerphile
+s8p8ukTyA2I|200|NeetCode|Task Scheduler - Leetcode 621 - Python
+sCR3SAVdyCc|200|IBM Technology|What is a Load Balancer?
+sSno9rV8Rhg|200|Abdul Bari|4.9 Longest Common Subsequence (LCS)  - Recursion and Dynamic Programm
+sfWyugl4JWA|200|CS Dojo|Introduction to Hash Tables and Dictionaries (Data Structures & Algori
+shs0KM3wKv8|200|HackerRank|Data Structures: Hash Tables
+t18YB3xDfXI|200|OktaDev|An Illustrated Guide to OAuth and OpenID Connect
+t0Cq6tVNRBA|200|HackerRank|Data Structures: Heaps
+t9IDoenf-lo|200|IBM Technology|What is a Vector Database?
+tEylFyxbDLE|200|Google Cloud Tech|SLIs, SLOs, SLAs, oh my! (class SRE implements DevOps)
+tfU0JEZjcsg|200|Be A Better Dev|AWS S3 Tutorial For Beginners
+tomUWcQ0P3k|200|Fireship|Terraform in 100 Seconds
+u4JAi2JJhI8|200|NeetCode|Serialize and Deserialize Binary Tree - Preorder Traversal - Leetcode
+uUatD9AudXo|200|WilliamFiset|Sparse Table Data Structure
+umWABit-wbk|200|Tech Dummies - Narendra Lakshmana Gowda|UBER System design | OLA system design | uber architecture | amazon in
+us0qySiUsGU|200|Tushar Roy - Coding Made Simple|System design : Design Autocomplete or Typeahead Suggestions for Googl
+uvb00oaa3k8|200|Fireship|Kafka in 100 Seconds
+v4cd1O4zkGw|200|HackerRank|Big O Notation
+uxA__b23t2w|200|GeeksforGeeks|Suffix Array | Set 1 | Introduction (Explanation) | GeeksforGeeks
+wUgWX0nc4NY|200|WilliamFiset|Tarjan's Strongly Connected Component (SCC) Algorithm (UPDATED) | Grap
+wNVCJj642n4|200|xoaxdotnet|Algorithms Lesson 5: Linear and Binary Searching
+wYk0xPP_P_8|200|Tech Dummies - Narendra Lakshmana Gowda|Twitter system design | twitter Software architecture | twitter interv
+wAyrtLAeWvI|200|mycodeschool|Exponentiation - Calculate Pow(x,n) using recursion
+wiGpQwVHdE0|200|NeetCode|Longest Substring Without Repeating Characters - Leetcode 3 - Python
+wjYnzkAhcNk|200|NeetCode|Find the Duplicate Number - Floyd's Cycle Detection - Leetcode 287 - P
+wptevk0bshY|200|WilliamFiset|Priority Queue Introduction
+xhr26ia4k38|200|TechRetox|Radix Sort Tutorial
+xpDnVSmNFX0|200|Gaurav Sen|System Design BASICS: Horizontal vs. Vertical Scaling
+xrYTjaK5QVM|200|Tech Dummies - Narendra Lakshmana Gowda|Amazon interview question: System design / Architecture for auto sugge
+yCcWpzY8dIA|200|GOTO Conferences|Conflict Resolution for Eventual Consistency • Martin Kleppmann • GOTO
+yFjzGRb8NOk|200|Drawing Boxes|Event Sourcing Explained
+yCxV0kBpA6M|200|Jenny's Lectures CS IT|7.4 Insertion Sort Algorithm |Explanation with C Program| Data Structu
+yWWbLrV4PZ8|200|동빈나|34강 - KMP 문자열 매칭 알고리즘 [ 실전 알고리즘 강좌(Algorithm Programming Tutorial) #34
+yvBR71D0nAQ|200|Amazon Web Services|AWS re:Invent 2018: Amazon DynamoDB Under the Hood: How We Built a Hyp
+zaRkONvyGr8|200|Gaurav Sen|What is CONSISTENT HASHING and Where is it used?
+zp6pBNbUB2U|200|Jenny's Lectures CS IT|4.1 Queue in Data Structure | Introduction to Queue | Data Structures
+#NON200 -ykwb1d0HxI:404,-CJ3afQc55k:404,0-sxOvL5wP8:404,0I28R0eTGWY:404,0Z5WWrHL6nk:404,0sYCCnxA9d8:404,1ReL03BFdkE:404,2Gu2DBJT_4o:404,2eDmZEIKxKk:404,3IfkgMgwPVY:404,4SHBPLbwpcs:404,5_Df7yGEGgc:404,5xIWoXBNqoA:404,6Cz_eFKS35M:404,6_R8KCvEe4Y:404,6gCoaJsXGBo:404,7HPzbOe1RuI:404,7JL6fYWiEo:400,7WqzKEXEb2k:404,7ZiGuYmNJxk:404,7h1s2SojuxM:404,7hJlj9WNAuQ:404,7m5xLXBwkCM:404,7r4_ne5l0XA:404,8zX0rue2NeU:404,9NN_2p_3bKQ:404,9aAEpJJjMdE:404,A74zyKO7xd8:404,ADAh2XEFo1I:404,AMNpD6GnYAo:404,AWVTKBEnoIg:404,AlE5Z8I4bW0:404,BH2OHYTA3TI:404,C0rXKREH3CA:404,C2YZnS3ZqAI:404,C46QfTjVCnu:400,CCpRvf1iyYQ:404,CRDhFQVcC4w:404,C_QnBxpNUPE:404,D4NvpklBd98:404,DTeqnN5vOos:404,DJh-NRkufic:404,Dl54tEQFJNM:404,EM3XLQH9RkM:404,GNWhAH3K1oE:404,GtLS6HfGPlM:404,H2bjttEV4LU:404,HcB6rC4CqGE:404,Hq7V6jDXtFU:404,HsQOWfc3Wic:403,IPrAuICnJQQ:404,JsGpJ3mQxjM:404,JapiE8E9728:404,JsyqFPklmJU:404,K9sZzHAhVbQ:404,KG5YFfR0j8E:404,LQqkMe5dyPo:404,LWZ_HFaZ2EE:404,M3o0i1otDos:404,LXhGW606R4o:404,MRV3fmMiNV4:404,N1sGLCk61pQ:404,Ngl0RGBfKXk:404,NxjB7PIquHQ:404,PPGb7qCwIHM:404,P18_E4PVX6I:404,PhZPTC_WgGI:404,PqmIJjhC2IA:404,R873BlNVUqQ:404,Qy1M3f_tsOg:404,ReU-6LMvV_E:404,S_E:400,SgE3MLa3E5o:404,T01ZXPFH7bk:404,TXvHuLjhMlI:404,TFI0KKTqwq8:404,TaNFsAIfSqU:404,UC5xf8FqkOM:404,V3rog5Z0opU:404,VGhsxQCFGGw:404,VgXiMcbGwzQ:403,Wu2x16pkp-A:404,WxHjXR4MyCM:404,WyWL1SmApkk:404,Xpksk5rS3XA:404,YOpPaHpsZU8:404,YR9vBhKCOBk:404,YTCiM4Xot6s:404,YW6oe2guatw:404,YbZ3zGi9cZk:404,YoPNHjSTB9s:404,Zi7Yv7tK2TM:404,ZE2wsZlPuQ8:404,ZhpT5p3t1Yo:404,_dlzg5QyVHc:404,a-3O3X4YkKE:404,b2uf5MFpMSI:404,bjhyvSMrRaU:404,bp5R-A0bAUo:404,cH6KBXLUGdI:404,cR23oJcU2Rc:404,ciDtpZSR7Nk:404,d-Bfi5qywBY:404,dQF0zyaym8A:404,dqHBAAuZass:404,eL10SJ_yGas:404,em_1DO6660A:404,edOZpFGBOrM:404,hRM0TBnwZp0:404,ibzseKL9GpM:404,iiAk5svVgRE:404,jD3B0y1Efp8:404,jB7xpFBi2yk:404,jDwOA0RkHVg:404,jTD2D8VuvTo:404,jUyQqLvg8Qg:404,jfnPJBdCDRg:404,jzFqE1vRtO8:404,kBtgt1U8MhI:404,kCzsASKsBEA:404,keSfV8f0nDg:404,lB8WxNBNLg0:404,leKvcs4S67I:404,m-Hia4xz5Wk:404,m1ersVHBFZc:404,mNR4e5OGEjQ:404,mNYIk6EV-kI:404,mkFr9Jj97GE:404,mnSc9HF3BPg:404,nGqRkEMqEAA:404,nKhbDYn8-SE:404,nHBGB1n7xlE:404,nMch7Q0n8Qk:404,nnWnPbPHfmU:404,nVfLSrSMOvo:404,oG5Kss8Rnbo:404,oI0X1MNxYFE:404,oUJbuFMyFDk:404,oaxVpGkyOGs:404,pQll-0LCNHQ:404,pJ3MPTiPHBY:404,pqxBM9wMbsQ:404,q8jPmCJEh6s:404,qqRYkcaza6I:404,r8UvWSX3179:400,r-2Z5eMcJik:404,r_1HhBa7vFk:404,s7EDKb-LQZg:404,s7I3PxNIb48:404,sPirTDM-Dzk:404,sVqUGDBJU2M:404,t8U3Os5B_HE:404,tFYMT_bfFks:404,t_pGTCgFLJU:404,u8fGswlf85o:404,uM06jHdIC80:404,uQwjYKZ5HGQ:404,uNpjTJFMa3g:404,u_Hfkb5Jqsk:404,ub2kDtfCbPo:404,vG7ntnMgxqQ:404,vS4Zn1a9KUc:401,v_PxhJsv_Hg:404,xouin3Cjec0:404,y9_HqZCRFvA:404,yHwneN6zber:400,ySKgQ8l60qk:404,zA5-x3T7qmI:404,zAkP5b6cHbk:404,zqkIav2vHpo:404

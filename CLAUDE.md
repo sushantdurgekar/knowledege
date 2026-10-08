@@ -28,8 +28,13 @@ Direct mode: the vault is on disk. Boot by reading `_meta/learner-profile.md`,
 | `sessions/YYYY/MM/` | checkpoint logs | yes |
 | `_meta/` | profile, resume state, tools, restructure log | yes |
 
-Domains in use: `data-ai`, `bi-analytics`, `cloud`, `devops`, `programming`,
+Domains in use: `data-ai`, `bi-analytics`, `cloud`, `databases`, `devops`, `programming`,
 `software-engineering`, `web-dev`, `security`, `certifications`.
+
+## Hub program (L1–L4 Study Hubs)
+Master plan and build queue: `_meta/hub-program/README.md` (with hub-spec, story-style-guide,
+concept-ownership, certification-map, verification-protocol). Each subject's plan is in
+`<subject>/plan/`; hubs go in `<subject>/hubs/<slug>-<level>-<label>-hub.html`. Build one hub per session.
 
 ## Rules
 - Names: lowercase-kebab-case for every folder/file *we* create or rename. Never rename

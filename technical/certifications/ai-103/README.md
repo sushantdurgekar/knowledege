@@ -93,3 +93,6 @@ Planned, not started. SRS cards (deck `ai-103`) start appearing from 2026-10-07,
 - [Content Understanding: portal, client app and images](labs/lab-cu.md) (90 min, cost: medium)
 - [Document Intelligence and knowledge mining](labs/lab-mining.md) (85 min, cost: medium)
 - [Automated RAG ingestion pipeline](labs/lab-rag.md) (45 min, cost: medium)
+
+## Story upgrade (planned 2026-10-08)
+Kid-style story blocks for every module: see [plan/story-upgrade.md](plan/story-upgrade.md).

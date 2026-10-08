@@ -8,6 +8,8 @@ updated: 2026-10-01
 React fundamentals to Redux and routing.
 
 ## Start here
+**L1–L4 plan (2026-10-08):** [`plan/README.md`](plan/README.md) — levels, certifications, capstones, hub build checklist.
+
 `courses/react-learning-projects` (Class-based Components, Custom Hooks, HTTP, Redux, Routing).
 
 ## What's in this folder

@@ -8,6 +8,8 @@ updated: 2026-10-01
 System design topics and learning plan.
 
 ## Start here
+**L1–L4 plan (2026-10-08):** [`plan/README.md`](plan/README.md) — levels, certifications, capstones, hub build checklist.
+
 `docs/system-design-200-topics.xlsx`, `docs/system-design-learning-plan.xlsx`. Generator script: `projects/sd-excel-builder`.
 
 ## What's in this folder

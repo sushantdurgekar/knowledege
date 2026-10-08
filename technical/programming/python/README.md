@@ -8,6 +8,8 @@ updated: 2026-10-01
 Python from basics to OOP.
 
 ## Start here
+**L1–L4 plan (2026-10-08):** [`plan/README.md`](plan/README.md) — levels, certifications, capstones, hub build checklist.
+
 Course: `courses/100-days-of-python` (Day 1…17, CoffeeMachine). Cheat sheet + syllabus in `docs/`.
 
 ## What's in this folder

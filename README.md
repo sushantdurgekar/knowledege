@@ -27,11 +27,12 @@ then the subject's `README.md` → *Start here*.
 ## Subjects
 | Domain | Subjects |
 |---|---|
-| data-ai | machine-learning · data-science · genai · agentic-ai · rag · anomaly-detection · claude-code |
-| bi-analytics | qlik-sense · thoughtspot |
+| data-ai | **ai-engineering** (plan; folds the rest) · machine-learning · data-science · genai · agentic-ai · rag · anomaly-detection · claude-code |
+| bi-analytics | qlik-sense · **power-bi** · thoughtspot |
 | certifications | ai-901 · ai-103 · ab-620 · ai-500 · dp-900 |
 | software-engineering | full-stack · system-design · dsa · competitive-programming |
-| web-dev | fundamentals · react · nextjs · seo |
+| databases | **sql** |
+| web-dev | **javascript** · **nodejs** · fundamentals · react · nextjs · seo |
 | programming | python |
 | devops | docker |
 | cloud, security | _(empty, ready)_ |
@@ -39,10 +40,14 @@ then the subject's `README.md` → *Start here*.
 ## Progress
 | Track | Goal | Target date | Readiness | Status |
 |---|---|---|---|---|
-| AI-901 Azure AI Fundamentals | Pass AI-901 | ~2026-10-05 | not measured | active |
-| AI-103 Azure AI Apps and Agents Developer | Pass AI-103 | TBD | not assessed | planned (next) |
+| AI-901 Azure AI Fundamentals | Pass AI-901 | 2026-10-07 | **passed 883** | done ✅ |
+| AI-103 Azure AI Apps and Agents Developer | Pass AI-103 | TBD | not assessed | next (story upgrade = hub build #1) |
 | AB-620 AI Agent Builder | Pass AB-620 | TBD | not assessed | planned (optional) |
 | AI-500 Multi-Agent AI Solutions Expert | Pass AI-500 (needs AI-103) | TBD | not assessed | planned |
+
+## L1–L4 hub program (planned 2026-10-08)
+12 capabilities × 4 levels (Foundation → Proficient → Specialist → Expert), built one hub per session.
+Queue and rules: [`_meta/hub-program/README.md`](_meta/hub-program/README.md). Next build: **#1 AI-103 story upgrade**, then **#2 Python L1**.
 
 ## Daily loop
 1. "Use pro-instructor, resume my learning" (Claude reads `_meta/resume.md`, runs due cards).

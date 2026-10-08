@@ -8,6 +8,8 @@ updated: 2026-10-01
 How search engines crawl, index and rank.
 
 ## Start here
+**Folded into a larger L1–L4 plan:** [../javascript/plan/README.md](../javascript/plan/README.md).
+
 `notes/seo-basics.txt`.
 
 ## What's in this folder

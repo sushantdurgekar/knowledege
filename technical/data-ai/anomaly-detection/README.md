@@ -8,6 +8,8 @@ updated: 2026-10-01
 Multivariate / time-series anomaly detection (Azure MVAD, Fabric KQL).
 
 ## Start here
+**Folded into the AI Engineering L1–L4 plan:** [../ai-engineering/plan/README.md](../ai-engineering/plan/README.md).
+
 Read `examples/azure-mvad-sample` first, then `examples/timeseries-anomaly-detection`. Your app: `projects/anomaly-detection-ui` + `projects/anomaly-detection-server` (open `projects/anomaly-detection.code-workspace`). Data in `datasets/`.
 
 ## What's in this folder

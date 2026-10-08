@@ -1,23 +1,20 @@
 ---
-updated: 2026-10-04
+updated: 2026-10-08
 ---
 # Resume State (keep < 400 words)
 
-- **Active track:** AI-901 Microsoft Azure AI Fundamentals (technical/certifications/ai-901)
-- **Exam / deadline:** AI-901 3-day sprint started 2026-10-02; book once its readiness gate is met (mock ≥ 80%, official practice ≥ 85%, no domain < 70%)
-- **Roadmap position:** AI-901 Day 1 → D1.1 unless progress was made in the hub (progress is saved in the hub, not here)
-- **Queued tracks (Study Hubs ready, vault folders written 2026-10-04):**
-  - AI-103 next (technical/certifications/ai-103) · hub https://claude.ai/artifact/TdpMZLFYA9knTdjNyCms9F
-  - AB-620 optional/parallel (technical/certifications/ab-620) · hub https://claude.ai/artifact/DfeAjDjaTCgtf36RSKeSSS
-  - AI-500 after AI-103 (technical/certifications/ai-500) · hub https://claude.ai/artifact/WBg4UvZLizXnza8mbGvMze
-- **Readiness (latest):** AI-901 not measured; AI-103/AB-620/AI-500 not assessed
-- **Weak areas:** all (new to AI + Azure). AI-103's biggest domain is agents (30–35%).
-- **Open misconceptions:** none logged yet (traps pre-seeded in each cert's misconceptions.md)
-- **Cards:** 55 ai-901 due now; 340 new cards scheduled along each roadmap (ai-103 from 2026-10-07, ab-620 from 2026-10-28, ai-500 from 2026-11-09, ~2 modules/day). Re-date if pace changes.
-- **Watch-outs (checked 2026-10-02):** Foundry workflows retire 1 Dec 2026; Azure OpenAI On Your Data retires 14 Oct 2026; CU pro mode retired (agentic mode); new agent identity model (July 2026). Hubs flag exam-outline vs current answers.
-- **Persona / prefs:** Tutor; wants stories, diagrams, discussion, examples, Q&A
-- **Last session:** sessions/2026/10/2026-10-04-1817-ai-103-ab-620-ai-500-hubs.md
+- **Done:** AI-901 passed 7 Oct 2026 (883). 
+- **Active track:** AI-103 (technical/certifications/ai-103) · hub https://claude.ai/artifact/TdpMZLFYA9knTdjNyCms9F
+- **New program (planned 2026-10-08):** L1–L4 Study Hubs for 12 capabilities + story upgrades of the 4 exam hubs. Queue (52 builds): `_meta/hub-program/README.md`. Plans in each subject's `plan/` folder (README, levels.md) + `resources.md`.
+- **Next build:** #1 AI-103 story upgrade (`technical/certifications/ai-103/plan/story-upgrade.md`), then #2 Python L1, #3 SQL L1, #4 Qlik L1, #5 Power BI L1.
+- **Audits done:** all 1,433 links in the system design + DSA sheets checked (31% dead, ~4 in 10 live YouTube labels wrong); cleaned `-verified.xlsx` copies saved; report `_meta/hub-program/link-audit/audit-report.md`. Qlik framework: 8 issues listed in `technical/bi-analytics/qlik-sense/plan/README.md`.
+- **Cert facts to re-check at build:** PCEP-30-03 / PCAP-31-04 (Q3 2026), Qlik System Administrator status, Mirantis DCA, DP-600/DP-800 new outlines from 19 Oct 2026, Node JSNAD/JSNSD retired.
+- **Readiness:** AI-103/AB-620/AI-500 not assessed.
+- **Cards:** existing decks unchanged (ai-103 cards dated from 2026-10-07 are due; re-date if starting later).
+- **Open questions for Sushant:** hours/week; whether the Qlik framework xlsx is an employer file (move to `work/`?); whether to export levels.md to the Learning Path app format.
+- **Persona / prefs:** Tutor; stories (apples/oranges, car trips), diagrams, discussion, Q&A.
+- **Last session:** sessions/2026/10/2026-10-08-1400-hub-program-plans.md
 - **Next 3 actions:**
-  1. Finish the AI-901 gate (mock + official practice), then book it
-  2. AI-103: take the hub diagnostic, set hours/week in Roadmap, start Block 1
-  3. Answer the 3 warm-up questions (AI-103, AB-620, AI-500) in chat; paste quiz/mock results for remediation
+  1. "Use pro-instructor. Build the next unticked item in `_meta/hub-program/README.md`" (AI-103 story upgrade)
+  2. Start AI-103 Block 1 with the upgraded hub
+  3. Build Python L1 hub (#2)

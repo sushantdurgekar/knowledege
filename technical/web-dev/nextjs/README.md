@@ -8,6 +8,8 @@ updated: 2026-10-01
 Next.js App Router + Prisma.
 
 ## Start here
+**L1–L4 plan (2026-10-08):** [`plan/README.md`](plan/README.md) — levels, certifications, capstones, hub build checklist.
+
 `examples/todo-list`.
 
 ## What's in this folder

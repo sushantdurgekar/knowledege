@@ -29,3 +29,6 @@ Microsoft AI-901 (refreshed Azure AI Fundamentals, successor of AI-900).
 | concepts/01-10 | Dense notes per topic (+ SDK cheat sheet) |
 | misconceptions.md | Traps / confusable pairs |
 | resources.md | Rated links + lab URLs |
+
+## Story upgrade (planned 2026-10-08)
+Kid-style story blocks for every module: see [plan/story-upgrade.md](plan/story-upgrade.md).

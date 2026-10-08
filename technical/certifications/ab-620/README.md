@@ -64,3 +64,6 @@ Planned, not started. SRS cards (deck `ab-620`) start appearing from 2026-10-28,
 - [Computer use on a test website (self-guided)](labs/lab-cua.md) (45 min, cost: medium)
 - [Cross-platform multi-agent with A2A (Learn module exercise)](labs/lab-a2a.md) (60 min, cost: low)
 - [Extend a pipeline with a gated approval](labs/lab-pipeline-gate.md) (50 min, cost: low)
+
+## Story upgrade (planned 2026-10-08)
+Kid-style story blocks for every module: see [plan/story-upgrade.md](plan/story-upgrade.md).

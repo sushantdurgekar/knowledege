@@ -8,6 +8,8 @@ updated: 2026-10-01
 GenAI with Python (Streamlit apps etc.).
 
 ## Start here
+**Folded into the AI Engineering L1–L4 plan:** [../ai-engineering/plan/README.md](../ai-engineering/plan/README.md).
+
 `courses/genai-python`.
 
 ## What's in this folder

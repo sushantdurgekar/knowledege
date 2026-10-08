@@ -1,0 +1,144 @@
+# Checked 2026-10-08 via the desktop app browser (same-origin fetch, redirects followed). Format: path|status|redirected-to|page title
+## blog.bytebytego.com (168 links: 5 live, 163 return 404 = invented slugs)
+/p/api-design|200||Mastering the Art of API Design - by Alex Xu
+/p/capacity-planning|200||Capacity Planning - by ByteByteGo and Diego Ballona
+/p/how-does-the-domain-name-system-dns|200||How does the Domain Name System (DNS) lookup work?
+/p/infrastructure-as-code|200||Infrastructure as Code - ByteByteGo Newsletter
+/p/redis-vs-memcached|200||Redis vs Memcached - by Alex Xu - ByteByteGo Newsletter
+#ALL-OTHER-BYTEBYTEGO|404
+## geeksforgeeks.org (135 links: 122 live, mostly redirected to /dsa/..., 13 dead)
+/a-search-algorithm|200|/dsa/a-search-algorithm/|A* Search Algorithm
+/0-1-knapsack-problem-dp-10|200|/dsa/0-1-knapsack-problem-dp-10/|0/1 Knapsack Problem
+/activity-selection-problem-greedy-algo-1|200|/dsa/activity-selection-problem-greedy-algo-1/|Activity Selection
+/aho-corasick-algorithm-pattern-searching|200|/dsa/aho-corasick-algorithm-pattern-searching/|Aho-Corasick Algorithm for Pattern Searching
+/array-data-structure|200|/dsa/array-data-structure-guide/|Array Data Structure
+/avl-tree-set-1-insertion|200|/dsa/insertion-in-an-avl-tree/|Insertion in an AVL Tree
+/amortized-analysis-introduction|404||
+/bellman-ford-algorithm-dp-23|200|/dsa/bellman-ford-algorithm-dp-23/|Bellman–Ford Algorithm
+/binary-heap|200|/dsa/binary-heap/|Binary Heap
+/b-tree-set-1-introduction-2|200|/dsa/introduction-of-b-tree-2/|Introduction of B Tree
+/backtracking-algorithms|200|/dsa/backtracking-algorithms/|Backtracking Algorithm
+/binary-search|200|/dsa/binary-search/|Binary Search
+/binary-search-tree-data-structure|200|/dsa/binary-search-tree-data-structure/|Binary Search Tree
+/binary-indexed-tree-or-fenwick-tree-2|200|/dsa/binary-indexed-tree-or-fenwick-tree-2/|Binary Indexed Tree or Fenwick Tree
+/binary-search-on-answer|404||
+/bipartite-graph|200|/dsa/bipartite-graph/|Check whether a given graph is Bipartite or not
+/binary-tree-data-structure|200|/dsa/binary-tree-data-structure/|Binary Tree Data Structure
+/bit-manipulation-techniques-in-competitive-programming|404||
+/bitwise-operators-in-c-cpp|200|/c/bitwise-operators-in-c-cpp/|Bitwise Operators in C
+/boyer-moore-algorithm-for-pattern-searching|200|/dsa/boyer-moore-algorithm-for-pattern-searching/|Boyer Moore Algorithm for Pattern Searching
+/bloom-filters-introduction-and-python-implementation|200|/python/bloom-filters-introduction-and-python-implementation/|Bloom Filters - Introduction and Implementation
+/bitmasking-and-dynamic-programming-set-1-count-ways-to-assign-unique-cap-to-every-person|200|/dsa/bitmasking-and-dynamic-programming-set-1-count-ways-to-assign-unique-cap-to-every-person/|Count Ways To Assign Unique Cap To Every Person
+/bubble-sort|200|/dsa/bubble-sort-algorithm/|Bubble Sort
+/check-if-two-given-line-segments-intersect|200|/dsa/check-if-two-given-line-segments-intersect/|Check If Two Segments Intersect
+/circular-linked-list|200|/dsa/circular-linked-list/|Introduction to Circular Linked List
+/breadth-first-search-or-bfs-for-a-graph|200|/dsa/breadth-first-search-or-bfs-for-a-graph/|Breadth First Search or BFS for a Graph
+/chinese-remainder-theorem-set-1-introduction|200|/dsa/introduction-to-chinese-remainder-theorem/|Introduction to Chinese Remainder Theorem
+/closest-pair-of-points-using-divide-and-conquer-algorithm|200|/dsa/closest-pair-of-points-using-divide-and-conquer-algorithm/|Minimum Distance between Two Points
+/counting-sort|200|/dsa/counting-sort/|Counting Sort
+/count-set-bits-in-an-integer|200|/dsa/count-set-bits-in-an-integer/|Count Set Bits
+/construct-tree-from-given-inorder-and-preorder-traversal|200|/dsa/construct-tree-from-given-inorder-and-preorder-traversal/|Binary Tree from Inorder and Preorder traversals
+/convex-hull-set-2-graham-scan|200|/dsa/convex-hull-using-graham-scan/|Convex Hull using Graham Scan
+/depth-first-search-or-dfs-for-a-graph|200|/dsa/depth-first-search-or-dfs-for-a-graph/|Depth First Search or DFS for a Graph
+/data-structures/linked-list|200|/dsa/linked-list-data-structure/|Linked List Data Structure
+/custom-comparator-in-cpp-for-sorting-a-vector-of-pairs|404||
+/deque-set-1-introduction-applications|200|/dsa/deque-set-1-introduction-applications/|Deque Data Structure
+/design-a-stack-that-supports-getmin-in-o1-time-and-o1-extra-space|200|/dsa/design-a-stack-that-supports-getmin-in-o1-time-and-o1-extra-space/|Stack with Minimum
+/dijkstras-shortest-path-algorithm-greedy-algo-7|200|/dsa/dijkstras-shortest-path-algorithm-greedy-algo-7/|Dijkstra's Algorithm
+/digit-dp-introduction|200|/dsa/digit-dp-introduction/|Digit DP | Introduction
+/dinics-algorithm-maximum-flow|200|/dsa/dinics-algorithm-maximum-flow/|Dinic's algorithm for Maximum Flow
+/doubly-linked-list|200|/dsa/doubly-linked-list/|Doubly Linked List Tutorial
+/divide-and-conquer|200|/dsa/divide-and-conquer/|Divide and Conquer Algorithm
+/dynamic-programming|200|/dsa/dynamic-programming/|Dynamic Programming or DP
+/edit-distance-dp-5|200|/dsa/edit-distance-dp-5/|Edit Distance
+/dp-on-trees|404||
+/euclidean-algorithms-basic-and-extended|200|/dsa/euclidean-algorithms-basic-and-extended/|Euclidean algorithms (Basic and Extended)
+/floyd-warshall-algorithm-dp-16|200|/dsa/floyd-warshall-algorithm-dp-16/|Floyd Warshall Algorithm
+/find-the-smallest-window-in-a-string-containing-all-characters-of-another-string|200|/dsa/find-the-smallest-window-in-a-string-containing-all-characters-of-another-string/|Smallest window in a String containing all characters of other
+/fibonacci-heap-set-1-introduction|200|/dsa/fibonacci-heap-set-1-introduction/|Fibonacci Heap | Set 1 (Introduction)
+/exponential-search|200|/dsa/exponential-search/|Exponential Search
+/fractional-knapsack-problem|200|/dsa/fractional-knapsack-problem/|Fractional Knapsack
+/ford-fulkerson-algorithm-for-maximum-flow-problem|200|/dsa/ford-fulkerson-algorithm-for-maximum-flow-problem/|Ford-Fulkerson Algorithm for Maximum Flow Problem
+/floyds-cycle-finding-algorithm|200|/dsa/floyds-cycle-finding-algorithm/|Floyd's Cycle Finding Algorithm
+/graph-data-structure-and-algorithms|200|/dsa/graph-data-structure-and-algorithms/|Graph Algorithms
+/hashing-data-structure|200|/dsa/hashing-data-structure/|Hashing in Data Structure
+/greedy-algorithms|200|/dsa/greedy-algorithms/|Greedy Algorithms Tutorial
+/given-a-set-of-line-segments-find-if-any-two-segments-intersect|200|/dsa/given-a-set-of-line-segments-find-if-any-two-segments-intersect/|Sweep Line Algorithm - Find if any Two Segments Intersect
+/heap-sort|200|/dsa/heap-sort/|Heap Sort
+/heavy-light-decomposition|404||
+/how-do-dynamic-arrays-work|200|/dsa/how-do-dynamic-arrays-work/|How do Dynamic arrays work?
+/huffman-coding-greedy-algo-3|200|/dsa/huffman-coding-greedy-algo-3/|Huffman Coding Algorithm
+/insertion-sort|200|/dsa/insertion-sort-algorithm/|Insertion Sort Algorithm
+/implementation-of-bfs-based-maximum-flow-algorithm-edmonds-karp-algorithm|404||
+/how-to-check-if-a-given-point-lies-inside-a-polygon|200|/dsa/how-to-check-if-a-given-point-lies-inside-a-polygon/|Point Inside Polygon
+/introduction-to-circular-queue|200|/dsa/introduction-to-circular-queue/|Implementation of Circular Queue Using Array
+/interval-tree|200|/dsa/interval-tree/|Interval Tree
+/interpolation-search|200|/dsa/interpolation-search/|Interpolation Search
+/k-dimensional-tree|200|/dsa/search-and-insertion-in-k-dimensional-tree/|Search and Insertion in K Dimensional tree
+/k-largestor-smallest-elements-in-an-array|200|/dsa/k-largestor-smallest-elements-in-an-array/|Find k largest elements in an array
+/kmp-algorithm-for-pattern-searching|200|/dsa/kmp-algorithm-for-pattern-searching/|KMP Algorithm
+/kruskals-minimum-spanning-tree-algorithm-greedy-algo-2|200|/dsa/kruskals-minimum-spanning-tree-algorithm-greedy-algo-2/|Kruskal's Minimum Spanning Tree (MST) Algorithm
+/longest-common-subsequence-dp-4|200|/dsa/longest-common-subsequence-dp-4/|Longest Common Subsequence (LCS)
+/linear-search|200|/dsa/linear-search/|Linear Search Algorithm
+/largest-sum-contiguous-subarray|200|/dsa/largest-sum-contiguous-subarray/|Maximum Subarray Sum - Kadane's Algorithm
+/lowest-common-ancestor-binary-tree-set-1|200|/dsa/lowest-common-ancestor-binary-tree-set-1/|Lowest Common Ancestor in a Binary Tree
+/lru-cache-implementation|200|/system-design/lru-cache-implementation/|Introduction to LRU Cache
+/longest-increasing-subsequence-dp-3|200|/dsa/longest-increasing-subsequence-dp-3/|Longest Increasing Subsequence (LIS)
+/manacher-algorithm-linear-time-longest-palindromic-substring-part-1|404||
+/matrix-chain-multiplication-dp-8|200|/dsa/matrix-chain-multiplication-dp-8/|Matrix Chain Multiplication
+/mathematics-combinatorics|404||
+/max-heap-in-python|200|/python/max-heap-in-python/|Max Heap in Python
+/matrix|200|/dsa/matrix/|Matrix Data Structure
+/median-of-stream-of-integers-running-integers|200|/dsa/median-of-stream-of-integers-running-integers/|Median of a Stream
+/maximum-bipartite-matching|200|/dsa/maximum-bipartite-matching/|Maximum Bipartite Matching
+/merge-sort|200|/dsa/merge-sort/|Merge Sort
+/merge-k-sorted-linked-lists|200|/dsa/merge-k-sorted-linked-lists/|Merge K sorted linked lists
+/merging-intervals|200|/dsa/merging-intervals/|Overlapping Intervals
+/minimum-number-of-jumps-to-reach-end-of-a-given-array|200|/dsa/minimum-number-of-jumps-to-reach-end-of-a-given-array/|Jump Game - Minimum Jumps to Reach End
+/min-heap-in-python|200|/python/min-heap-in-python/|Min Heap in Python
+/memoization-1d-2d-and-3d|200|/dsa/memoization-1d-2d-and-3d/|Memoization (1D, 2D and 3D)
+/modular-arithmetic|200|/engineering-mathematics/modular-arithmetic/|Modular Arithmetic
+/mos-algorithm-query-square-root-decomposition-set-1-introduction|200|/dsa/mos-algorithm-query-square-root-decomposition-set-1-introduction/|Range Queries for At Least K Frequent
+/monotonic-stack|404||
+/n-queen-problem-backtracking-3|200|/dsa/n-queen-problem-backtracking-3/|N Queen Problem
+/prefix-sum-array-implementation-applications|404||
+/open-addressing-collision-handling-technique-in-hashing|200|/dsa/open-addressing-collision-handling-technique-in-hashing/|Open Addressing Collision Handling technique in Hashing
+/persistent-segment-tree-set-1-introduction|200|/dsa/persistent-segment-tree-set-1-introduction/|Persistent Segment Tree | Set 1 (Introduction)
+/prims-minimum-spanning-tree-mst-greedy-algo-5|200|/dsa/prims-minimum-spanning-tree-mst-greedy-algo-5/|Prim's Algorithm for Minimum Spanning Tree (MST)
+/priority-queue-set-1-introduction|200|/dsa/priority-queue-set-1-introduction/|Introduction to Priority Queue
+/queue-data-structure|200|/dsa/queue-data-structure/|Queue Data Structure
+/program-to-find-whether-a-no-is-power-of-two|200|/dsa/program-to-find-whether-a-given-number-is-power-of-2/|Check for Power of 2
+/quick-sort|200|/dsa/quick-sort-algorithm/|Quick Sort
+/quickselect-algorithm|200|/dsa/quickselect-algorithm/|Quickselect Algorithm
+/rabin-karp-algorithm-for-pattern-searching|200|/dsa/rabin-karp-algorithm-for-pattern-searching/|Rabin-Karp Algorithm for Pattern Searching
+/recursion|200|/dsa/introduction-to-recursion-2/|Introduction to Recursion
+/radix-sort|200|/dsa/radix-sort/|Radix Sort
+/red-black-tree-set-1-introduction-2|200|/dsa/introduction-to-red-black-tree/|Introduction to Red-Black Tree
+/randomized-algorithms|200|/dsa/randomized-algorithms/|Randomized Algorithms
+/segment-tree-set-1-sum-of-given-range|200|/dsa/segment-tree-sum-of-given-range/|Range Sum Queries with Update
+/separate-chaining-collision-handling-technique-in-hashing|200|/dsa/separate-chaining-collision-handling-technique-in-hashing/|Separate Chaining Collision Handling Technique in Hashing
+/sieve-of-eratosthenes|200|/dsa/sieve-of-eratosthenes/|Sieve of Eratosthenes
+/selection-sort|200|/dsa/selection-sort-algorithm-2/|Selection Sort
+/set-in-python|404||
+/stack-data-structure|200|/dsa/stack-data-structure/|Stack Data Structure
+/sliding-window-maximum-maximum-of-all-subarrays-of-size-k|200|/dsa/sliding-window-maximum-maximum-of-all-subarrays-of-size-k/|Sliding Window Maximum (Maximum of All Subarrays of Size K)
+/skip-list|200|/dsa/skip-list/|Skip List - Efficient Search, Insert and Delete in Linked List
+/sparse-table|200|/dsa/sparse-table/|Sparse Table
+/string-data-structure|200|/dsa/string-data-structure/|String in Data Structure
+/strongly-connected-components|200|/dsa/strongly-connected-components/|Strongly Connected Components
+/strassens-matrix-multiplication|200|/dsa/strassens-matrix-multiplication/|Matrix Multiplication
+/stock-buy-sell|200|/dsa/stock-buy-sell/|Stock Buy and Sell - Multiple Transaction Allowed
+/suffix-array-set-1-introduction|200|/dsa/suffix-array-set-1-introduction/|Suffix Array | Set 1 (Introduction)
+/ternary-search|200|/dsa/ternary-search/|Ternary Search
+/tabulation-vs-memoization|200|/dsa/tabulation-vs-memoization/|Tabulation vs Memoization
+/timsort|200|/dsa/timsort/|TimSort
+/trie-insert-and-search|200|/dsa/trie-insert-and-search/|Trie Data Structure
+/treap-a-randomized-binary-search-tree|200|/dsa/treap-a-randomized-binary-search-tree/|Treap (A Randomized Binary Search Tree)
+/two-pointers-technique|200|/dsa/two-pointers-technique/|Two Pointers Technique
+/topological-sorting|200|/dsa/topological-sorting/|Topological Sorting
+/window-sliding-technique|200|/dsa/window-sliding-technique/|Sliding Window Technique
+/unbounded-knapsack-repetition-of-items-allowed|404||
+/write-a-c-program-to-calculate-powxn|200|/dsa/write-a-c-program-to-calculate-powxn/|Power Function Implementation
+/union-find|200|/dsa/introduction-to-disjoint-set-data-structure-or-union-find-algorithm/|Introduction to Disjoint Set (Union-Find Data Structure)
+/write-a-c-program-to-print-all-permutations-of-a-given-string|200|/dsa/write-a-c-program-to-print-all-permutations-of-a-given-string/|Permutations of given String
+/z-algorithm-linear-time-pattern-searching-algorithm|200|/dsa/z-algorithm-linear-time-pattern-searching-algorithm/|Z algorithm (Linear time pattern searching Algorithm)

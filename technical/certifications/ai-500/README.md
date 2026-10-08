@@ -74,3 +74,6 @@ Planned, not started. SRS cards (deck `ai-500`) start appearing from 2026-11-09,
 - [Zero Trust for agents: workload identity, RBAC, private networking, Key Vault](labs/lab-security.md) (120 min, cost: high)
 - [Guardrails and the AI Red Teaming Agent](labs/lab-redteam.md) (90 min, cost: medium)
 - [CI/CD with IaC, OIDC, dependency order and evaluation gates](labs/lab-cicd.md) (100 min, cost: medium)
+
+## Story upgrade (planned 2026-10-08)
+Kid-style story blocks for every module: see [plan/story-upgrade.md](plan/story-upgrade.md).

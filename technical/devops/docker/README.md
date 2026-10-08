@@ -8,6 +8,8 @@ updated: 2026-10-01
 Dockerfiles and multi-container apps.
 
 ## Start here
+**L1–L4 plan (2026-10-08):** [`plan/README.md`](plan/README.md) — levels, certifications, capstones, hub build checklist.
+
 `examples/hello-docker` → `examples/react-express-app` → `examples/react-express-app-dockerignore`.
 
 ## What's in this folder

@@ -1,0 +1,433 @@
+{
+ "empty_topics": [
+  [
+   "sd-topics",
+   "5. Caching",
+   "Write-Around Cache"
+  ],
+  [
+   "sd-topics",
+   "8. Data Processing",
+   "Lambda Architecture"
+  ],
+  [
+   "sd-topics",
+   "9. Security",
+   "Canary Deployment"
+  ],
+  [
+   "sd-topics",
+   "9. Security",
+   "Multi-Region High Availability"
+  ],
+  [
+   "sd-plan",
+   "Phase 3 \u2014 Core Advanced",
+   "Lambda Architecture"
+  ],
+  [
+   "sd-plan",
+   "Phase 3 \u2014 Core Advanced",
+   "Canary Deployment"
+  ],
+  [
+   "sd-plan",
+   "Phase 3 \u2014 Core Advanced",
+   "Multi-Region High Availability"
+  ],
+  [
+   "sd-plan",
+   "Phase 6 \u2014 More Advanced",
+   "Write-Around Cache"
+  ]
+ ],
+ "thin_topics": [
+  [
+   "sd-topics",
+   "1. Fundamentals",
+   "PACELC Theorem"
+  ],
+  [
+   "sd-topics",
+   "2. Networking",
+   "TCP vs UDP"
+  ],
+  [
+   "sd-topics",
+   "3. Databases",
+   "Column-Family Stores (Wide-Column)"
+  ],
+  [
+   "sd-topics",
+   "3. Databases",
+   "Time-Series Databases"
+  ],
+  [
+   "sd-topics",
+   "3. Databases",
+   "Blob / Object Storage"
+  ],
+  [
+   "sd-topics",
+   "4. DB Internals",
+   "Database Replication"
+  ],
+  [
+   "sd-topics",
+   "4. DB Internals",
+   "Vector Clocks"
+  ],
+  [
+   "sd-topics",
+   "4. DB Internals",
+   "Two-Phase Commit (2PC)"
+  ],
+  [
+   "sd-topics",
+   "4. DB Internals",
+   "MVCC (Multi-Version Concurrency Control)"
+  ],
+  [
+   "sd-topics",
+   "4. DB Internals",
+   "Read/Write Quorum"
+  ],
+  [
+   "sd-topics",
+   "5. Caching",
+   "Cache Stampede / Thundering Herd"
+  ],
+  [
+   "sd-topics",
+   "5. Caching",
+   "Hotspot / Hot Key Problem"
+  ],
+  [
+   "sd-topics",
+   "6. Messaging & Events",
+   "Event-Driven Architecture"
+  ],
+  [
+   "sd-topics",
+   "6. Messaging & Events",
+   "Outbox Pattern"
+  ],
+  [
+   "sd-topics",
+   "7. Architecture",
+   "Service Discovery"
+  ],
+  [
+   "sd-topics",
+   "7. Architecture",
+   "API Versioning"
+  ],
+  [
+   "sd-topics",
+   "8. Data Processing",
+   "Batch Processing"
+  ],
+  [
+   "sd-topics",
+   "8. Data Processing",
+   "ETL Pipelines"
+  ],
+  [
+   "sd-topics",
+   "8. Data Processing",
+   "Materialized Views"
+  ],
+  [
+   "sd-topics",
+   "8. Data Processing",
+   "Data Warehouse"
+  ],
+  [
+   "sd-topics",
+   "8. Data Processing",
+   "Column-Oriented Storage"
+  ],
+  [
+   "sd-topics",
+   "8. Data Processing",
+   "Data Partitioning in Analytics"
+  ],
+  [
+   "sd-topics",
+   "9. Security",
+   "DDoS Protection"
+  ],
+  [
+   "sd-topics",
+   "9. Security",
+   "Zero Trust Architecture"
+  ],
+  [
+   "sd-topics",
+   "9. Security",
+   "WAF (Web Application Firewall)"
+  ],
+  [
+   "sd-topics",
+   "10. Observability",
+   "Incident Response & Post-Mortems"
+  ],
+  [
+   "sd-topics",
+   "10. Observability",
+   "Profiling & Performance Debugging"
+  ],
+  [
+   "sd-topics",
+   "11. Distributed Algos",
+   "Gossip Protocol"
+  ],
+  [
+   "sd-topics",
+   "11. Distributed Algos",
+   "Count-Min Sketch"
+  ],
+  [
+   "sd-topics",
+   "11. Distributed Algos",
+   "Quorum Systems"
+  ],
+  [
+   "sd-topics",
+   "11. Distributed Algos",
+   "Heartbeat Protocol"
+  ],
+  [
+   "sd-topics",
+   "11. Distributed Algos",
+   "Phi Accrual Failure Detector"
+  ],
+  [
+   "sd-topics",
+   "11. Distributed Algos",
+   "Two-Phase Locking (2PL)"
+  ],
+  [
+   "sd-topics",
+   "11. Distributed Algos",
+   "Lamport Timestamps"
+  ],
+  [
+   "sd-topics",
+   "12. Cloud & Infra",
+   "CI/CD Pipelines"
+  ],
+  [
+   "sd-topics",
+   "12. Cloud & Infra",
+   "Multi-Cloud & Hybrid Cloud"
+  ],
+  [
+   "sd-topics",
+   "13. Classic Designs",
+   "URL Shortener (TinyURL)"
+  ],
+  [
+   "sd-plan",
+   "Phase 1 \u2014 Core Beginner",
+   "Blob / Object Storage"
+  ],
+  [
+   "sd-plan",
+   "Phase 1 \u2014 Core Beginner",
+   "Batch Processing"
+  ],
+  [
+   "sd-plan",
+   "Phase 1 \u2014 Core Beginner",
+   "URL Shortener (TinyURL)"
+  ],
+  [
+   "sd-plan",
+   "Phase 2 \u2014 Core Intermediate",
+   "Column-Family Stores (Wide-Column)"
+  ],
+  [
+   "sd-plan",
+   "Phase 2 \u2014 Core Intermediate",
+   "Database Replication"
+  ],
+  [
+   "sd-plan",
+   "Phase 2 \u2014 Core Intermediate",
+   "Event-Driven Architecture"
+  ],
+  [
+   "sd-plan",
+   "Phase 2 \u2014 Core Intermediate",
+   "Service Discovery"
+  ],
+  [
+   "sd-plan",
+   "Phase 2 \u2014 Core Intermediate",
+   "ETL Pipelines"
+  ],
+  [
+   "sd-plan",
+   "Phase 2 \u2014 Core Intermediate",
+   "Data Warehouse"
+  ],
+  [
+   "sd-plan",
+   "Phase 2 \u2014 Core Intermediate",
+   "DDoS Protection"
+  ],
+  [
+   "sd-plan",
+   "Phase 2 \u2014 Core Intermediate",
+   "Incident Response & Post-Mortems"
+  ],
+  [
+   "sd-plan",
+   "Phase 2 \u2014 Core Intermediate",
+   "Heartbeat Protocol"
+  ],
+  [
+   "sd-plan",
+   "Phase 2 \u2014 Core Intermediate",
+   "CI/CD Pipelines"
+  ],
+  [
+   "sd-plan",
+   "Phase 3 \u2014 Core Advanced",
+   "Two-Phase Commit (2PC)"
+  ],
+  [
+   "sd-plan",
+   "Phase 3 \u2014 Core Advanced",
+   "MVCC (Multi-Version Concurrency Control)"
+  ],
+  [
+   "sd-plan",
+   "Phase 3 \u2014 Core Advanced",
+   "Cache Stampede / Thundering Herd"
+  ],
+  [
+   "sd-plan",
+   "Phase 3 \u2014 Core Advanced",
+   "Outbox Pattern"
+  ],
+  [
+   "sd-plan",
+   "Phase 3 \u2014 Core Advanced",
+   "Zero Trust Architecture"
+  ],
+  [
+   "sd-plan",
+   "Phase 3 \u2014 Core Advanced",
+   "Quorum Systems"
+  ],
+  [
+   "sd-plan",
+   "Phase 4 \u2014 More Beginner",
+   "TCP vs UDP"
+  ],
+  [
+   "sd-plan",
+   "Phase 5 \u2014 More Intermediate",
+   "Time-Series Databases"
+  ],
+  [
+   "sd-plan",
+   "Phase 5 \u2014 More Intermediate",
+   "API Versioning"
+  ],
+  [
+   "sd-plan",
+   "Phase 5 \u2014 More Intermediate",
+   "Materialized Views"
+  ],
+  [
+   "sd-plan",
+   "Phase 5 \u2014 More Intermediate",
+   "Data Partitioning in Analytics"
+  ],
+  [
+   "sd-plan",
+   "Phase 5 \u2014 More Intermediate",
+   "WAF (Web Application Firewall)"
+  ],
+  [
+   "sd-plan",
+   "Phase 5 \u2014 More Intermediate",
+   "Profiling & Performance Debugging"
+  ],
+  [
+   "sd-plan",
+   "Phase 6 \u2014 More Advanced",
+   "PACELC Theorem"
+  ],
+  [
+   "sd-plan",
+   "Phase 6 \u2014 More Advanced",
+   "Vector Clocks"
+  ],
+  [
+   "sd-plan",
+   "Phase 6 \u2014 More Advanced",
+   "Read/Write Quorum"
+  ],
+  [
+   "sd-plan",
+   "Phase 6 \u2014 More Advanced",
+   "Hotspot / Hot Key Problem"
+  ],
+  [
+   "sd-plan",
+   "Phase 6 \u2014 More Advanced",
+   "Column-Oriented Storage"
+  ],
+  [
+   "sd-plan",
+   "Phase 6 \u2014 More Advanced",
+   "Gossip Protocol"
+  ],
+  [
+   "sd-plan",
+   "Phase 6 \u2014 More Advanced",
+   "Count-Min Sketch"
+  ],
+  [
+   "sd-plan",
+   "Phase 6 \u2014 More Advanced",
+   "Phi Accrual Failure Detector"
+  ],
+  [
+   "sd-plan",
+   "Phase 6 \u2014 More Advanced",
+   "Two-Phase Locking (2PL)"
+  ],
+  [
+   "sd-plan",
+   "Phase 6 \u2014 More Advanced",
+   "Lamport Timestamps"
+  ],
+  [
+   "sd-plan",
+   "Phase 6 \u2014 More Advanced",
+   "Multi-Cloud & Hybrid Cloud"
+  ],
+  [
+   "dsa-ultimate",
+   "20. Advanced Techniques",
+   "Mo's Algorithm"
+  ],
+  [
+   "dsa-complete",
+   "Advanced Data Structures",
+   "Persistent Data Structures"
+  ]
+ ],
+ "topics": 607,
+ "actions": {
+  "keep": 1118,
+  "removed": 1230,
+  "relabelled": 541,
+  "url updated": 307
+ }
+}

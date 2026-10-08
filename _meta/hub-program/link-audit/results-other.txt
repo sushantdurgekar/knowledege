@@ -1,0 +1,245 @@
+# Checked 2026-10-08 (desktop app browser + web fetch). Format: url|verdict|note
+# verdict: OK, DEAD (404/410/gone), SOFT (redirects to a generic/unrelated page), MOVED (redirects to the same content at a new address: OK to keep, update URL), BLOCKED (bot-blocked; content exists per metadata)
+http://lambda-architecture.net/|DEAD|domain now redirects to an unrelated parked site
+http://www.brendangregg.com/flamegraphs.html|OK|Flame Graphs
+https://15445.courses.cs.cmu.edu/fall2022/|OK|CMU 15-445/645 Intro to Database Systems (Fall 2022)
+https://ably.com/blog/websockets-vs-long-polling|OK|WebSockets vs long polling (Ably)
+https://argo-cd.readthedocs.io/en/stable/operator-manual/architecture/|OK|Argo CD architectural overview
+https://auth0.com/blog/a-look-at-the-latest-draft-for-jwt-bcp/|OK|A Look at The Draft for JWT Best Current Practices
+https://aws.amazon.com/architecture/well-architected/|OK|AWS Well-Architected
+https://aws.amazon.com/blogs/architecture/disaster-recovery-dr-architecture-on-aws/|DEAD|404
+https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/|MOVED|https://builder.aws.com/content/3EumjoZascWd1oZiEgL8ORlv3qE/timeouts-retries-and-backoff-with-jitter
+https://aws.amazon.com/caching/best-practices/|OK|Caching Best Practices
+https://aws.amazon.com/data-warehouse/|MOVED|https://aws.amazon.com/what-is/data-warehouse/
+https://aws.amazon.com/elasticache/redis-vs-memcached/|OK|Redis OSS vs Memcached
+https://aws.amazon.com/hybrid/|OK|AWS Hybrid Cloud
+https://aws.amazon.com/nosql/columnar/|SOFT|redirects to generic /nosql/ page
+https://aws.amazon.com/redshift/what-is-a-data-warehouse/|DEAD|404 (use https://aws.amazon.com/what-is/data-warehouse/)
+https://aws.amazon.com/relational-database/|MOVED|https://aws.amazon.com/rds/what-is-a-relational-database/
+https://aws.amazon.com/s3/architecture/|DEAD|404
+https://aws.amazon.com/solutions/implementations/multi-region-application-architecture/|SOFT|redirects to generic AWS Solutions Library
+https://aws.amazon.com/what-is/virtualization/|OK|What is Virtualization?
+https://aws.amazon.com/whitepapers/latest/database-caching-strategies-using-redis/caching-patterns.html|DEAD|wrong host; correct: https://docs.aws.amazon.com/whitepapers/latest/database-caching-strategies-using-redis/caching-patterns.html
+https://blog.cloudflare.com/cloudflare-ddos-protection-updates/|DEAD|404
+https://blog.cloudflare.com/introducing-cloudflare-workers/|OK|Introducing Cloudflare Workers
+https://blog.twitter.com/engineering/en_us/a/2013/new-tweets-per-second-record-and-how|MOVED|https://blog.x.com/engineering/en_us/a/2013/new-tweets-per-second-record-and-how
+https://bugs.python.org/file4451/timsort.txt|OK|Timsort (listsort.txt)
+https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html|OK|Cassandra Dynamo architecture
+https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html|OK|OWASP Authentication Cheat Sheet
+https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html|OK|OWASP Authorization Cheat Sheet
+https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html|OK|OWASP Session Management Cheat Sheet
+https://clickhouse.com/docs/en/intro/|OK|What is ClickHouse?
+https://cloud.google.com/architecture/devops/devops-tech-continuous-integration|SOFT|redirects to generic DevOps index on docs.cloud.google.com
+https://cloud.google.com/architecture/dr-scenarios-planning-guide|MOVED|https://docs.cloud.google.com/architecture/dr-scenarios-planning-guide
+https://cloud.google.com/pubsub/architecture|MOVED|https://docs.cloud.google.com/pubsub/architecture
+https://codeforces.com/blog/entry/20935|OK|DP on Trees Tutorial
+https://crdt.tech/|OK|About CRDTs
+https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL|OK|Hive LanguageManual DDL
+https://databricks.com/discover/data-lakes|OK|Introduction to Data Lakes
+https://debezium.io/documentation/reference/stable/architecture.html|OK|Debezium Architecture
+https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control|OK|Cache-Control header (MDN)
+https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set|OK|Set (MDN)
+https://developers.cloudflare.com/api-shield/security/mtls/|OK|Mutual TLS (Cloudflare)
+https://discord.com/blog/how-discord-stores-billions-of-messages|OK|How Discord Stores Billions of Messages
+https://dl.acm.org/doi/10.1145/226643.226647|BLOCKED|Crossref: Chandra & Toueg, "Unreliable failure detectors for reliable distributed systems", JACM 1996
+https://dl.acm.org/doi/10.1145/346312.346340|DEAD|DOI not found in Crossref
+https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html|OK|Using dead-letter queues in Amazon SQS
+https://docs.aws.amazon.com/AmazonS3/latest/userguide/best-practices-design-patterns.html|MOVED|redirect loop; use https://docs.aws.amazon.com/AmazonS3/latest/userguide/optimizing-performance.html
+https://docs.aws.amazon.com/autoscaling/ec2/userguide/what-is-amazon-ec2-auto-scaling.html|OK|What is Amazon EC2 Auto Scaling?
+https://docs.aws.amazon.com/encryption-sdk/latest/developer-guide/introduction.html|OK|What is the AWS Encryption SDK?
+https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-concepts.html|OK|AWS Lambda concepts
+https://docs.aws.amazon.com/whitepapers/latest/database-caching-strategies-using-redis/caching-patterns.html|OK|Caching patterns (whitepaper)
+https://docs.datadoghq.com/synthetics/|OK|Synthetic Testing and Monitoring
+https://docs.datadoghq.com/tracing/|OK|APM / tracing
+https://docs.docker.com/get-started/overview/|OK|What is Docker?
+https://docs.microsoft.com/en-us/azure/architecture/patterns/bulkhead|MOVED|https://learn.microsoft.com/en-us/azure/architecture/patterns/bulkhead
+https://docs.microsoft.com/en-us/azure/architecture/patterns/competing-consumers|MOVED|https://learn.microsoft.com/en-us/azure/architecture/patterns/competing-consumers
+https://docs.microsoft.com/en-us/azure/architecture/patterns/sidecar|MOVED|https://learn.microsoft.com/en-us/azure/architecture/patterns/sidecar
+https://docs.nginx.com/nginx/admin-guide/load-balancer/http-load-balancer/|OK|NGINX HTTP Load Balancing
+https://docs.python.org/3/howto/sorting.html|OK|Sorting Techniques
+https://docs.python.org/3/library/heapq.html|OK|heapq
+https://docs.timescale.com/about/latest/timescaledb-architecture/|DEAD|now tigerdata.com, path 404
+https://dropbox.tech/infrastructure|OK|Dropbox tech blog: Infrastructure
+https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch|OK|Count–min sketch
+https://en.wikipedia.org/wiki/Fibonacci_heap|OK|Fibonacci heap
+https://en.wikipedia.org/wiki/K-d_tree|OK|K-d tree
+https://en.wikipedia.org/wiki/Strassen_algorithm|OK|Strassen algorithm
+https://eng.uber.com/distributed-transactions-sagas/|DEAD|404
+https://engineering.fb.com/2020/03/02/production-engineering/messenger/|OK|Project LightSpeed: Rewriting Messenger (iOS app rewrite; check label)
+https://engineering.fb.com/2023/06/08/developer-tools/feature-flags/|DEAD|404
+https://flink.apache.org/what-is-flink/|OK|About Apache Flink
+https://git-scm.com/book/en/v2/Git-Internals-Git-Objects|OK|Git Objects
+https://grafana.com/docs/grafana/latest/best-practices/|OK|Grafana dashboard best practices
+https://grafana.com/docs/loki/latest/get-started/architecture/|OK|Loki architecture
+https://grpc.io/docs/what-is-grpc/core-concepts/|OK|gRPC core concepts
+https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HdfsDesign.html|OK|HDFS Architecture
+https://helm.sh/docs/|OK|Helm docs
+https://highscalability.com/blog/2016/3/23/what-is-a-bloom-filter.html|DEAD|404
+https://highscalability.com/google-architecture/|OK|Google Architecture
+https://highscalability.com/more-numbers-every-awesome-programmer-must-know/|OK|More Numbers Every Awesome Programmer Must Know
+https://highscalability.com/reliability-engineering/|DEAD|404
+https://http2.github.io/|OK|HTTP/2
+https://istio.io/latest/docs/concepts/what-is-istio/|OK|The Istio service mesh
+https://jeffe.cs.illinois.edu/teaching/algorithms|OK|Algorithms by Jeff Erickson
+https://jeffe.cs.illinois.edu/teaching/algorithms/book/03-dynprog.pdf|OK|Dynamic Programming (Ch. 3)
+https://jepsen.io/consistency|OK|Jepsen: Consistency models
+https://kafka.apache.org/documentation/#design|SOFT|now a documentation redirect/version picker; link the versioned design section
+https://kubernetes.io/docs/concepts/cluster-administration/networking/|OK|Cluster Networking
+https://kubernetes.io/docs/concepts/overview/|OK|Kubernetes Overview
+https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/|OK|Liveness, Readiness and Startup Probes
+https://lamport.azurewebsites.net/pubs/paxos-simple.pdf|OK|Paxos Made Simple
+https://lamport.azurewebsites.net/pubs/time-clocks.pdf|OK|Time, Clocks, and the Ordering of Events
+https://llimllib.github.io/bloomfilter-tutorial/|OK|Bloom Filters by Example
+https://martin.kleppmann.com/2014/11/25/hermitage-testing-the-i-in-acid.html|OK|Hermitage: Testing the "I" in ACID
+https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html|OK|How to do distributed locking
+https://martinfowler.com/articles/data-monolith-to-mesh.html|OK|Data Monolith to Data Mesh
+https://martinfowler.com/bliki/CQRS.html|OK|CQRS
+https://martinfowler.com/bliki/CircuitBreaker.html|OK|Circuit Breaker
+https://martinfowler.com/bliki/MonolithFirst.html|OK|Monolith First
+https://martinfowler.com/bliki/StranglerFigApplication.html|OK|Strangler Fig
+https://martinfowler.com/bliki/TwoHardThings.html|OK|Two Hard Things
+https://martinfowler.com/eaaDev/EventSourcing.html|OK|Event Sourcing
+https://microservices.io/patterns/data/api-composition.html|OK|Pattern: API Composition
+https://microservices.io/patterns/data/saga.html|OK|Pattern: Saga
+https://microservices.io/patterns/data/transactional-outbox.html|OK|Pattern: Transactional outbox
+https://microservices.io/patterns/microservices.html|OK|Microservice Architecture pattern
+https://mwhittaker.github.io/blog/an_illustrated_proof_of_the_cap_theorem/|OK|An Illustrated Proof of the CAP Theorem
+https://neetcode.io/courses/advanced-algorithms/0|OK|NeetCode advanced algorithms (lesson 0: Kadane)
+https://neetcode.io/roadmap|OK|NeetCode roadmap
+https://neo4j.com/graph-databases-book/|MOVED|https://www.oreilly.com/library/view/graph-databases-2nd/9781491930885
+https://netflixtechblog.com/|OK|Netflix TechBlog
+https://netflixtechblog.com/high-quality-video-encoding-at-scale-d159db052746|OK|High Quality Video Encoding at Scale
+https://netflixtechblog.com/how-netflix-scales-its-api-with-graphql-federation-part-1-ae3557c187e2|OK|GraphQL Federation (Part 1)
+https://netflixtechblog.com/open-sourcing-zuul-2-82ea476cb2b3|OK|Open Sourcing Zuul 2
+https://netflixtechblog.com/tagged/chaos-engineering|SOFT|tag page shows generic blog front page
+https://netflixtechblog.com/tagged/kafka|SOFT|tag page lists no stories
+https://nodejs.org/api/crypto.html|OK|Node.js Crypto
+https://nodejs.org/api/tls.html|OK|Node.js TLS
+https://nodejs.org/en/docs/guides/backpressuring-in-streams|OK|Backpressuring in Streams
+https://oauth.net/2/|OK|OAuth 2.0
+https://opendatastructures.org/ods-python/4_Skiplists.html|OK|Skiplists (Open Data Structures)
+https://opentelemetry.io/docs/|OK|OpenTelemetry docs
+https://opentelemetry.io/docs/concepts/|OK|OpenTelemetry concepts
+https://owasp.org/www-project-api-security/|OK|OWASP API Security Project
+https://owasp.org/www-project-testing/|DEAD|404 (use the Web Security Testing Guide link)
+https://owasp.org/www-project-web-security-testing-guide/|OK|OWASP Web Security Testing Guide
+https://parquet.apache.org/docs/|OK|Parquet documentation
+https://principlesofchaos.org/|OK|Principles of chaos engineering
+https://programiz.com/dsa/arrays|DEAD|404
+https://programiz.com/dsa/binary-tree|OK|Binary Tree
+https://programiz.com/dsa/circular-linked-list|OK|Circular Linked List
+https://programiz.com/dsa/doubly-linked-list|OK|Doubly Linked List
+https://programiz.com/dsa/exponential-search|DEAD|404
+https://programiz.com/dsa/greedy-algorithm|OK|Greedy Algorithm
+https://programiz.com/dsa/hash-table|OK|Hash Table
+https://programiz.com/dsa/heap-data-structure|OK|Heap Data Structure
+https://programiz.com/dsa/interpolation-search|DEAD|404
+https://programiz.com/dsa/linear-search|OK|Linear Search
+https://programiz.com/dsa/linked-list|OK|Linked List
+https://programiz.com/dsa/queue|OK|Queue
+https://programiz.com/dsa/stack|OK|Stack
+https://programiz.com/dsa/trie|DEAD|404
+https://programiz.com/python-programming/matrix|OK|Python Matrix and NumPy intro
+https://prometheus.io/docs/introduction/overview/|OK|Prometheus overview
+https://raft.github.io/|OK|Raft Consensus Algorithm
+https://raft.github.io/raft.pdf|OK|In Search of an Understandable Consensus Algorithm
+https://realpython.com/python-deque|OK|Python's deque
+https://realpython.com/python-lists-tuples|OK|Lists vs Tuples in Python
+https://realpython.com/python-recursion|OK|Recursion in Python
+https://realpython.com/python-strings|OK|Strings and Character Data in Python
+https://redis.io/docs/data-types/|MOVED|https://redis.io/docs/latest/develop/data-types/
+https://redis.io/docs/data-types/geospatial/|MOVED|https://redis.io/docs/latest/develop/data-types/geospatial/
+https://redis.io/docs/data-types/probabilistic/hyperloglogs/|MOVED|https://redis.io/docs/latest/develop/data-types/probabilistic/hyperloglogs/
+https://redis.io/docs/manual/eviction/|MOVED|https://redis.io/docs/latest/develop/reference/eviction/
+https://redis.io/docs/manual/patterns/distributed-locks/|MOVED|https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/
+https://redis.io/docs/manual/scaling/|MOVED|redis.io/docs/latest/operate/oss_and_stack/management/scaling/
+https://redis.io/glossary/cache-stampede/|DEAD|404
+https://redis.io/glossary/hot-key/|DEAD|404
+https://rocksdb.org/blog/|OK|RocksDB blog
+https://spark.apache.org/docs/latest/rdd-programming-guide.html|OK|RDD Programming Guide
+https://static.googleusercontent.com/media/research.google.com/en//archive/bigtable-osdi06.pdf|OK|Bigtable paper
+https://static.googleusercontent.com/media/research.google.com/en//archive/gfs-sosp2003.pdf|OK|GFS paper
+https://static.googleusercontent.com/media/research.google.com/en//archive/mapreduce-osdi04.pdf|OK|MapReduce paper
+https://static.googleusercontent.com/media/research.google.com/en//archive/spanner-osdi2012.pdf|OK|Spanner paper
+https://stripe.com/blog/api-versioning|OK|APIs as infrastructure: versioning
+https://stripe.com/blog/idempotency|OK|Designing robust APIs with idempotency
+https://stripe.com/blog/rate-limiters|OK|Scaling your API with rate limiters
+https://use-the-index-luke.com/sql/anatomy/the-tree|OK|The B-Tree in SQL databases
+https://visualgo.net/en/array|OK|Array - VisuAlgo
+https://visualgo.net/en/bst|OK|BST, AVL Tree - VisuAlgo
+https://visualgo.net/en/graphds|OK|Graph Data Structures - VisuAlgo
+https://visualgo.net/en/sorting|OK|Sorting - VisuAlgo
+https://www.allthingsdistributed.com/2008/12/eventually_consistent.html|OK|Eventually Consistent - Revisited
+https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf|OK|Dynamo paper
+https://www.allthingsdistributed.com/files/p49-decandia.pdf|DEAD|403 (missing file); duplicate of the Dynamo paper above
+https://www.cloudflare.com/en-gb/learning/cdn/glossary/reverse-proxy/|OK|What is a reverse proxy?
+https://www.cloudflare.com/en-gb/learning/cdn/what-is-a-cdn/|OK|What is a CDN?
+https://www.cloudflare.com/en-gb/learning/ddos/glossary/tcp-ip/|OK|What is TCP/IP?
+https://www.cloudflare.com/en-gb/learning/ddos/glossary/web-application-firewall-waf/|OK|What is a WAF?
+https://www.cloudflare.com/en-gb/learning/dns/what-is-dns/|OK|What is DNS?
+https://www.cloudflare.com/en-gb/learning/ssl/tls-1-3/|DEAD|404
+https://www.confluent.io/blog/exactly-once-semantics-are-possible-heres-how-apache-kafka-does-it/|OK|Exactly-once Semantics in Kafka
+https://www.confluent.io/blog/put-several-event-types-kafka-topic/|OK|Several event types in one Kafka topic?
+https://www.consul.io/use-cases/service-discovery-and-health-checking|SOFT|redirects to generic Consul home (developer.hashicorp.com/consul)
+https://www.cs.princeton.edu/courses/archive/fall09/cos518/papers/chash.pdf|OK|Consistent Hashing and Random Trees (Karger et al.)
+https://www.cs.umd.edu/~abadi/papers/abadi-pacelc.pdf|OK|Consistency Tradeoffs in Modern Distributed DB Design (PACELC)
+https://www.databass.dev/|OK|Database Internals (Petrov)
+https://www.designgurus.io/blog/url-shortening-service|DEAD|404
+https://www.elastic.co/guide/en/elastic-stack-get-started/current/get-started-elastic-stack.html|SOFT|redirects to generic Elastic docs index
+https://www.elastic.co/guide/en/elasticsearch/reference/current/documents-indices.html|MOVED|https://www.elastic.co/docs/manage-data/data-store/index-basics
+https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-discovery-quorums.html|MOVED|https://www.elastic.co/docs/deploy-manage/distributed-architecture/discovery-cluster-formation/modules-discovery-quorums
+https://www.elastic.co/guide/en/elasticsearch/reference/current/search-suggesters.html|MOVED|https://www.elastic.co/docs/reference/elasticsearch/rest-apis/search-suggesters
+https://www.getdbt.com/blog/what-is-the-modern-data-stack/|DEAD|404
+https://www.lecloud.net/tagged/scalability|OK|Scalability for Dummies series (site has an expired TLS chain; posts load)
+https://www.mongodb.com/basics/sharding|MOVED|https://www.mongodb.com/resources/products/capabilities/sharding
+https://www.mongodb.com/docs/manual/aggregation/|OK|Aggregation Operations
+https://www.mongodb.com/docs/manual/core/data-modeling-introduction/|MOVED|https://www.mongodb.com/docs/manual/data-modeling/
+https://www.mongodb.com/document-databases|MOVED|https://www.mongodb.com/resources/basics/databases/document-databases
+https://www.mongodb.com/nosql-explained/when-to-use-nosql|MOVED|https://www.mongodb.com/resources/basics/databases/nosql-explained/when-to-use-nosql
+https://www.nginx.com/resources/glossary/reverse-proxy-server/|MOVED|https://www.f5.com/glossary/reverse-proxy
+https://www.oreilly.com/library/view/rest-api-design/9781449317904/|OK|REST API Design Rulebook
+https://www.oreilly.com/library/view/streaming-systems/9781491983867/|OK|Streaming Systems
+https://www.oreilly.com/radar/questioning-the-lambda-architecture/|OK|Questioning the Lambda Architecture
+https://www.pgbouncer.org/|OK|PgBouncer
+https://www.pinecone.io/learn/vector-database/|OK|What is a Vector Database? (Pinecone)
+https://www.postgresql.org/docs/current/ddl-partitioning.html|OK|Table Partitioning (PostgreSQL 18)
+https://www.postgresql.org/docs/current/high-availability.html|OK|High Availability (PostgreSQL 18)
+https://www.postgresql.org/docs/current/mvcc-intro.html|OK|MVCC Introduction (PostgreSQL 18)
+https://www.postgresql.org/docs/current/sql-creatematerializedview.html|OK|CREATE MATERIALIZED VIEW
+https://www.postgresql.org/docs/current/wal-intro.html|OK|Write-Ahead Logging
+https://www.rabbitmq.com/tutorials/tutorial-one-javascript.html|OK|RabbitMQ tutorial "Hello World!" (JS)
+https://www.smashingmagazine.com/2018/02/sse-websockets-data-flow-http2/|OK|Using SSE instead of WebSockets
+https://www.terraform.io/docs/cloud/guides/recommended-practices/|DEAD|404 after redirect to developer.hashicorp.com
+https://www.thoughtworks.com/insights/blog/bff-soundcloud|OK|BFF @ SoundCloud
+https://www.uber.com/en-US/blog/engineering/|OK|Uber Engineering blog
+https://www.vaultproject.io/docs/internals/architecture|MOVED|https://developer.hashicorp.com/vault/docs/internals/architecture
+https://zookeeper.apache.org/doc/current/recipes.html|OK|ZooKeeper recipes
+## cp-algorithms.com (49)
+https://cp-algorithms.com/|OK|Main Page
+https://cp-algorithms.com/algebra/|DEAD|404
+https://cp-algorithms.com/algebra/modular-arithmetic.html|DEAD|404 → replacement verified: https://cp-algorithms.com/algebra/module-inverse.html
+https://cp-algorithms.com/algebra/prefix-sums.html|DEAD|404
+https://cp-algorithms.com/dynamic_programming|DEAD|404 → replacement verified: https://cp-algorithms.com/dynamic_programming/intro-to-dp.html
+https://cp-algorithms.com/dynamic_programming/digit-dp.html|DEAD|404
+https://cp-algorithms.com/graph/|DEAD|404
+https://cp-algorithms.com/graph/kuhn_algorithm.html|DEAD|404 → replacement verified: https://cp-algorithms.com/graph/kuhn_maximum_bipartite_matching.html
+https://cp-algorithms.com/greedy/|DEAD|404
+https://cp-algorithms.com/sequences/longest-common-subsequence.html|DEAD|404
+https://cp-algorithms.com/sequences/longest-increasing-subsequence.html|DEAD|404 → replacement verified: https://cp-algorithms.com/sequences/longest_increasing_subsequence.html
+#ALL-OTHER-CP-ALGORITHMS|OK|38 pages live with matching titles (binary-exp, CRT, euclid, sieve, binomial, DSU, fenwick, segment tree, sparse table, sqrt decomposition, treap, convex hull, segment intersection, nearest points, point-in-polygon, Floyd-Warshall, Bellman-Ford, bipartite, BFS, DFS, Dijkstra, Dinic, Edmonds-Karp, HLD, LCA, Kruskal, Prim, SCC, topo sort, binary search, ternary search, Aho-Corasick, Manacher, prefix function, string hashing, suffix array, Z-function)
+## leetcode.com (27 links)
+#ALL-LEETCODE-PROBLEM-LINKS|OK|20 problem slugs verified via LeetCode's own API (all exist)
+https://leetcode.com/explore/learn/card/array-and-string|BLOCKED|bot check (403) to scripts; page exists
+https://leetcode.com/explore/learn/card/binary-search|BLOCKED|bot check (403) to scripts; page exists
+https://leetcode.com/explore/learn/card/recursion-ii|BLOCKED|bot check (403) to scripts; page exists
+https://leetcode.com/tag/dynamic-programming|BLOCKED|bot check (403) to scripts; page exists
+https://leetcode.com/tag/heap-priority-queue|OK|
+https://leetcode.com/tag/monotonic-queue|OK|
+https://leetcode.com/tag/monotonic-stack|OK|
+## youtube non-video links
+https://www.youtube.com/@AsliEngineering|OK|Arpit Bhayani channel
+https://www.youtube.com/@CMUDatabaseGroup|OK|CMU Database Group channel
+https://www.youtube.com/@hnasr|OK|Hussein Nasser channel
+https://youtube.com/playlist?list=PLot-Xpze53ldVwtstag2TL4HQhAnC8ATf|OK|NeetCode "Leetcode BLIND-75 Solutions" playlist
+https://www.youtube.com/results?search_query=PACELC+theorem+system+design|SOFT|a search results page, not a resource
+https://youtube.com/watch?v=|DEAD|empty video id

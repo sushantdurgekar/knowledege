@@ -8,6 +8,8 @@ updated: 2026-10-01
 Number theory and game theory for contests.
 
 ## Start here
+**Folded into a larger L1–L4 plan:** [../dsa/plan/README.md](../dsa/plan/README.md).
+
 `courses/udemy-cp-maths-puzzles-1/` then `courses/udemy-cp-game-theory/`. These courses have no downloads, so write your notes in `concepts/`.
 
 See also `_meta/learning-paths.md`.
