@@ -3,7 +3,7 @@ title: "Hub program: master plan and build queue"
 track: technical
 tags: [plan, hubs, levels]
 created: 2026-10-08
-updated: 2026-10-08
+updated: 2026-10-09
 ---
 # Hub program: master plan and build queue
 
@@ -39,6 +39,18 @@ Supporting docs: [hub-spec.md](hub-spec.md) (what every hub contains) · [story-
 3. **Build just in time.** Build the next hub when you're about 70% through the current one. Run at most 2–3 active hubs at once (for example one language, one BI tool and one exam).
 4. Re-order freely. Say "move Power BI L2 up" and the queue changes.
 
+## Current run order (set 2026-10-08)
+
+Sushant asked for DSA and System Design as two separate hub series, all four levels each, straight after the AI-103 upgrade, with every algorithm and pattern shown in **both Python and JavaScript/Node.js**. Other hubs add Python + JavaScript examples where it's natural (SQL drivers, AI SDKs, Docker). Numbers are the build IDs from the queue table below.
+
+1. ~~#1 AI-103 story upgrade~~ (done 2026-10-08)
+2. ~~#8 DSA L1~~ (done 2026-10-09) → #20 DSA L2 → #33 DSA L3 → #46 DSA L4
+3. #9 System Design L1 → #21 L2 → #34 L3 → #47 L4
+4. L1 hubs: #2 Python → #3 SQL → #4 Qlik Sense → #5 Power BI → #6 AI Engineering → #7 JavaScript → #10 Node.js → #11 React → #12 Docker → #13 Next.js
+5. Then the rest of the queue in number order.
+
+Hub tooling: bundles are applied with `python _meta/tools/apply_hub_bundle.py <bundle.tgz>`; new flashcards arrive parked and start with `python _meta/tools/activate_deck.py <deck>`.
+
 ## Build queue
 
 | # | Done | Build | Output | Certification / note | Effort to learn |
@@ -50,7 +62,7 @@ Supporting docs: [hub-spec.md](hub-spec.md) (what every hub contains) · [story-
 | 5 | [ ] | **Power BI L1 Foundation** | `technical/bi-analytics/power-bi/hubs/power-bi-l1-foundation-hub.html` | None at L1; start the PL-300 learning path (Microsoft Learn) | 30–40 h |
 | 6 | [ ] | **AI Engineering L1 Foundation** | `technical/data-ai/ai-engineering/hubs/ai-engineering-l1-foundation-hub.html` | AI-901 Azure AI Fundamentals: passed 7 Oct 2026 (883); Optional: AWS Certified AI Practitioner | 40–55 h |
 | 7 | [ ] | **JavaScript (browser) L1 Foundation** | `technical/web-dev/javascript/hubs/javascript-l1-foundation-hub.html` | JSE-40-01 (JS Institute, entry); certificates.dev Junior JavaScript (optional) | 50–70 h |
-| 8 | [ ] | **Data Structures & Algorithms L1 Foundation** | `technical/software-engineering/dsa/hubs/dsa-l1-foundation-hub.html` | No credible certification; milestone = 40 easy + 20 medium problems | 50–70 h |
+| 8 | [x] | **Data Structures & Algorithms L1 Foundation** | `technical/software-engineering/dsa/hubs/dsa-l1-foundation-hub.html` | No credible certification; milestone = 40 easy + 20 medium problems | 50–70 h |
 | 9 | [ ] | **System Design L1 Foundation** | `technical/software-engineering/system-design/hubs/system-design-l1-foundation-hub.html` | No certification; evidence = design docs | 35–45 h |
 | 10 | [ ] | **Node.js (server) L1 Foundation** | `technical/web-dev/nodejs/hubs/nodejs-l1-foundation-hub.html` | None current: OpenJS JSNAD and JSNSD were retired on 30 Sep 2025 | 40–55 h |
 | 11 | [ ] | **React L1 Foundation** | `technical/web-dev/react/hubs/react-l1-foundation-hub.html` | certificates.dev Junior React (optional, not endorsed by Meta) | 40–55 h |

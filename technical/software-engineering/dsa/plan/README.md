@@ -4,21 +4,23 @@ track: technical
 domain: software-engineering
 subject: dsa
 tags: [dsa, plan, levels]
-status: planned
+status: in-progress
 created: 2026-10-08
-updated: 2026-10-08
+updated: 2026-10-09
 ---
 # Data Structures & Algorithms: L1–L4 learning plan
 
 > Problem-solving from Big-O and arrays to graphs, dynamic programming and contest-level algorithms.
 >
-> Plan written 2026-10-08 (research + structure). **Hubs are built one at a time** from the queue in [`_meta/hub-program/README.md`](../../../../_meta/hub-program/README.md). Nothing here is taught yet; each hub build re-verifies facts first.
+> Plan written 2026-10-08 (research + structure). **Hubs are built one at a time** from the queue in [`_meta/hub-program/README.md`](../../../../_meta/hub-program/README.md). Each hub build re-verifies facts first.
+>
+> **L1 hub built 2026-10-09:** [open the hub](https://claude.ai/artifact/SWv6N1Uh2oiFNH1mxefcNr) · saved copy `../hubs/dsa-l1-foundation-hub.html` · 8 modules, every example in Python and JavaScript · deck `dsa-l1` (parked).
 
 ## The ladder
 
 | Level | You can… | Hours | Certification(s) | Capstone | Hub (build #) |
 |---|---|---|---|---|---|
-| **L1 Foundation** | Analyse complexity and solve easy problems with arrays, hashing, two pointers, stacks, queues and binary search. | 50–70 | No credible certification; milestone = 40 easy + 20 medium problems | Mini DS library | `hubs/dsa-l1-foundation-hub.html` (#8) |
+| **L1 Foundation** | Analyse complexity and solve easy problems with arrays, hashing, two pointers, stacks, queues and binary search. | 50–70 | No widely recognised certification; milestone = 40 easy + 20 medium problems | Mini DS library | `hubs/dsa-l1-foundation-hub.html` (#8) |
 | **L2 Proficient** | Solve medium interview problems with trees, heaps, graphs, backtracking and core DP. | 80–100 | None; milestone = 150 curated problems + mock interviews | Interview-ready set | `hubs/dsa-l2-proficient-hub.html` (#20) |
 | **L3 Specialist** | Handle hard problems: advanced DP, shortest paths, range queries, strings and number theory; reach a solid contest rating. | 100–130 | None; milestone = contest rating | Contest track | `hubs/dsa-l3-specialist-hub.html` (#33) |
 | **L4 Expert** | Master advanced algorithms and teach problem-solving to others. | ongoing | None; milestone = Codeforces 1900+ or equivalent | Problem-setter pack | `hubs/dsa-l4-expert-hub.html` (#46) |
@@ -68,7 +70,7 @@ Their course files stay where they are; this plan points at them, so nothing is 
 
 | Certification | Level | Status | Key facts | Source |
 |---|---|---|---|---|
-| (no credible DSA certification) | — | none | Use milestones instead: curated problem lists, timed mock interviews, contest ratings (Codeforces/AtCoder/LeetCode). | — |
+| (no widely recognised DSA certification) | — | none | Use milestones instead: curated problem lists, timed mock interviews, contest ratings (Codeforces/AtCoder/LeetCode). | — |
 
 Status *verify* means it was not confirmed on the vendor's own page in this session; the hub build checks it before writing any exam prep. Exam tracks get their own `technical/certifications/<code>/` folder (blueprint, mocks, readiness gate) only when the hub that prepares for them is built.
 
@@ -84,11 +86,11 @@ All links in both DSA workbooks were opened one by one ([full report](../../../.
 
 ## Build checklist (one hub per session)
 
-- [ ] **#8 Data Structures & Algorithms L1 Foundation hub** → `hubs/dsa-l1-foundation-hub.html`
-  - [ ] re-verify versions, cert facts and links · audit existing material for L1
-  - [ ] concept notes `concepts/l1-NN-*.md` (story + diagram + worked example)
-  - [ ] hub published + saved · independent fact/answer-key check · SRS deck `dsa-l1`
-  - [ ] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
+- [x] **#8 Data Structures & Algorithms L1 Foundation hub** → `hubs/dsa-l1-foundation-hub.html`
+  - [x] re-verify versions, cert facts and links · audit existing material for L1
+  - [x] concept notes `concepts/l1-NN-*.md` (story + diagram + worked example)
+  - [x] hub published + saved · independent fact/answer-key check · SRS deck `dsa-l1`
+  - [x] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
 - [ ] **#20 Data Structures & Algorithms L2 Proficient hub** → `hubs/dsa-l2-proficient-hub.html`
   - [ ] re-verify versions, cert facts and links · audit existing material for L2
   - [ ] concept notes `concepts/l2-NN-*.md` (story + diagram + worked example)
