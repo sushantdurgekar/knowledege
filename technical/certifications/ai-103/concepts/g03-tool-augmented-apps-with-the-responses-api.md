@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d2, g03]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/training/paths/develop-generative-ai-apps/
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ sources:
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The note to the storeroom**
+
+Robo is clever, but he can't leave his desk. Maya asks, "How many pencils are in the storeroom?" Robo writes a note: "Please count the pencils in room B." A helper runs to the storeroom, counts 37, and brings the note back with the answer. Now Robo replies, "We have 37 pencils!" Robo also has a calculator on his desk he can use himself, and a filing cabinet of school papers he can search.
+
+| In the story | In Foundry |
+|---|---|
+| The note asking for a count | A `function_call` item with a name and arguments |
+| The helper who runs to the storeroom | Your application running the function |
+| The note coming back with "37" | A `function_call_output` with the same `call_id` |
+| Calculator and filing cabinet on Robo's desk | Built-in tools: code interpreter and file search |
+
+**Where the story breaks:** A good helper double-checks the note first: models can ask for the wrong room or invent arguments, so validate them before acting.
+
+## Mental model & story (grown-up version)
 A model on its own is a brilliant **consultant locked in a room**: knowledgeable, but it can't check today's prices, open your files or run a calculation reliably. Tools are the room's **phone, filing cabinet and calculator**.
 
 Built-in tools run on the service side. **Code interpreter** gives the model a sandboxed Python environment (pandas, matplotlib, no internet) to analyse uploaded data and draw charts. **Web search** fetches live information. **File search** searches a **vector store** of your uploaded documents. You list the tools; the model decides when to use them (guided by your instructions or `tool_choice`).

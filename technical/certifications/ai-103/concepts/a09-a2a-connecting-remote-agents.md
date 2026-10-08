@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d2, a09]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-agents/Instructions/Exercises/09-multi-remote-agents-with-a2a.html
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ A2A connects **agents to agents**. The remote agent has its own reasoning, tools
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Name badges at the robot fair**
+
+At the robot fair, every robot wears a name badge: "I'm Visa-Bot. I answer questions about travel papers. Ask me in words. Find me at table 9." Robo reads the badges, picks Visa-Bot and hands over a question. Visa-Bot thinks on its own with its own tools, and Robo can't see how. Small questions get an answer straight away. Big ones get a ticket that says "working..." until the job is done.
+
+| In the story | In Foundry |
+|---|---|
+| The name badge | The agent card at `/.well-known/agent-card.json` |
+| "I answer questions about travel papers" | The skills listed in the card |
+| Handing over a question | Sending a message |
+| The "working..." ticket | A task with states |
+
+**Where the story breaks:** Badges can be faked. Check who the robot really is (authentication) and double-check its answers like any outside input.
+
+## Mental model & story (grown-up version)
 Imagine a **conference of specialists**. Each wears a **badge**, the **agent card**, published at a well-known address (`/.well-known/agent-card.json`): name, description, endpoint URL, version, input/output modes, capabilities (such as streaming or push notifications), **skills** with examples, and how to authenticate.
 
 A **routing agent** reads the badges, picks the right specialist and sends a **message** (made of parts such as text). Short jobs come back as a direct message; longer ones become a **task** with states (working, completed…) that you poll or stream.

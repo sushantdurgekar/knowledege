@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d4, t01]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/training/paths/develop-language-solutions-azure-ai/
     accessed: 2026-10-02
@@ -31,7 +31,21 @@ Prompt an LLM with a strict **JSON schema** (summary bullets + sentiment label +
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The stamping machine and the storyteller**
+
+Town Hall gets 1,000 letters a day. A stamping machine reads each one fast. It stamps the language ("Spanish, very sure"), circles names and places, and blacks out phone numbers with a thick marker. Then Robo reads the cleaned letters and writes a three-line summary and how the writer felt, always on the same form with the same boxes. The machine is cheap and never changes; Robo is flexible but needs checking.
+
+| In the story | In Foundry |
+|---|---|
+| The language stamp | Language detection with a confidence score |
+| Circling names and places | Named entity recognition |
+| The black marker on phone numbers | PII redaction (`redacted_text`) |
+| Robo's summary on a fixed form | An LLM with a structured-output schema |
+
+**Where the story breaks:** The machine no longer writes summaries or moods (those Azure Language features are deprecated), so that part belongs to Robo.
+
+## Mental model & story (grown-up version)
 Contoso's contact centre receives 40,000 emails a day in a dozen languages. The pipeline has two kinds of worker.
 
 **Azure Language** (a Foundry Tool) is the **conveyor-belt machine**: cheap, fast and consistent. It detects each email's language (with a confidence score), finds **named entities** (people, organisations, places, dates, quantities…) with offsets, and finds **PII** to return a **redacted** copy (`****` in place of phone numbers and card numbers). Each result has a confidence score you can threshold.

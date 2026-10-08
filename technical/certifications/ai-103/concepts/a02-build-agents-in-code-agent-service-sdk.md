@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d2, a02]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-agents/Instructions/Exercises/02-agent-custom-tools.html
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ Expect drop-down questions on this exact code: `create_version`, `PromptAgentDef
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The Hiring Desk and the Help Desk**
+
+Town Hall has two desks. At the Hiring Desk, Maya writes Robo's job card once and files it as "Robo, version 1". If she changes it, she files version 2; she never scribbles on an old card. At the Help Desk, children queue all day. Each child gets a folder, writes a question inside and asks for "Robo" by name. If Robo needs something from the storeroom, a Help Desk clerk fetches it and puts the answer back in the folder.
+
+| In the story | In Foundry |
+|---|---|
+| Filing job cards at the Hiring Desk | `project.agents.create_version` (versions never change) |
+| The Help Desk | The OpenAI client from `get_openai_client()` |
+| A child's folder | A conversation and its items |
+| Asking for Robo by name | `agent_reference` in `responses.create` |
+
+**Where the story breaks:** The clerk who fetches from the storeroom is your own code running function tools. The Help Desk never runs your functions for you.
+
+## Mental model & story (grown-up version)
 The SDK has two desks. The **admin desk** (`AIProjectClient`) is where you register an agent: `agents.create_version(agent_name=..., definition=PromptAgentDefinition(model, instructions, tools))`. Each call creates a new immutable **version** of a named agent. You usually do this at deployment time, not per user request.
 
 The **service desk** (`project.get_openai_client()`) handles conversations. You create a **conversation**, add the user's message as an **item**, and ask for a **response** that references the agent: `extra_body={"agent_reference": {"name": ..., "type": "agent_reference"}}`. The service runs the loop: the model may call built-in tools (file search, code interpreter) automatically.

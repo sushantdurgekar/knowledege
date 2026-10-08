@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d1, p07]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/training/paths/develop-ai-agents-azure/
     accessed: 2026-10-02
@@ -31,7 +31,21 @@ Monitoring appears in three outline bullets across D1 and D2: model performance 
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The dashboard and the trip diary**
+
+On the family car trip, the dashboard shows speed and fuel. When the trip felt slow, Dad opened the trip diary: "Drove 20 minutes, shop stop 45 minutes, drove 15 minutes." The shop stop was the problem, not the car. Robo's help desk has the same things: gauges for errors and waiting time, a diary of every step of every answer, and a weekly quiz that checks whether Robo's answers are still as good as last month's.
+
+| In the story | In Foundry |
+|---|---|
+| Dashboard gauges | Azure Monitor metrics: errors, 429s, latency, tokens |
+| The trip diary | Tracing spans in Application Insights (OpenTelemetry) |
+| The long shop stop | A slow tool or retrieval span |
+| The weekly quiz | Continuous and scheduled evaluation to catch drift |
+
+**Where the story breaks:** A car engine doesn't change by itself, but models, users' questions and documents do, so you compare with a baseline, not a fixed rule.
+
+## Mental model & story (grown-up version)
 Running an agent without monitoring is like flying without instruments. Contoso's dashboard has three gauges.
 
 **Health gauges** (Azure Monitor metrics): requests, errors, throttled calls (429s), latency and tokens per deployment. **Flight recorder** (tracing): every run becomes a trace of spans using the OpenTelemetry GenAI conventions (`invoke_agent`, `chat`, `execute_tool`), each with duration, token usage and, if you allow it, the content. Traces flow to **Application Insights**, and the Foundry portal shows them per agent and conversation. **Quality gauges** (evaluation): **continuous evaluation** scores a sample of live traffic with evaluators such as groundedness, relevance, intent resolution and task adherence, and scheduled evaluations and red-teaming runs check for drift.

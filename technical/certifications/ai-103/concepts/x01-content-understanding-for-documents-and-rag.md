@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d5, x01]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-information-extraction/Instructions/Exercises/01-content-understanding.html
     accessed: 2026-10-02
@@ -31,7 +31,21 @@ Markdown keeps **structure** (headings, tables, lists, reading order), so chunks
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Copying the recipe cards neatly**
+
+Maya's old recipe cards are messy: scanned, full of tables and handwritten notes. Robo copies each card neatly into a notebook, keeping the headings, lists and tables in place so anyone can find "Step 3" fast. He also fills in a small form for each card (dish name, cooking time, oven heat), each with a "how sure am I" sticker and an arrow showing where on the card he read it. Answers he isn't sure about go to Maya to check.
+
+| In the story | In Foundry |
+|---|---|
+| The neat notebook copy | Markdown output that keeps structure for RAG chunks |
+| The small form for each card | Structured fields (extract / classify / generate) |
+| The "how sure" sticker and the arrow | Confidence and grounding from document analyzers |
+| Unsure answers going to Maya | Confidence-based routing to human review |
+
+**Where the story breaks:** Robo fills in every box even when a card is unreadable. The stickers only help if someone actually checks the low ones.
+
+## Mental model & story (grown-up version)
 Contoso Insurance receives claims as PDFs, scans, photos and the occasional voicemail. Two downstream consumers need very different things. Their **RAG assistant** needs clean, well-structured text to chunk and search. Their **claims workflow** needs exact fields such as policy number, claim date, amount and incident type, with confidence scores to decide what needs review.
 
 Content Understanding (CU) serves both from one pipeline. The analyzer first does **content extraction**: OCR, layout analysis (paragraphs, headings, tables, selection marks) and, for audio and video, transcription and segmentation. It then emits **markdown**, a faithful, structured representation ideal for RAG, plus **fields** defined in the schema (extract, classify, generate) with **confidence** and **grounding** (page and coordinates, like `D(1,0.5,1.2,...)`, or text spans).

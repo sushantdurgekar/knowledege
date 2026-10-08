@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d3, v02]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-vision/Instructions/Exercises/02-generate-image.html
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ The **transparent** (alpha = 0) areas are edited; opaque areas are preserved. Th
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The stencil**
+
+Robo paints pictures from a description: "a teal mug on a wooden desk in morning light". When Maya wants only the mug's logo changed, Robo lays a stencil over the painting. The cut-out hole is the only spot he repaints; everything under the solid part stays exactly as it was. The stencil must be the same size as the painting. Every finished painting gets a hidden sticker that says "made by a robot".
+
+| In the story | In Foundry |
+|---|---|
+| Painting from a description | `images.generate` with a prompt |
+| The cut-out hole | The transparent area of the mask (gets edited) |
+| The solid part of the stencil | The opaque area of the mask (kept) |
+| The hidden "made by a robot" sticker | C2PA content credentials |
+
+**Where the story breaks:** Some children expect the coloured part of a stencil to be repainted. In a real mask it's the opposite: transparent means "change this".
+
+## Mental model & story (grown-up version)
 An image model is a **studio illustrator** who works from a brief. The brief (prompt) should cover subject, setting, style, lighting, composition and any text to include. You can also hand over **reference images** (a product photo, a brand mood board) to anchor subject or style.
 
 Foundry's catalogue has the **gpt-image** family and partner models such as **FLUX** from Black Forest Labs. As of October 2026 the GA models are **gpt-image-2** and **gpt-image-2.5** (Flare, Sunburst); **gpt-image-1**, **gpt-image-1-mini** and **gpt-image-1.5** are limited-access previews, and gpt-image-1 retires on 23 Oct 2026. DALL-E 3 was retired in March 2026.

@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d2, g05]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-studio/Instructions/Exercises/02-model-catalog-evaluation.html
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ Yes. **Groundedness** is an AI-assisted evaluator that checks whether the respon
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Checking 300 homework answers**
+
+Robo answers 300 homework questions, and Maya can't check them all by hand. One helper asks: "Did Robo use the textbook page he was given, or make it up?" Another asks: "Did he actually answer the question?" For spelling tests with an answer sheet, a stamp machine counts matching words. Then Maya sorts the low scores into piles and spots the pattern: every bad answer is about the field trip, because the field-trip page was out of date.
+
+| In the story | In Foundry |
+|---|---|
+| "From the page or made up?" | The groundedness evaluator |
+| "Did he answer the question?" | The relevance evaluator |
+| The stamp machine with an answer sheet | NLP metrics (F1, BLEU, ROUGE), which need ground truth |
+| Sorting low scores into piles | Error analysis by slicing results |
+
+**Where the story breaks:** Robot checkers can be unfair (for example, liking longer answers), so compare them with human grading now and then.
+
+## Mental model & story (grown-up version)
 Evaluating an LLM app is like **grading essays in a big school**. Teachers can read a sample by hand (**manual evaluation**: playground side-by-side comparisons, structured 1–5 ratings, user studies). For thousands of essays you need **automated** graders.
 
 Some graders compare against an answer key: **F1** (word overlap), **BLEU** (n-gram precision, from translation), **ROUGE** (recall-oriented, from summarisation), **METEOR** (also credits synonyms and word stems) and **GLEU** (sentence-level BLEU). Others use a strong model as the judge, the **AI-assisted** evaluators: **groundedness** (is it supported by the context? This is how you catch fabrications), **relevance**, **coherence**, **fluency**, retrieval quality and response completeness.

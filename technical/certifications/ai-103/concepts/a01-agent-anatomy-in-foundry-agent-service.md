@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d2, a01]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/training/paths/develop-ai-agents-azure/
     accessed: 2026-10-02
@@ -31,7 +31,21 @@ An agent combines a model with **instructions and tools** and can **decide to ta
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Robo gets a real job**
+
+Until now Robo only chatted. Today Maya gives him a real job. He has a brain for thinking, a job card ("Help children find lost things. Never give out home addresses."), and a toolbox with the lost-property list and a phone to the office. Now Robo can decide for himself: "I'll check the list, then call the office," step by step, until the missing lunchbox is found. Maya also gives him a notebook for each child, so he remembers what they already told him.
+
+| In the story | In Foundry |
+|---|---|
+| Robo's brain | A model deployment |
+| The job card | The agent's instructions |
+| The toolbox | Tools: knowledge tools and action tools |
+| A notebook for each child | Conversation state managed by Agent Service |
+
+**Where the story breaks:** Robo follows his job card most of the time, not always. Tools, identities and approvals must limit what he can actually do.
+
+## Mental model & story (grown-up version)
 Think of an agent as a **new team member**. The **model** is their brain. The **instructions** are their job description: role, goal, boundaries, tone, when to escalate. The **tools** are the systems they're allowed to use: file search over the policy library, code interpreter for spreadsheets, an API to create tickets. **Conversations** are their notebook for each customer, so they remember what was said.
 
 **Foundry Agent Service** is the HR department and the office building in one: it hosts the agent, runs the model, executes built-in tools automatically, stores conversation state, applies guardrails and records traces. You don't manage servers. A working agent takes a few dozen lines of code, or none in the portal.

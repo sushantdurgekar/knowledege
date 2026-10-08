@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d1, p01]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/azure/foundry/what-is-foundry
     accessed: 2026-10-02
@@ -31,7 +31,21 @@ One **Foundry resource** (shared deployments, networking, billing) with **two pr
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: One Town Hall, many classrooms**
+
+Foundry Town Hall has one front door, one electricity meter and one big kitchen where the robot brains are cooked. Inside are classrooms. The art club and the robot club each get their own classroom with their own cupboards and notebooks, so the robot club can't peek at the art club's paintings. But both clubs eat from the same kitchen and share one meter, so Mayor Maya pays one bill. When the chess club joins, Maya doesn't build a new Town Hall. She opens another classroom.
+
+| In the story | In Foundry |
+|---|---|
+| Town Hall with its door, meter and kitchen | The Foundry resource (networking, billing, model deployments) |
+| A classroom | A project (agents, files, evaluations) |
+| The shared kitchen | Model deployments that every project can use |
+| Opening another classroom | Adding a project for a new team |
+
+**Where the story breaks:** Some rules are building-wide only: locking the network and customer-managed keys are set on the resource, not per classroom.
+
+## Mental model & story (grown-up version)
 Contoso Pharma wants three things: a chat assistant for sales, an agent that files expense claims, and a pipeline that pulls fields from lab reports. Their architect, Priya, opens Microsoft Foundry and sees it's organised like a **workshop building**.
 
 The **Foundry resource** is the building: power, plumbing and security at the door. Model deployments, networking rules and the bill live here. Inside are **projects**, one workshop room per team. Each room keeps its own agents, connections, uploaded data, evaluations and traces. Every resource gets a default project, and you add more as teams arrive.

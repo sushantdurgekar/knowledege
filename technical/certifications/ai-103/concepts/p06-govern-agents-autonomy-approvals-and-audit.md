@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d1, p06]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/tool-catalog
     accessed: 2026-10-02
@@ -31,7 +31,21 @@ For example: **require human approval** for refunds above a threshold (human-in-
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Robo's spending card**
+
+Maya gives Robo a spending card for school supplies. He can buy small things like pencils on his own, but anything over 10 coins needs Maya's signature first. The card only works at the stationery shop, not the toy shop. Every purchase goes into a logbook: what, when, which robot and who said yes. When Robo asks for a bigger allowance, Maya reads the logbook first.
+
+| In the story | In Foundry |
+|---|---|
+| Small purchases on his own | Bounded autonomy for low-impact actions |
+| Maya's signature over 10 coins | Human-in-the-loop approval |
+| Only the stationery shop | Tool-access controls (`allowed_tools`, least privilege) |
+| The logbook | Audit: traces, approval records and versions |
+
+**Where the story breaks:** Robo doesn't become more trustworthy just by getting older. Every bigger allowance must be a deliberate, tested change.
+
+## Mental model & story (grown-up version)
 Think of an agent as a **new employee with a company card**. On day one you don't hand over an unlimited card. You decide how much it can do alone (its **autonomy level**), which shops it may use (**tool-access controls**), when a manager must sign off (**approval workflow**) and what records it must keep (**audit**).
 
 Oversight comes in modes. **Human-in-the-loop**: the agent proposes, a person approves before anything happens, which suits payments, deletions and emails to customers. **Human-on-the-loop**: the agent acts while people monitor and can intervene, suiting low-risk, reversible tasks. **Autonomous**: no live human, only for tightly constrained, low-impact work.

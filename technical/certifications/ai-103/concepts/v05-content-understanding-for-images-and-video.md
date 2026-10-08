@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d3, v05]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-vision/Instructions/Exercises/04-content-understanding.html
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ A **Content Understanding analyzer** based on the image analyzer with a field sc
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The inspection form**
+
+Robo inspects 10,000 toy-car photos at the factory. Instead of describing each one in his own words, he fills in the same form every time. Which part? (door, wheel, roof). What problem? (none, scratch, dent). How bad? (low, medium, high). Plus one sentence of notes. For videos, he first cuts each film into scenes, then fills in a form for each scene. His photo forms don't say how sure he is, so an inspector double-checks every "high".
+
+| In the story | In Foundry |
+|---|---|
+| The same form every time | An analyzer with a field schema |
+| Answers picked from a fixed list | classify fields |
+| The one-sentence notes | generate fields |
+| Cutting films into scenes | Video segmentation with fields per segment |
+
+**Where the story breaks:** Only document forms come with "how sure" scores and "where I found it" marks. Image and video forms don't, so validate and spot-check them.
+
+## Mental model & story (grown-up version)
 Content Understanding is a **customs inspection desk** for media. You design the inspection form once (the **analyzer**): which base analyzer to start from (document, image, audio, video), which **fields** to fill, and how each field is filled: **extract** (copy a value that's visibly there), **classify** (pick from a fixed list) or **generate** (write a summary or inference). Every item that passes the desk gets the same form. **Document** analyzers can also return **confidence scores** and **grounding** (where the evidence was found) for each field when `estimateFieldSourceAndConfidence` is on; image, audio and video analyzers return the fields without them.
 
 For **images**, Litware's quality team built an analyzer from `prebuilt-image` with fields like `Defect` (classify: scratch, dent, crack, none), `Component` (classify: door, hinge, panel), `Severity` (classify: low, medium, high) and `Description` (generate). Image analyzers don't return confidence, so every *crack* or *high* result goes to an inspector and a weekly sample is spot-checked.

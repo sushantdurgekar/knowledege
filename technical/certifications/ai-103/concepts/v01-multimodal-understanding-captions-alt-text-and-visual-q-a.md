@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d3, v01]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-vision/Instructions/Exercises/01-gen-ai-vision.html
     accessed: 2026-10-02
@@ -29,7 +29,20 @@ It says what the element is, not what it **means**. Good alt text conveys the pu
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Robo describes the photo**
+
+Children show Robo photos. For the tiny picture tiles on the school website, he says one short line: "Red bicycle by the gate." For the lost-property page he says more: the colour, the bell, the scratched left handle. When a child asks, "Is my bike broken?", Robo only says what he can actually see, and if the photo is blurry he says, "I can't tell." For children who can't see the picture, he says what it's for, never "a picture of".
+
+| In the story | In Foundry |
+|---|---|
+| One short line vs a fuller description | Concise vs detailed captions |
+| Only what he can see, or "I can't tell" | Visual Q&A grounded in visible evidence |
+| Saying what the picture is for | Alt text that states the purpose, without "image of" |
+
+**Where the story breaks:** Robo sees a shrunken copy of each photo, so tiny writing can be lost unless you send a high-detail or cropped image.
+
+## Mental model & story (grown-up version)
 A multimodal model is a **colleague who can see**: you hand over one or more pictures with a question and get a written answer. In Foundry you use vision-capable models (GPT-4.1, GPT-4.1-mini, the GPT-5 family, Phi-4-multimodal) through the same Responses or Chat Completions APIs. The image travels as a URL or a base64 **data URL**, as an `input_image` part next to your `input_text`.
 
 Northwind's online shop uses one model for four jobs. **Concise captions** for product tiles (one line). **Detailed captions** for the product page. **Comparisons** across several images ("Which of these three sofas is the darkest?"). **Visual Q&A** for support: a customer uploads a photo of a damaged parcel and asks whether it's covered.

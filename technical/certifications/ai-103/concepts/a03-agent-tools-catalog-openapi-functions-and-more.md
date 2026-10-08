@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d2, a03]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/tool-catalog
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ Add an **OpenAPI tool** with the spec (anonymous, API-key connection or managed-
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Two drawers in the toolbox**
+
+Robo's toolbox has two drawers. The FIND drawer helps him look things up: a magnifying glass for the school's own papers, binoculars for news from outside, and a card for the big school library. The DO drawer helps him act: a calculator, a phone that rings other offices using their instruction booklet, and a walkie-talkie to other robots. Maya packs only the tools Robo needs today, because a heavy toolbox makes him slow and muddled.
+
+| In the story | In Foundry |
+|---|---|
+| FIND drawer | Knowledge tools: file search, web search, Azure AI Search or Foundry IQ |
+| Calculator and phone with a booklet | Action tools: code interpreter and the OpenAPI tool |
+| Walkie-talkie to other robots | A2A |
+| Packing only today's tools | Fewer, well-described tools |
+
+**Where the story breaks:** A tool in the box isn't automatically allowed through every door. Real tools need connections and identities with the right permissions.
+
+## Mental model & story (grown-up version)
 An agent's tools are its **toolbox**, and Foundry's catalog sorts them into two drawers.
 
 **Knowledge tools** fetch information: **file search** (your uploaded files in a vector store), **web search / Grounding with Bing** (live public web, with citations), **Azure AI Search** (an existing enterprise index), **SharePoint** (documents with the user's permissions), **Fabric data agent** (questions over Fabric data), and **Foundry IQ** knowledge bases.

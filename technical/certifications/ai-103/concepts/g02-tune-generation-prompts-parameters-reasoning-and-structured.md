@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d2, g02]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/training/paths/develop-generative-ai-apps/
     accessed: 2026-10-02
@@ -31,7 +31,20 @@ No. Lower temperature makes output more consistent but guarantees nothing. **Str
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The surprise dial and the cookie-cutter**
+
+Robo writes name cards for the school play. When Maya says "make them nice", every card comes out different. So she gives clear instructions: who they're for, what to write, how long. She turns Robo's surprise dial down low so the cards stay alike, and turns it up only for the poster contest. For cards that go straight into the printer, she gives Robo a cookie-cutter: every card must fit the exact shape, or it can't leave the kitchen.
+
+| In the story | In Foundry |
+|---|---|
+| Clear instructions | The system message: role, task, format, boundaries |
+| The surprise dial | Temperature |
+| The cookie-cutter shape | A JSON schema with strict structured outputs |
+
+**Where the story breaks:** A low surprise dial makes cards similar, not guaranteed. Only the cookie-cutter (structured outputs) guarantees the shape.
+
+## Mental model & story (grown-up version)
 Prompting is **briefing a talented contractor** who has never met you. Vague briefs get vague work. A good **system message** says who they are, what outcome you want, the boundaries, the output format, and what to do when unsure ("say you don't know").
 
 Then come the techniques. **Few-shot** examples show the pattern you want. **Delimiters** (`---`, Markdown headings, XML-style tags) separate instructions from data so the model doesn't confuse a pasted email with your rules. **Chain-of-thought** ("think step by step") helps non-reasoning models with multi-step problems; reasoning models already think internally. Models also have **recency bias**: repeat the key instruction at the end of long prompts.

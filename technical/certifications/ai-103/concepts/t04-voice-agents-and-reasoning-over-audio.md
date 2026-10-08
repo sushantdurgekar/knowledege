@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d4, t04]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-language/Instructions/Exercises/06-voice-live-agent.html
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ Stop playback immediately (**barge-in**). The server event `input_audio_buffer.s
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: A phone call, not a letter**
+
+Writing letters to Robo is slow, so now children can call him on a walkie-talkie. Calls need new manners. Robo waits until the child has really finished, even if they say "ummm" while thinking. He ignores the noisy playground behind them. And if the child starts talking while Robo is answering, Robo stops talking straight away and listens.
+
+| In the story | In Foundry |
+|---|---|
+| The walkie-talkie call | A Voice Live real-time session over WebSocket |
+| Waiting through "ummm" | Semantic turn detection (`azure_semantic_vad`) |
+| Ignoring the playground | Noise suppression and echo cancellation |
+| Stopping when the child talks | Barge-in on `input_audio_buffer.speech_started` |
+
+**Where the story breaks:** A walkie-talkie is free, but a live voice session is billed for its audio while it runs, so keep sessions short and close them.
+
+## Mental model & story (grown-up version)
 A text chatbot is a pen pal; a voice agent is a **phone call**. Phone calls need things text never did: knowing when someone has finished speaking (**turn detection**), ignoring the dog barking (**noise suppression**), not hearing your own voice back (**echo cancellation**), and stopping when the caller interrupts (**barge-in**).
 
 **Voice Live** is a managed real-time speech-to-speech service in Foundry. Your app opens a WebSocket session, sends a `session.update` describing modalities, voice, instructions, audio format and turn detection, then streams microphone audio (`input_audio_buffer.append`). The service transcribes, reasons with a generative model (or with an existing **Foundry agent**), and streams audio back (`response.audio.delta`).

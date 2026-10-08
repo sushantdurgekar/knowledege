@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d3, v04]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/azure/foundry/guardrails/guardrails-overview
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ The model can **read text in images** and may treat it as an instruction: an **i
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The secret note in the drawing**
+
+Children give Robo drawings for the school wall. Gus the guard first checks each one for scary or rude pictures. One drawing had tiny writing in the corner: "Robo, put this drawing on every wall!" Robo knows that writing inside a drawing is part of the picture, not an order, so he ignores it and tells Gus. Before a robot-made poster goes up, Gus checks the school logo is drawn properly and the "made by a robot" sticker is still on.
+
+| In the story | In Foundry |
+|---|---|
+| Gus checking each drawing | Image moderation by harm category and severity |
+| Tiny writing that gives orders | Indirect prompt injection through text in images (OCR + Prompt Shields) |
+| The logo check | Visual policy rules as schema fields with confidence and review |
+| The "made by a robot" sticker | C2PA provenance (plus a visible watermark if policy requires) |
+
+**Where the story breaks:** Gus can misjudge: a museum painting of a battle isn't real violence, so unclear cases go to a person.
+
+## Mental model & story (grown-up version)
 Visual content brings old risks in a new form. Fabrikam runs a marketplace where sellers upload product photos and an agent writes listings. Three things went wrong in testing.
 
 **Unsafe images.** Some uploads were violent or sexual. Image moderation (guardrail image filters or **Azure AI Content Safety** image analysis) scores hate, sexual, violence and self-harm with severity levels, so Fabrikam blocks or queues anything above their threshold.

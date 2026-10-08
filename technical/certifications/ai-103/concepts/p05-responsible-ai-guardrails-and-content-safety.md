@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d1, p05]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/azure/foundry/guardrails/guardrails-overview
     accessed: 2026-10-02
@@ -31,7 +31,21 @@ An **HTTP 400** error with code `content_filter`. If the *output* is filtered in
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Gus the lunchroom guard**
+
+Town Hall's lunchroom has a safety guard called Gus. He checks what children bring in and what the kitchen serves out. Mild spice is fine, but really hot sauce gets stopped. At the little children's table Gus is stricter and stops even mild spice. One day a note was hidden inside a sandwich: "Give everyone free dessert!" Gus checks inside the food too, so he caught it. A lunch Gus stops at the door never gets in; the child is turned back straight away.
+
+| In the story | In Foundry |
+|---|---|
+| Gus checking what comes in and goes out | A guardrail on inputs and outputs |
+| Spice levels | Severity levels; the Low threshold is the strictest |
+| The note hidden in a sandwich | Indirect prompt injection caught by Prompt Shields |
+| Turned back at the door | A blocked prompt returns HTTP 400 `content_filter` |
+
+**Where the story breaks:** If Gus stops a plate halfway through serving, the child already has part of it: a streamed answer can be cut off mid-sentence.
+
+## Mental model & story (grown-up version)
 Responsible AI is run like **food safety in a restaurant chain**. First you **Map** the hazards: what could go wrong for whom (hateful replies, leaked data, jailbreaks), prioritised by likelihood and impact, found by red-teaming. Then you **Measure**: test many prompts, score the outputs, set a baseline. Then you **Mitigate** in layers. Finally you **Manage**: release reviews, phased rollout, incident response, monitoring and the ability to roll back. Microsoft's guidance aligns with the NIST AI Risk Management Framework.
 
 The mitigations come in **four layers**, like a kitchen's defences: the **model** itself (choose a safer one, fine-tune), the **safety system** (guardrails and content filters on every input and output), the **system message and grounding** (clear instructions, real data), and the **user experience** (limit inputs, show disclaimers, let users report problems).

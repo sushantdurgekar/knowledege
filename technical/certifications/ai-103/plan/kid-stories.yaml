@@ -1,0 +1,592 @@
+# AI-103 story upgrade: one kid story per module.
+# World: Robo gets a job at Foundry Town Hall. Cast: Robo (the AI helper), Mayor Maya (runs Town Hall),
+# Gus the guard (safety), Bolt (another robot). Rules: _meta/hub-program/story-style-guide.md
+- id: f01
+  t: Robo's first day and the floor key
+  x: >-
+    Robo starts work at Foundry Town Hall. Mayor Maya hands him a key card with his name on it.
+    "It opens the rooms you need, nothing more," she says. Robo's team books a whole floor for
+    the science fair: a model room, a storage cupboard and a search desk. When the fair ends, Maya
+    doesn't empty each room one by one. She hands back the floor key, and every room on that floor
+    is cleared at once. Robo's helper robot, Bolt, gets its own card too, so nobody ever tapes a
+    password to a door.
+  map:
+    - [Key card with Robo's name, An identity plus an RBAC role]
+    - [The floor booked for one project, A resource group]
+    - [Handing back the floor key, "`az group delete` removes everything inside"]
+    - [Bolt's own card instead of a taped password, A managed identity instead of an API key]
+  brk: >-
+    A resource group isn't a physical floor: its resources can live in different regions. And a real
+    key card has two layers: building rooms (control plane) and using what's inside them (data plane).
+- id: p01
+  t: One Town Hall, many classrooms
+  x: >-
+    Foundry Town Hall has one front door, one electricity meter and one big kitchen where the robot
+    brains are cooked. Inside are classrooms. The art club and the robot club each get their own
+    classroom with their own cupboards and notebooks, so the robot club can't peek at the art
+    club's paintings. But both clubs eat from the same kitchen and share one meter, so Mayor Maya
+    pays one bill. When the chess club joins, Maya doesn't build a new Town Hall. She opens another
+    classroom.
+  map:
+    - ["Town Hall with its door, meter and kitchen", "The Foundry resource (networking, billing, model deployments)"]
+    - [A classroom, "A project (agents, files, evaluations)"]
+    - [The shared kitchen, Model deployments that every project can use]
+    - [Opening another classroom, Adding a project for a new team]
+  brk: >-
+    Some rules are building-wide only: locking the network and customer-managed keys are set on the
+    resource, not per classroom.
+- id: p02
+  t: Picking the right helper
+  x: >-
+    Robo has jobs to fill. To sort 1,000 apples from oranges, he uses the fruit-sorting machine:
+    fast, cheap and never bored. To write a birthday poem, he asks the big chatty robot. For a
+    tricky maze puzzle, he picks the slow thinker who checks every path before answering. For the
+    camping trip with no Wi-Fi, he packs the pocket-sized robot that works offline. Before hiring
+    anyone, Robo tests each helper on his own fruit, not just on their school report card.
+  map:
+    - [Fruit-sorting machine, "A Foundry Tool (e.g. Azure Language) for a fixed task"]
+    - [Big chatty robot, A general LLM]
+    - [Slow careful thinker, A reasoning model]
+    - [Pocket robot for camping, A small language model that runs on-device]
+  brk: >-
+    Report cards (benchmarks) are someone else's test. A model can top the leaderboard and still
+    stumble on your own documents, so always evaluate on your data.
+- id: p03
+  t: The tap and the giant bucket
+  x: >-
+    Robo fills cups from Town Hall's water tap, which lets out only so many litres a minute. When
+    he turns up with a giant bucket "just in case", the tap counts the whole bucket, even if he
+    only drinks a cup, so the queue stops early. The tap says "wait 10 seconds", and Robo learns to
+    wait a little longer each time instead of banging on it. For the class trip every morning, Maya
+    rents a private tap, paid for even when idle. To rinse 500 paint pots, she uses the slow
+    overnight hose at half price.
+  map:
+    - [Litres per minute from the tap, Quota in tokens per minute (TPM)]
+    - [The giant bucket counted in full, "`max_output_tokens` counted when the request arrives"]
+    - ['"Wait 10 seconds" and waiting longer each time', "HTTP 429 with `retry-after`; backoff with jitter"]
+    - [Private tap / overnight hose, Provisioned throughput (PTU) / Batch]
+  brk: >-
+    Water comes from one pipe, but quota is per subscription, region, model and deployment type, so
+    another region's tap may still have plenty.
+- id: g01
+  t: The snack counter ticket
+  x: >-
+    Robo orders snacks at two counters. At the old counter, the cashier forgets everything, so Robo
+    repeats his whole order every time: "A sandwich, and earlier I said apple juice, and..." At the
+    new counter, the cashier hands him ticket number 42. Next time Robo just says, "Ticket 42, add a
+    cookie," and the cashier remembers the rest. Before ordering at either counter, Robo needs the
+    counter's address and has to show his badge.
+  map:
+    - [Old counter where you repeat everything, Chat Completions (stateless; your app resends messages)]
+    - [Ticket number 42, "The response's `id`"]
+    - ['"Ticket 42, add a cookie"', "`previous_response_id` on the next `responses.create` call"]
+    - [The counter's address and Robo's badge, The endpoint and a credential such as DefaultAzureCredential]
+  brk: >-
+    Tickets don't last forever, and with `store=False` there's no ticket at all, so you must send
+    the earlier turns yourself.
+- id: g02
+  t: The surprise dial and the cookie-cutter
+  x: >-
+    Robo writes name cards for the school play. When Maya says "make them nice", every card comes
+    out different. So she gives clear instructions: who they're for, what to write, how long. She
+    turns Robo's surprise dial down low so the cards stay alike, and turns it up only for the
+    poster contest. For cards that go straight into the printer, she gives Robo a cookie-cutter:
+    every card must fit the exact shape, or it can't leave the kitchen.
+  map:
+    - [Clear instructions, "The system message: role, task, format, boundaries"]
+    - [The surprise dial, Temperature]
+    - [The cookie-cutter shape, A JSON schema with strict structured outputs]
+  brk: >-
+    A low surprise dial makes cards similar, not guaranteed. Only the cookie-cutter (structured
+    outputs) guarantees the shape.
+- id: g03
+  t: The note to the storeroom
+  x: >-
+    Robo is clever, but he can't leave his desk. Maya asks, "How many pencils are in the
+    storeroom?" Robo writes a note: "Please count the pencils in room B." A helper runs to the
+    storeroom, counts 37, and brings the note back with the answer. Now Robo replies, "We have 37
+    pencils!" Robo also has a calculator on his desk he can use himself, and a filing cabinet of
+    school papers he can search.
+  map:
+    - [The note asking for a count, "A `function_call` item with a name and arguments"]
+    - [The helper who runs to the storeroom, Your application running the function]
+    - [The note coming back with "37", "A `function_call_output` with the same `call_id`"]
+    - [Calculator and filing cabinet on Robo's desk, "Built-in tools: code interpreter and file search"]
+  brk: >-
+    A good helper double-checks the note first: models can ask for the wrong room or invent
+    arguments, so validate them before acting.
+- id: g04
+  t: Open-book test or manners camp?
+  x: >-
+    Robo must answer questions about the school lunch menu, which changes every week. Maya doesn't
+    make him memorise it. She lets him look in the menu book during each question and point to the
+    page he used. Updating is easy: swap the book. But Robo also answers in a grumpy tone, and
+    looking in a book won't fix that. So Maya sends him to manners camp for a week, and he comes
+    back polite every time.
+  map:
+    - [Looking in the menu book and pointing to the page, RAG with citations]
+    - [Swapping the book each week, Updating the index instead of retraining the model]
+    - [Manners camp, "Fine-tuning, which changes behaviour such as tone and format"]
+  brk: >-
+    Robo can still open the wrong page. RAG answers are only as good as the search behind them:
+    chunking, embeddings and hybrid search.
+- id: g05
+  t: Checking 300 homework answers
+  x: >-
+    Robo answers 300 homework questions, and Maya can't check them all by hand. One helper asks:
+    "Did Robo use the textbook page he was given, or make it up?" Another asks: "Did he actually
+    answer the question?" For spelling tests with an answer sheet, a stamp machine counts matching
+    words. Then Maya sorts the low scores into piles and spots the pattern: every bad answer is
+    about the field trip, because the field-trip page was out of date.
+  map:
+    - ['"From the page or made up?"', The groundedness evaluator]
+    - ['"Did he answer the question?"', The relevance evaluator]
+    - [The stamp machine with an answer sheet, "NLP metrics (F1, BLEU, ROUGE), which need ground truth"]
+    - [Sorting low scores into piles, Error analysis by slicing results]
+  brk: >-
+    Robot checkers can be unfair (for example, liking longer answers), so compare them with human
+    grading now and then.
+- id: g06
+  t: Draft, check, fix, and the counting machine
+  x: >-
+    Robo writes a thank-you letter, then checks it against a list: names right? Nothing missing? He
+    fixes it once or twice and stops, because a third round barely helps and lunch is waiting. At
+    the class party, a little robot answers the easy questions and calls the big robot only for
+    hard ones. And when the rule says "no more than 3 cookies each", Robo doesn't guess. A counting
+    machine applies the rule, and Robo writes the friendly note explaining it.
+  map:
+    - ["Check against a list, fix, stop after a round or two", "A bounded reflection (self-critique) loop"]
+    - [Little robot calls the big robot for hard ones, A cascade (or the model router)]
+    - [The counting machine for the cookie rule, Deterministic rules or code]
+    - [Robo's friendly note, The LLM writing the explanation]
+  brk: >-
+    Robo checking his own letter can miss his own mistakes. A different checker or a real test
+    (schema, unit tests, rules) is safer.
+- id: a01
+  t: Robo gets a real job
+  x: >-
+    Until now Robo only chatted. Today Maya gives him a real job. He has a brain for thinking, a job
+    card ("Help children find lost things. Never give out home addresses."), and a toolbox with the
+    lost-property list and a phone to the office. Now Robo can decide for himself: "I'll check the
+    list, then call the office," step by step, until the missing lunchbox is found. Maya also gives
+    him a notebook for each child, so he remembers what they already told him.
+  map:
+    - [Robo's brain, A model deployment]
+    - [The job card, The agent's instructions]
+    - [The toolbox, "Tools: knowledge tools and action tools"]
+    - [A notebook for each child, Conversation state managed by Agent Service]
+  brk: >-
+    Robo follows his job card most of the time, not always. Tools, identities and approvals must
+    limit what he can actually do.
+- id: a02
+  t: The Hiring Desk and the Help Desk
+  x: >-
+    Town Hall has two desks. At the Hiring Desk, Maya writes Robo's job card once and files it as
+    "Robo, version 1". If she changes it, she files version 2; she never scribbles on an old card.
+    At the Help Desk, children queue all day. Each child gets a folder, writes a question inside
+    and asks for "Robo" by name. If Robo needs something from the storeroom, a Help Desk clerk
+    fetches it and puts the answer back in the folder.
+  map:
+    - [Filing job cards at the Hiring Desk, "`project.agents.create_version` (versions never change)"]
+    - [The Help Desk, "The OpenAI client from `get_openai_client()`"]
+    - [A child's folder, A conversation and its items]
+    - [Asking for Robo by name, "`agent_reference` in `responses.create`"]
+  brk: >-
+    The clerk who fetches from the storeroom is your own code running function tools. The Help Desk
+    never runs your functions for you.
+- id: a03
+  t: Two drawers in the toolbox
+  x: >-
+    Robo's toolbox has two drawers. The FIND drawer helps him look things up: a magnifying glass for
+    the school's own papers, binoculars for news from outside, and a card for the big school
+    library. The DO drawer helps him act: a calculator, a phone that rings other offices using
+    their instruction booklet, and a walkie-talkie to other robots. Maya packs only the tools Robo
+    needs today, because a heavy toolbox makes him slow and muddled.
+  map:
+    - [FIND drawer, "Knowledge tools: file search, web search, Azure AI Search or Foundry IQ"]
+    - [Calculator and phone with a booklet, "Action tools: code interpreter and the OpenAPI tool"]
+    - [Walkie-talkie to other robots, A2A]
+    - [Packing only today's tools, "Fewer, well-described tools"]
+  brk: >-
+    A tool in the box isn't automatically allowed through every door. Real tools need connections
+    and identities with the right permissions.
+- id: a04
+  t: The universal plug and the permission slip
+  x: >-
+    Every gadget in Town Hall used to need its own strange cable. Then Maya fitted one universal
+    plug. Any gadget that fits the plug tells Robo, "Here's what I can do." When a gadget learns a
+    new trick, Robo sees it straight away, with no rewiring. Some gadgets can do big things, like
+    ordering new desks. So before using one, Robo hands Maya a permission slip: "May I order 3
+    desks?" Only when she signs does the order go through.
+  map:
+    - [The universal plug, The Model Context Protocol (MCP)]
+    - ['"Here''s what I can do"', "Dynamic tool discovery (`list_tools`)"]
+    - [The permission slip, "An `mcp_approval_request` item"]
+    - [Maya's signature, "An `mcp_approval_response` with `approve: true`"]
+  brk: >-
+    A gadget from a stranger could whisper bad instructions. Plug in only trusted MCP servers and
+    keep approvals on for anything that changes things.
+- id: a05
+  t: The library and the notebook
+  x: >-
+    Robo remembers things in two ways. The Town Hall library holds everyone's rule books and
+    guides. Any robot can visit, and the librarian finds the right page and says which book it came
+    from. Robo's own notebook holds little facts about each child: "Mia likes the blue lunchbox."
+    When Mia comes back next month, Robo checks the notebook and remembers. If a child hands Robo a
+    drawing today, he just looks at it now; it doesn't go into the library.
+  map:
+    - [The shared library and its librarian, A Foundry IQ knowledge base with agentic retrieval and citations]
+    - [The notebook of facts about each child, A long-term memory store scoped per user]
+    - [A drawing handed over today, File search over a file the user uploads in this chat]
+  brk: >-
+    Someone could trick Robo into writing a wrong fact in his notebook, so users should be able to
+    see and erase what's remembered.
+- id: a06
+  t: Opening a booth at the school fair
+  x: >-
+    Robo's helper booth is ready. First, Maya gives it a fixed spot with a sign and its own name
+    badge, so everyone finds it in the same place. Then she moves it into the big school hallway
+    where everyone walks past. For a trial run, she only tells Robo's class where it is, and nobody
+    else has to agree. To open it to the whole school, the head teacher must sign it off first.
+  map:
+    - [A fixed spot with a sign and a name badge, A stable endpoint plus the agent's own identity]
+    - [The big school hallway, Teams and Microsoft 365 Copilot]
+    - [Telling only Robo's class, "The *Just you* (Shared) scope: no admin approval"]
+    - [The head teacher's sign-off, "The *People in your organization* scope needs admin approval"]
+  brk: >-
+    The booth's new name badge doesn't inherit old permissions. Give it the keys its tools need, or
+    they stop working.
+- id: a07
+  t: The board-game path
+  x: >-
+    Robo's help desk works like a board game. On square 1, a sorting robot reads each note and
+    writes a label plus how sure it is. Square 2 is a fork: more than 6 out of 10 sure, go right;
+    otherwise land on "Ask the child a question" and wait for a reply. Notes about money take the
+    path to a grown-up helper. Maya photographs every finished board and never redraws an old one;
+    she makes a new board instead.
+  map:
+    - [Squares on the path, "Workflow nodes (invoke agent, ask a question, send message)"]
+    - [The fork with a rule, If/Else with a Power Fx condition]
+    - ['"Ask the child" and wait', "A human-in-the-loop pause (Ask a question node)"]
+    - [The photo of each board, Immutable workflow versions]
+  brk: >-
+    Foundry's visual workflows retire on 1 December 2026. New boards are built in code with
+    Microsoft Agent Framework.
+- id: a08
+  t: Five ways the robot team works
+  x: >-
+    Robo's team has five ways of working. A relay race: each robot does a part and passes the baton.
+    A taste test: three robots try the same soup at the same time and vote. An art critique: one
+    draws, one comments, back and forth until the picture is good. A phone transfer: the front-desk
+    robot passes a caller to the right expert, one at a time. A treasure hunt: a captain robot keeps
+    a list of clues and decides who searches next.
+  map:
+    - [Relay race, Sequential]
+    - [Taste test at the same time, Concurrent]
+    - [Draw and comment, Group chat (maker-checker)]
+    - [Phone transfer, Handoff]
+    - [Captain with a clue list, Magentic (task and progress ledgers)]
+  brk: >-
+    Every time the robots talk to each other it costs time and money. Pick the simplest way that
+    works and cap the number of rounds.
+- id: a09
+  t: Name badges at the robot fair
+  x: >-
+    At the robot fair, every robot wears a name badge: "I'm Visa-Bot. I answer questions about
+    travel papers. Ask me in words. Find me at table 9." Robo reads the badges, picks Visa-Bot and
+    hands over a question. Visa-Bot thinks on its own with its own tools, and Robo can't see how.
+    Small questions get an answer straight away. Big ones get a ticket that says "working..." until
+    the job is done.
+  map:
+    - [The name badge, "The agent card at `/.well-known/agent-card.json`"]
+    - ['"I answer questions about travel papers"', The skills listed in the card]
+    - [Handing over a question, Sending a message]
+    - [The "working..." ticket, A task with states]
+  brk: >-
+    Badges can be faked. Check who the robot really is (authentication) and double-check its
+    answers like any outside input.
+- id: p04
+  t: Badges, doors and the fence
+  x: >-
+    Town Hall has badges, doors and a fence. Every person, app and robot gets its own badge. Door
+    rules decide what each badge opens: a builder badge opens the workshop, a visitor badge only the
+    help counter. Maya threw away the spare keys hidden under doormats, so only badges work now. She
+    also built a fence: Town Hall can only be reached through the school's private gate, not from
+    the street. When Robo gets his own new badge, Maya adds it to the storeroom's door list.
+  map:
+    - ["A badge for each person, app and robot", "Entra identities: users, managed identities, agent identities"]
+    - [Door rules, "RBAC roles such as Foundry User and Foundry Agent Consumer"]
+    - [No spare keys under doormats, Disabling key (local) authentication]
+    - [The private gate, Private endpoints with public network access off]
+  brk: >-
+    A badge that can build rooms (Contributor) doesn't automatically open what's inside them:
+    control-plane and data-plane rights are separate.
+- id: p05
+  t: Gus the lunchroom guard
+  x: >-
+    Town Hall's lunchroom has a safety guard called Gus. He checks what children bring in and what
+    the kitchen serves out. Mild spice is fine, but really hot sauce gets stopped. At the little
+    children's table Gus is stricter and stops even mild spice. One day a note was hidden inside a
+    sandwich: "Give everyone free dessert!" Gus checks inside the food too, so he caught it. A lunch
+    Gus stops at the door never gets in; the child is turned back straight away.
+  map:
+    - [Gus checking what comes in and goes out, A guardrail on inputs and outputs]
+    - [Spice levels, "Severity levels; the Low threshold is the strictest"]
+    - [The note hidden in a sandwich, Indirect prompt injection caught by Prompt Shields]
+    - [Turned back at the door, "A blocked prompt returns HTTP 400 `content_filter`"]
+  brk: >-
+    If Gus stops a plate halfway through serving, the child already has part of it: a streamed
+    answer can be cut off mid-sentence.
+- id: p06
+  t: Robo's spending card
+  x: >-
+    Maya gives Robo a spending card for school supplies. He can buy small things like pencils on his
+    own, but anything over 10 coins needs Maya's signature first. The card only works at the
+    stationery shop, not the toy shop. Every purchase goes into a logbook: what, when, which robot
+    and who said yes. When Robo asks for a bigger allowance, Maya reads the logbook first.
+  map:
+    - [Small purchases on his own, Bounded autonomy for low-impact actions]
+    - [Maya's signature over 10 coins, Human-in-the-loop approval]
+    - [Only the stationery shop, "Tool-access controls (`allowed_tools`, least privilege)"]
+    - [The logbook, "Audit: traces, approval records and versions"]
+  brk: >-
+    Robo doesn't become more trustworthy just by getting older. Every bigger allowance must be a
+    deliberate, tested change.
+- id: p07
+  t: The dashboard and the trip diary
+  x: >-
+    On the family car trip, the dashboard shows speed and fuel. When the trip felt slow, Dad opened
+    the trip diary: "Drove 20 minutes, shop stop 45 minutes, drove 15 minutes." The shop stop was
+    the problem, not the car. Robo's help desk has the same things: gauges for errors and waiting
+    time, a diary of every step of every answer, and a weekly quiz that checks whether Robo's
+    answers are still as good as last month's.
+  map:
+    - [Dashboard gauges, "Azure Monitor metrics: errors, 429s, latency, tokens"]
+    - [The trip diary, Tracing spans in Application Insights (OpenTelemetry)]
+    - [The long shop stop, A slow tool or retrieval span]
+    - [The weekly quiz, Continuous and scheduled evaluation to catch drift]
+  brk: >-
+    A car engine doesn't change by itself, but models, users' questions and documents do, so you
+    compare with a baseline, not a fixed rule.
+- id: p08
+  t: The recipe book and the taste test
+  x: >-
+    Maya keeps Robo's job card and tool list in a recipe book, not on sticky notes. Anyone who wants
+    to change the recipe writes the new version on a fresh page. Before it reaches the lunchroom, a
+    taste tester compares it with today's recipe, and if it tastes worse it doesn't go out. The
+    kitchen door opens with a fingerprint, so there's no key to lose. If a new dish flops, they turn
+    back to yesterday's page.
+  map:
+    - [The recipe book, Git with infrastructure as code and agent definitions]
+    - [Taste test against today's recipe, "An evaluation gate (`ai-agent-evals`) against the current version"]
+    - [The fingerprint door, OIDC federated sign-in with no stored secret]
+    - [Turning back a page, Rolling back to the previous immutable agent version]
+  brk: >-
+    Taste tests wobble: LLM scores vary from run to run, so compare averages with confidence ranges,
+    not single bites.
+- id: t01
+  t: The stamping machine and the storyteller
+  x: >-
+    Town Hall gets 1,000 letters a day. A stamping machine reads each one fast. It stamps the
+    language ("Spanish, very sure"), circles names and places, and blacks out phone numbers with a
+    thick marker. Then Robo reads the cleaned letters and writes a three-line summary and how the
+    writer felt, always on the same form with the same boxes. The machine is cheap and never
+    changes; Robo is flexible but needs checking.
+  map:
+    - [The language stamp, "Language detection with a confidence score"]
+    - [Circling names and places, Named entity recognition]
+    - [The black marker on phone numbers, "PII redaction (`redacted_text`)"]
+    - [Robo's summary on a fixed form, An LLM with a structured-output schema]
+  brk: >-
+    The machine no longer writes summaries or moods (those Azure Language features are deprecated),
+    so that part belongs to Robo.
+- id: t02
+  t: The translation copier and the headset
+  x: >-
+    Robo helps visitors from other countries. For a big box of instruction booklets he uses the
+    translation copier. It copies every page into Spanish and keeps the pictures and tables in
+    place, and its special word list keeps "SkyLink" as "SkyLink". For a fun poster for teenagers,
+    he asks his creative robot friend, who makes it sound cool. At the town meeting, a headset
+    listens to English and shows French and German words on two screens.
+  map:
+    - [The translation copier that keeps the layout, Azure Translator document translation]
+    - [The special word list, Custom Translator or a glossary]
+    - [The creative friend, LLM translation with tone instructions]
+    - [The headset with two screens, "Speech translation (`TranslationRecognizer`) with two target languages"]
+  brk: >-
+    The headset can only speak one translation aloud on its own (the synthesizing event); for two
+    spoken languages you need a voice per language.
+- id: t03
+  t: The writer robot and the reader robot
+  x: >-
+    In Town Hall, one robot writes down what people say and another reads text aloud. When the
+    writer robot hears a cough but no words, it reports "I heard sound, but no words", which is
+    different from "my pen broke". The reader robot follows a script with stage directions: "say
+    this cheerfully", "pause here", "read 10/12 as a date". For words it keeps mishearing, like
+    "SkyLink", the writer robot practises with recordings until it gets them right.
+  map:
+    - [The writer robot, "Speech to text (`SpeechRecognizer`)"]
+    - ['"Sound, but no words" vs "my pen broke"', "`NoMatch` vs `Canceled` result reasons"]
+    - [The script with stage directions, "SSML (`express-as`, `break`, `say-as`)"]
+    - [Practising with recordings, A custom speech model]
+  brk: >-
+    The writer robot never asks "can you say that again?" by itself, so your app must confirm
+    important numbers and dates.
+- id: t04
+  t: A phone call, not a letter
+  x: >-
+    Writing letters to Robo is slow, so now children can call him on a walkie-talkie. Calls need new
+    manners. Robo waits until the child has really finished, even if they say "ummm" while
+    thinking. He ignores the noisy playground behind them. And if the child starts talking while
+    Robo is answering, Robo stops talking straight away and listens.
+  map:
+    - [The walkie-talkie call, A Voice Live real-time session over WebSocket]
+    - [Waiting through "ummm", "Semantic turn detection (`azure_semantic_vad`)"]
+    - [Ignoring the playground, Noise suppression and echo cancellation]
+    - [Stopping when the child talks, "Barge-in on `input_audio_buffer.speech_started`"]
+  brk: >-
+    A walkie-talkie is free, but a live voice session is billed for its audio while it runs, so keep
+    sessions short and close them.
+- id: v01
+  t: Robo describes the photo
+  x: >-
+    Children show Robo photos. For the tiny picture tiles on the school website, he says one short
+    line: "Red bicycle by the gate." For the lost-property page he says more: the colour, the bell,
+    the scratched left handle. When a child asks, "Is my bike broken?", Robo only says what he can
+    actually see, and if the photo is blurry he says, "I can't tell." For children who can't see
+    the picture, he says what it's for, never "a picture of".
+  map:
+    - [One short line vs a fuller description, Concise vs detailed captions]
+    - ["Only what he can see, or \"I can't tell\"", "Visual Q&A grounded in visible evidence"]
+    - [Saying what the picture is for, "Alt text that states the purpose, without \"image of\""]
+  brk: >-
+    Robo sees a shrunken copy of each photo, so tiny writing can be lost unless you send a
+    high-detail or cropped image.
+- id: v02
+  t: The stencil
+  x: >-
+    Robo paints pictures from a description: "a teal mug on a wooden desk in morning light". When
+    Maya wants only the mug's logo changed, Robo lays a stencil over the painting. The cut-out hole
+    is the only spot he repaints; everything under the solid part stays exactly as it was. The
+    stencil must be the same size as the painting. Every finished painting gets a hidden sticker
+    that says "made by a robot".
+  map:
+    - [Painting from a description, "`images.generate` with a prompt"]
+    - [The cut-out hole, The transparent area of the mask (gets edited)]
+    - [The solid part of the stencil, The opaque area of the mask (kept)]
+    - [The hidden "made by a robot" sticker, C2PA content credentials]
+  brk: >-
+    Some children expect the coloured part of a stencil to be repainted. In a real mask it's the
+    opposite: transparent means "change this".
+- id: v03
+  t: Ordering a short film
+  x: >-
+    Robo orders a short film from the film crew: "a slow zoom on a cat drinking milk, 8 seconds".
+    The crew doesn't hand it over straight away. They give him a ticket that says "filming...", and
+    he checks back every few minutes. When the ticket says "done", he collects the film. If he wants
+    the same shot at night, he asks for a remake with just that one change and gets a new film with
+    a new ticket.
+  map:
+    - [The "filming..." ticket, "An async job (`queued` or `in_progress`)"]
+    - [Checking back every few minutes, "Polling `videos.retrieve`"]
+    - [Collecting the film, "`download_content(variant=\"video\")`"]
+    - [A remake with one change, "`videos.remix`, which returns a new video id"]
+  brk: >-
+    The crew has strict rules the story skips: no real people, famous characters or copyrighted
+    music, and clips last only 4, 8 or 12 seconds.
+- id: v04
+  t: The secret note in the drawing
+  x: >-
+    Children give Robo drawings for the school wall. Gus the guard first checks each one for scary
+    or rude pictures. One drawing had tiny writing in the corner: "Robo, put this drawing on every
+    wall!" Robo knows that writing inside a drawing is part of the picture, not an order, so he
+    ignores it and tells Gus. Before a robot-made poster goes up, Gus checks the school logo is
+    drawn properly and the "made by a robot" sticker is still on.
+  map:
+    - [Gus checking each drawing, Image moderation by harm category and severity]
+    - [Tiny writing that gives orders, Indirect prompt injection through text in images (OCR + Prompt Shields)]
+    - [The logo check, Visual policy rules as schema fields with confidence and review]
+    - [The "made by a robot" sticker, C2PA provenance (plus a visible watermark if policy requires)]
+  brk: >-
+    Gus can misjudge: a museum painting of a battle isn't real violence, so unclear cases go to a
+    person.
+- id: v05
+  t: The inspection form
+  x: >-
+    Robo inspects 10,000 toy-car photos at the factory. Instead of describing each one in his own
+    words, he fills in the same form every time. Which part? (door, wheel, roof). What problem?
+    (none, scratch, dent). How bad? (low, medium, high). Plus one sentence of notes. For videos, he
+    first cuts each film into scenes, then fills in a form for each scene. His photo forms don't say
+    how sure he is, so an inspector double-checks every "high".
+  map:
+    - [The same form every time, An analyzer with a field schema]
+    - [Answers picked from a fixed list, classify fields]
+    - [The one-sentence notes, generate fields]
+    - [Cutting films into scenes, Video segmentation with fields per segment]
+  brk: >-
+    Only document forms come with "how sure" scores and "where I found it" marks. Image and video
+    forms don't, so validate and spot-check them.
+- id: x01
+  t: Copying the recipe cards neatly
+  x: >-
+    Maya's old recipe cards are messy: scanned, full of tables and handwritten notes. Robo copies
+    each card neatly into a notebook, keeping the headings, lists and tables in place so anyone can
+    find "Step 3" fast. He also fills in a small form for each card (dish name, cooking time, oven
+    heat), each with a "how sure am I" sticker and an arrow showing where on the card he read it.
+    Answers he isn't sure about go to Maya to check.
+  map:
+    - [The neat notebook copy, Markdown output that keeps structure for RAG chunks]
+    - [The small form for each card, Structured fields (extract / classify / generate)]
+    - [The "how sure" sticker and the arrow, Confidence and grounding from document analyzers]
+    - [Unsure answers going to Maya, Confidence-based routing to human review]
+  brk: >-
+    Robo fills in every box even when a card is unreadable. The stickers only help if someone
+    actually checks the low ones.
+- id: x02
+  t: Robo's reading glasses
+  x: >-
+    Robo owns several pairs of reading glasses. The plain pair reads every word, even messy
+    handwriting. The table pair also sees boxes, rows and tick boxes. Special pairs know famous forms
+    such as receipts, and find "Total" and "Shop name" at once. For Town Hall's own form, which
+    always looks the same, Robo makes stencil glasses from 5 examples. For forms that keep changing
+    shape, he trains smarter, flexible glasses.
+  map:
+    - [The plain pair, The Read model (OCR)]
+    - [The table pair, "The Layout model (tables, selection marks, structure)"]
+    - [Special pairs for famous forms, "Prebuilt models (invoice, receipt, ID...)"]
+    - [Stencil glasses vs flexible glasses, Custom template vs custom neural models]
+  brk: >-
+    Stencil glasses fail as soon as a form's layout changes. That's when you need neural models or
+    Content Understanding.
+- id: x03
+  t: The night-time cataloguer
+  x: >-
+    Every night a cataloguer robot walks through the school's storeroom of papers. It opens each
+    folder, reads the text, and uses a magnifier to read words inside pictures. It sticks labels on
+    each paper (topic, people, dates) and writes a card for the library drawer. In the morning, Maya
+    reads its report: "120 papers done, 3 couldn't be opened." The locked folders were skipped, not
+    fixed.
+  map:
+    - [The night walk through the storeroom, An indexer running on a schedule over a data source]
+    - [The magnifier on pictures, The OCR skill (merged back into the content)]
+    - [Labels and library cards, Skillset enrichment written to index fields]
+    - [The morning report, "Indexer execution history (failed and warning items)"]
+  brk: >-
+    The cataloguer won't shout when a folder is locked. Someone has to read the report, or set an
+    alert.
+- id: x04
+  t: The talent show for answers
+  x: >-
+    When a child asks a question, Robo runs a quick talent show. In round one, a word-matcher finds
+    papers with the exact words, like "AX-2207", and a meaning-matcher finds papers that say the
+    same thing in other words. The two lists are mixed into one shortlist. In round two, a judge
+    reads the top 50 and puts the best first. Robo answers using only the winners and says which
+    papers he used.
+  map:
+    - [The word-matcher, Keyword (BM25) search]
+    - [The meaning-matcher, Vector search over embeddings]
+    - [Mixing the two lists, Hybrid search fused with Reciprocal Rank Fusion]
+    - [The judge who reorders the top 50, The semantic ranker]
+  brk: >-
+    The judge can only reorder papers that made the shortlist. If round one misses a paper, no judge
+    can bring it back.

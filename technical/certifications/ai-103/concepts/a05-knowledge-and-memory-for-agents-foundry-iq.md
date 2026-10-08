@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d2, a05]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-agents/Instructions/Exercises/04-integrate-agent-with-foundry-iq.html
     accessed: 2026-10-02
@@ -29,7 +29,20 @@ Agents need two kinds of remembering: **knowledge** (what the organisation knows
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The library and the notebook**
+
+Robo remembers things in two ways. The Town Hall library holds everyone's rule books and guides. Any robot can visit, and the librarian finds the right page and says which book it came from. Robo's own notebook holds little facts about each child: "Mia likes the blue lunchbox." When Mia comes back next month, Robo checks the notebook and remembers. If a child hands Robo a drawing today, he just looks at it now; it doesn't go into the library.
+
+| In the story | In Foundry |
+|---|---|
+| The shared library and its librarian | A Foundry IQ knowledge base with agentic retrieval and citations |
+| The notebook of facts about each child | A long-term memory store scoped per user |
+| A drawing handed over today | File search over a file the user uploads in this chat |
+
+**Where the story breaks:** Someone could trick Robo into writing a wrong fact in his notebook, so users should be able to see and erase what's remembered.
+
+## Mental model & story (grown-up version)
 Picture a company **library** and a personal **notebook**. **Foundry IQ** is the library: a managed knowledge layer on Azure AI Search where you create **knowledge bases** per business domain, each with **knowledge sources** such as an Azure AI Search index, Blob Storage files, SharePoint, OneLake or the web. Foundry IQ handles chunking, embedding and indexing, and at question time does **agentic retrieval**: it plans the query, picks strategies, ranks results and returns citations. Many agents can share one knowledge base.
 
 Agents connect to a knowledge base through **MCP**: the knowledge base exposes an MCP endpoint (`{search endpoint}/knowledgebases/<name>/mcp`) that you add as an `MCPTool`. The project's identity needs **Search Index Data Reader** (or key auth).

@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d2, a08]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-agents/Instructions/Exercises/07-agent-framework.html
     accessed: 2026-10-02
@@ -31,7 +31,22 @@ sources:
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Five ways the robot team works**
+
+Robo's team has five ways of working. A relay race: each robot does a part and passes the baton. A taste test: three robots try the same soup at the same time and vote. An art critique: one draws, one comments, back and forth until the picture is good. A phone transfer: the front-desk robot passes a caller to the right expert, one at a time. A treasure hunt: a captain robot keeps a list of clues and decides who searches next.
+
+| In the story | In Foundry |
+|---|---|
+| Relay race | Sequential |
+| Taste test at the same time | Concurrent |
+| Draw and comment | Group chat (maker-checker) |
+| Phone transfer | Handoff |
+| Captain with a clue list | Magentic (task and progress ledgers) |
+
+**Where the story breaks:** Every time the robots talk to each other it costs time and money. Pick the simplest way that works and cap the number of rounds.
+
+## Mental model & story (grown-up version)
 Agent Framework is a **film studio** for agents written in Python or .NET. Each **Agent** has a chat client (Foundry, Azure OpenAI, OpenAI, Anthropic, Ollama and more), instructions and tools. **Function tools** are plain Python functions; type hints and descriptions become their schema, and `@tool(approval_mode="always_require")` makes them pause for approval. **Sessions** keep conversation history; **context providers** add memory; **middleware** can log, authorise or block calls.
 
 Multi-agent work follows recognisable scripts. **Sequential**: a pipeline where each agent builds on the previous one (draft → review → polish). **Concurrent**: several agents work on the same input in parallel and results are merged (independent reviews, voting). **Group chat**: a chat manager picks who speaks next in a shared conversation, ideal for maker-checker loops with two or three agents. **Handoff**: one agent at a time owns the conversation and transfers control dynamically, like triage passing to billing or tech support. **Magentic**: a manager agent plans open-ended work with a **task ledger** and tracks it with a **progress ledger**, assigning steps to specialists; powerful but slow.

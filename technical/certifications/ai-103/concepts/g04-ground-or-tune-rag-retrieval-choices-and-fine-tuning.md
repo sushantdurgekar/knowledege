@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d2, g04]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/training/paths/develop-generative-ai-apps/
     accessed: 2026-10-02
@@ -31,7 +31,20 @@ sources:
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Open-book test or manners camp?**
+
+Robo must answer questions about the school lunch menu, which changes every week. Maya doesn't make him memorise it. She lets him look in the menu book during each question and point to the page he used. Updating is easy: swap the book. But Robo also answers in a grumpy tone, and looking in a book won't fix that. So Maya sends him to manners camp for a week, and he comes back polite every time.
+
+| In the story | In Foundry |
+|---|---|
+| Looking in the menu book and pointing to the page | RAG with citations |
+| Swapping the book each week | Updating the index instead of retraining the model |
+| Manners camp | Fine-tuning, which changes behaviour such as tone and format |
+
+**Where the story breaks:** Robo can still open the wrong page. RAG answers are only as good as the search behind them: chunking, embeddings and hybrid search.
+
+## Mental model & story (grown-up version)
 Three ways to make a model better at your job, like preparing a new hire. **Prompt engineering** is a good briefing: cheap and instant. **RAG** (retrieval-augmented generation) is giving them the **company handbook to look things up** during each conversation: answers stay current and can cite the page. **Fine-tuning** is **sending them on a training course**: it changes habits (style, format, tone, tool use) permanently, but it's slow, costly and doesn't teach facts that change next month.
 
 RAG has two halves. At **index time** you extract text from documents, split it into **chunks**, turn each chunk into an **embedding** (a vector of numbers capturing meaning) and store them in an index. At **query time** you embed the question with the **same model**, retrieve the best chunks, add them to the prompt and ask the model to answer *only from this context, with citations*.

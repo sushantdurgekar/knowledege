@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d5, x03]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-information-extraction/Instructions/Exercises/04-knowledge-mining.html
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ An **OCR skill** in a skillset (with image extraction enabled) to read text from
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The night-time cataloguer**
+
+Every night a cataloguer robot walks through the school's storeroom of papers. It opens each folder, reads the text, and uses a magnifier to read words inside pictures. It sticks labels on each paper (topic, people, dates) and writes a card for the library drawer. In the morning, Maya reads its report: "120 papers done, 3 couldn't be opened." The locked folders were skipped, not fixed.
+
+| In the story | In Foundry |
+|---|---|
+| The night walk through the storeroom | An indexer running on a schedule over a data source |
+| The magnifier on pictures | The OCR skill (merged back into the content) |
+| Labels and library cards | Skillset enrichment written to index fields |
+| The morning report | Indexer execution history (failed and warning items) |
+
+**Where the story breaks:** The cataloguer won't shout when a folder is locked. Someone has to read the report, or set an alert.
+
+## Mental model & story (grown-up version)
 Azure AI Search is a **library with an automated cataloguing team**. A **data source** says where the books are (Blob Storage, ADLS Gen2, Azure SQL, Cosmos DB, OneLake…). An **indexer** is the cataloguer: it **cracks** each document open (extracts text and images), runs an optional **skillset** of AI skills to enrich it, maps the results into fields, and writes them to the **index**, the catalogue that queries search. It runs on a schedule and picks up changes.
 
 Each skill reads from and writes to an **enrichment tree**, a growing JSON-like structure per document: `/document/content` is the extracted text, `/document/normalized_images/*` are images, and skills add nodes such as `/document/normalized_images/*/text` (OCR output) or `/document/merged_content`. Built-in skills cover OCR, image analysis, language detection, entity recognition, PII, translation, **text split** (chunking), **text merge**, the **shaper**, **Azure OpenAI embedding** (vectors), **document layout**, and GenAI prompt skills. When nothing fits, a **custom Web API skill** (usually an Azure Function) plugs in your own code using a simple `values` / `recordId` / `data` contract.

@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d3, v03]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-vision/Instructions/Exercises/03-generate-video.html
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ Video generation takes minutes, so it's an **asynchronous job**. You get a video
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Ordering a short film**
+
+Robo orders a short film from the film crew: "a slow zoom on a cat drinking milk, 8 seconds". The crew doesn't hand it over straight away. They give him a ticket that says "filming...", and he checks back every few minutes. When the ticket says "done", he collects the film. If he wants the same shot at night, he asks for a remake with just that one change and gets a new film with a new ticket.
+
+| In the story | In Foundry |
+|---|---|
+| The "filming..." ticket | An async job (`queued` or `in_progress`) |
+| Checking back every few minutes | Polling `videos.retrieve` |
+| Collecting the film | `download_content(variant="video")` |
+| A remake with one change | `videos.remix`, which returns a new video id |
+
+**Where the story breaks:** The crew has strict rules the story skips: no real people, famous characters or copyrighted music, and clips last only 4, 8 or 12 seconds.
+
+## Mental model & story (grown-up version)
 Making a Sora 2 video is like commissioning a **short film crew**. You hand over a shot description, and they go away to film it. You check back (poll) until they say it's done, then collect the footage.
 
 The brief works best like a director's note: **one camera move and one action per shot** ("slow dolly-in on a barista pouring latte art, morning light"). Clips are short (**4, 8 or 12 seconds**, default 4) in **1280×720 or 720×1280**, and Sora 2 generates **audio** too. Longer stories are stitched from several clips.

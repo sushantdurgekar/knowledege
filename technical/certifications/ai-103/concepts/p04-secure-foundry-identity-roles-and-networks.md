@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d1, p04]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/azure/foundry/concepts/rbac-foundry
     accessed: 2026-10-02
@@ -31,7 +31,21 @@ Publishing gave the agent its **own Entra agent identity**. The role assignment 
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Badges, doors and the fence**
+
+Town Hall has badges, doors and a fence. Every person, app and robot gets its own badge. Door rules decide what each badge opens: a builder badge opens the workshop, a visitor badge only the help counter. Maya threw away the spare keys hidden under doormats, so only badges work now. She also built a fence: Town Hall can only be reached through the school's private gate, not from the street. When Robo gets his own new badge, Maya adds it to the storeroom's door list.
+
+| In the story | In Foundry |
+|---|---|
+| A badge for each person, app and robot | Entra identities: users, managed identities, agent identities |
+| Door rules | RBAC roles such as Foundry User and Foundry Agent Consumer |
+| No spare keys under doormats | Disabling key (local) authentication |
+| The private gate | Private endpoints with public network access off |
+
+**Where the story breaks:** A badge that can build rooms (Contributor) doesn't automatically open what's inside them: control-plane and data-plane rights are separate.
+
+## Mental model & story (grown-up version)
 Security in Foundry is a building with **badges, doors and walls**. Badges are identities: people, apps (managed identities) and, since agents became first-class, **agent identities** in Microsoft Entra. Doors are **RBAC roles** that decide what each badge can do. Walls are **networking**: public access, private endpoints and virtual networks.
 
 In 2026 Microsoft renamed the Foundry roles. **Foundry User** (formerly Azure AI User) lets developers build and call agents and models. **Foundry Project Manager** adds managing the project, assigning Foundry User and publishing agents. **Foundry Account Owner** creates projects and manages deployments but can't build. **Foundry Owner** can do everything. The new **Foundry Agent Consumer** can only call agent endpoints, which is perfect for an app that just uses an agent (legacy *agent applications* still need Foundry User).

@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d2, g06]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/ai-103
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ Often it helps, mostly on the first revision. The catch is **cost and latency** 
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Draft, check, fix, and the counting machine**
+
+Robo writes a thank-you letter, then checks it against a list: names right? Nothing missing? He fixes it once or twice and stops, because a third round barely helps and lunch is waiting. At the class party, a little robot answers the easy questions and calls the big robot only for hard ones. And when the rule says "no more than 3 cookies each", Robo doesn't guess. A counting machine applies the rule, and Robo writes the friendly note explaining it.
+
+| In the story | In Foundry |
+|---|---|
+| Check against a list, fix, stop after a round or two | A bounded reflection (self-critique) loop |
+| Little robot calls the big robot for hard ones | A cascade (or the model router) |
+| The counting machine for the cookie rule | Deterministic rules or code |
+| Robo's friendly note | The LLM writing the explanation |
+
+**Where the story breaks:** Robo checking his own letter can miss his own mistakes. A different checker or a real test (schema, unit tests, rules) is safer.
+
+## Mental model & story (grown-up version)
 Good writers **draft, critique, revise**. A **reflection loop** does the same: generate an answer, ask a model (the same or a different one) to critique it against explicit criteria ("Is every number supported by the source? Is anything missing?"), then revise. Stop when the critique passes or after a fixed number of cycles, because the first revision gives most of the gain.
 
 A **chain-of-thought evaluation** grades the *reasoning*, not just the final answer: did the steps follow the rules, use the right figures, avoid leaps? Reasoning models can return a reasoning summary you can log and evaluate; for others you can ask for a structured rationale.

@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d1, p08]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/training/paths/develop-ai-agents-azure/
     accessed: 2026-10-02
@@ -31,7 +31,21 @@ No long-lived secret exists to leak or rotate. GitHub (or Azure DevOps) gets a s
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The recipe book and the taste test**
+
+Maya keeps Robo's job card and tool list in a recipe book, not on sticky notes. Anyone who wants to change the recipe writes the new version on a fresh page. Before it reaches the lunchroom, a taste tester compares it with today's recipe, and if it tastes worse it doesn't go out. The kitchen door opens with a fingerprint, so there's no key to lose. If a new dish flops, they turn back to yesterday's page.
+
+| In the story | In Foundry |
+|---|---|
+| The recipe book | Git with infrastructure as code and agent definitions |
+| Taste test against today's recipe | An evaluation gate (`ai-agent-evals`) against the current version |
+| The fingerprint door | OIDC federated sign-in with no stored secret |
+| Turning back a page | Rolling back to the previous immutable agent version |
+
+**Where the story breaks:** Taste tests wobble: LLM scores vary from run to run, so compare averages with confidence ranges, not single bites.
+
+## Mental model & story (grown-up version)
 Contoso's first agent was built by clicking in the portal. It worked, until someone changed its instructions on a Friday and nobody could say what changed or roll it back. Their second agent was treated like software.
 
 Everything lives in Git: **infrastructure as code** (Bicep or Terraform, or an `azd` template) for the Foundry resource, projects, model deployments, connections and role assignments; the **agent definition** (model, instructions, tools) as YAML or code; and **evaluation datasets**.

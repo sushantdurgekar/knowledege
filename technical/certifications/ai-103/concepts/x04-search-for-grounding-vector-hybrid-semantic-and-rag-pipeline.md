@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d5, x04]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-information-extraction/Instructions/Exercises/05-rag-pipeline.html
     accessed: 2026-10-02
@@ -31,7 +31,21 @@ Their **order** (and it adds captions and answers). It re-ranks the top results 
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The talent show for answers**
+
+When a child asks a question, Robo runs a quick talent show. In round one, a word-matcher finds papers with the exact words, like "AX-2207", and a meaning-matcher finds papers that say the same thing in other words. The two lists are mixed into one shortlist. In round two, a judge reads the top 50 and puts the best first. Robo answers using only the winners and says which papers he used.
+
+| In the story | In Foundry |
+|---|---|
+| The word-matcher | Keyword (BM25) search |
+| The meaning-matcher | Vector search over embeddings |
+| Mixing the two lists | Hybrid search fused with Reciprocal Rank Fusion |
+| The judge who reorders the top 50 | The semantic ranker |
+
+**Where the story breaks:** The judge can only reorder papers that made the shortlist. If round one misses a paper, no judge can bring it back.
+
+## Mental model & story (grown-up version)
 A search query is a **two-stage talent show**. Stage one finds candidates. **Keyword search** (BM25) uses the **simple** or **full Lucene** syntax (fuzzy `~`, proximity, boosting `^`, wildcards, regex) with **filters** (`$filter`), **facets** and **sorting**. **Vector search** finds nearest neighbours by meaning, with a `VectorizedQuery` (you pass the vector) or a `VectorizableTextQuery` (the index's vectorizer embeds the text). **Hybrid search** runs both and fuses the rankings with **Reciprocal Rank Fusion (RRF)**.
 
 Stage two is the judges: the **semantic ranker** re-scores the top results (about 50) with a language model and can return **captions** (key sentences) and **answers** (extracted spans). It needs a **semantic configuration** naming the title, content and keyword fields.

@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d1, p03]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-models/concepts/deployment-types
     accessed: 2026-10-02
@@ -31,7 +31,21 @@ About **16**. The service estimates each request as prompt + maximum output (2,0
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The tap and the giant bucket**
+
+Robo fills cups from Town Hall's water tap, which lets out only so many litres a minute. When he turns up with a giant bucket "just in case", the tap counts the whole bucket, even if he only drinks a cup, so the queue stops early. The tap says "wait 10 seconds", and Robo learns to wait a little longer each time instead of banging on it. For the class trip every morning, Maya rents a private tap, paid for even when idle. To rinse 500 paint pots, she uses the slow overnight hose at half price.
+
+| In the story | In Foundry |
+|---|---|
+| Litres per minute from the tap | Quota in tokens per minute (TPM) |
+| The giant bucket counted in full | `max_output_tokens` counted when the request arrives |
+| "Wait 10 seconds" and waiting longer each time | HTTP 429 with `retry-after`; backoff with jitter |
+| Private tap / overnight hose | Provisioned throughput (PTU) / Batch |
+
+**Where the story breaks:** Water comes from one pipe, but quota is per subscription, region, model and deployment type, so another region's tap may still have plenty.
+
+## Mental model & story (grown-up version)
 Picture model capacity as a **water utility**. A **deployment** is the tap you install for one model in one region. Its **deployment type** is the plumbing contract: **Global Standard** draws from the whole global network, pay per litre, with the most capacity, and is the default. **Data Zone** keeps processing inside the US or EU zone for residency rules. **Standard** (regional) keeps it in one geography. **Provisioned (PTU)** reserves a dedicated pipe for steady flow and predictable latency, at a fixed price. **Batch** is overnight delivery at half price: jobs finish within about 24 hours.
 
 Your **quota** is the maximum litres per minute the utility allows your subscription, per region, per model and per deployment type, measured in **tokens per minute (TPM)**. Requests per minute (RPM) are derived from TPM. When you exceed it, the tap sputters: HTTP **429**, with a `retry-after` header telling you how long to wait.

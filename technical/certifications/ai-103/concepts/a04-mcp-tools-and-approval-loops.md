@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d2, a04]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-agents/Instructions/Exercises/03-mcp-integration.html
     accessed: 2026-10-02
@@ -31,7 +31,21 @@ An output item of type `mcp_approval_request` (with the tool name and arguments)
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The universal plug and the permission slip**
+
+Every gadget in Town Hall used to need its own strange cable. Then Maya fitted one universal plug. Any gadget that fits the plug tells Robo, "Here's what I can do." When a gadget learns a new trick, Robo sees it straight away, with no rewiring. Some gadgets can do big things, like ordering new desks. So before using one, Robo hands Maya a permission slip: "May I order 3 desks?" Only when she signs does the order go through.
+
+| In the story | In Foundry |
+|---|---|
+| The universal plug | The Model Context Protocol (MCP) |
+| "Here's what I can do" | Dynamic tool discovery (`list_tools`) |
+| The permission slip | An `mcp_approval_request` item |
+| Maya's signature | An `mcp_approval_response` with `approve: true` |
+
+**Where the story breaks:** A gadget from a stranger could whisper bad instructions. Plug in only trusted MCP servers and keep approvals on for anything that changes things.
+
+## Mental model & story (grown-up version)
 Before USB, every device needed its own cable. **MCP** is the USB port for AI tools: one standard way for an AI application to discover and call tools, read resources and use prompt templates from any compatible server.
 
 Three roles. The **host** is the AI application (your app or Foundry Agent Service). Inside it, an MCP **client** keeps a connection to each **server**. The server exposes **tools** (actions), **resources** (data) and **prompts** (templates). The client can ask *what tools do you have?* (`list_tools`) at runtime, so when the server adds a tool, every agent using it gets it without a redeploy. That's **dynamic discovery**: integrate once, update centrally.

@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d1, f01]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/python/api/overview/azure/identity-readme
     accessed: 2026-10-02
@@ -31,7 +31,21 @@ It opens the client and **guarantees it is closed** (connections released) when 
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Robo's first day and the floor key**
+
+Robo starts work at Foundry Town Hall. Mayor Maya hands him a key card with his name on it. "It opens the rooms you need, nothing more," she says. Robo's team books a whole floor for the science fair: a model room, a storage cupboard and a search desk. When the fair ends, Maya doesn't empty each room one by one. She hands back the floor key, and every room on that floor is cleared at once. Robo's helper robot, Bolt, gets its own card too, so nobody ever tapes a password to a door.
+
+| In the story | In Foundry |
+|---|---|
+| Key card with Robo's name | An identity plus an RBAC role |
+| The floor booked for one project | A resource group |
+| Handing back the floor key | `az group delete` removes everything inside |
+| Bolt's own card instead of a taped password | A managed identity instead of an API key |
+
+**Where the story breaks:** A resource group isn't a physical floor: its resources can live in different regions. And a real key card has two layers: building rooms (control plane) and using what's inside them (data plane).
+
+## Mental model & story (grown-up version)
 Think of Azure as a **hotel chain**. Your company's **Microsoft Entra tenant** is the chain's head office that knows every guest and staff member. A **subscription** is one hotel's bill: everything charged to it ends up on one invoice. A **resource group** is a floor of rooms you book together and can check out of together. Each **resource** (a Foundry resource, a storage account, a search service) is a room with a door and a lock.
 
 Getting into a room needs an identity and a permission. **RBAC (role-based access control)** hands out key cards: *Foundry User* opens the project's working rooms; *Reader* only lets you look through the window. A **managed identity** is a key card issued to a *machine* (your web app or container), so you never have to tape a password (an API key) to the door.

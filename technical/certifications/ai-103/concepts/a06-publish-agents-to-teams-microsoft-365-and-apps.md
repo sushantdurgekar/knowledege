@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d2, a06]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-agents/Instructions/Exercises/05a-m365-teams-integration.html
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ Organization scope requires **admin approval** in the Microsoft 365 admin center
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Opening a booth at the school fair**
+
+Robo's helper booth is ready. First, Maya gives it a fixed spot with a sign and its own name badge, so everyone finds it in the same place. Then she moves it into the big school hallway where everyone walks past. For a trial run, she only tells Robo's class where it is, and nobody else has to agree. To open it to the whole school, the head teacher must sign it off first.
+
+| In the story | In Foundry |
+|---|---|
+| A fixed spot with a sign and a name badge | A stable endpoint plus the agent's own identity |
+| The big school hallway | Teams and Microsoft 365 Copilot |
+| Telling only Robo's class | The *Just you* (Shared) scope: no admin approval |
+| The head teacher's sign-off | The *People in your organization* scope needs admin approval |
+
+**Where the story breaks:** The booth's new name badge doesn't inherit old permissions. Give it the keys its tools need, or they stop working.
+
+## Mental model & story (grown-up version)
 Publishing is opening a **shop front** for your agent. The agent needs a stable address, its own Entra identity, Entra-only authentication and isolation of each user's data, so apps can call it like an API. In the legacy model, publishing created an **agent application** to provide these; since July 2026 every new agent has them from creation, so *publish* now means the next step: distribution.
 
 To reach people where they work, you publish to **Microsoft Teams and Microsoft 365 Copilot**. Foundry creates an **Azure Bot Service** resource, an Entra app registration and an M365 app package. You supply the metadata: name, descriptions, 32×32 and 192×192 icons, privacy and terms URLs (never secrets).

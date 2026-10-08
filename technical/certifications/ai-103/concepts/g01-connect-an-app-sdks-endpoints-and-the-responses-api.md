@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d2, g01]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/training/paths/develop-generative-ai-apps/
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ Code questions start here: which client, which endpoint, which method, which pro
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The snack counter ticket**
+
+Robo orders snacks at two counters. At the old counter, the cashier forgets everything, so Robo repeats his whole order every time: "A sandwich, and earlier I said apple juice, and..." At the new counter, the cashier hands him ticket number 42. Next time Robo just says, "Ticket 42, add a cookie," and the cashier remembers the rest. Before ordering at either counter, Robo needs the counter's address and has to show his badge.
+
+| In the story | In Foundry |
+|---|---|
+| Old counter where you repeat everything | Chat Completions (stateless; your app resends messages) |
+| Ticket number 42 | The response's `id` |
+| "Ticket 42, add a cookie" | `previous_response_id` on the next `responses.create` call |
+| The counter's address and Robo's badge | The endpoint and a credential such as DefaultAzureCredential |
+
+**Where the story breaks:** Tickets don't last forever, and with `store=False` there's no ticket at all, so you must send the earlier turns yourself.
+
+## Mental model & story (grown-up version)
 Imagine ordering at a café. With the **Chat Completions** counter, the barista has no memory: each time you must repeat your whole order history ("earlier I asked for oat milk, then…"). That's the `messages` list your app keeps and resends every turn.
 
 The **Responses** counter keeps a ticket for you. Each answer has an **id**; next time you say *same ticket, add a croissant* (`previous_response_id`) and the service brings back the context. It's newer, works with tools and reasoning models, and is Microsoft's recommended API in Foundry, including for non-OpenAI models such as Phi or DeepSeek through the OpenAI-compatible v1 endpoint.

@@ -43,7 +43,7 @@ Supporting docs: [hub-spec.md](hub-spec.md) (what every hub contains) · [story-
 
 | # | Done | Build | Output | Certification / note | Effort to learn |
 |---|---|---|---|---|---|
-| 1 | [ ] | **AI-103 story upgrade** | `technical/certifications/ai-103/plan/story-upgrade.md` | AI-103 is your next exam; re-story its 37 modules before you start | 1 session |
+| 1 | [x] | **AI-103 story upgrade** | `technical/certifications/ai-103/plan/story-upgrade.md` | AI-103 is your next exam; re-story its 37 modules before you start | 1 session |
 | 2 | [ ] | **Python L1 Foundation** | `technical/programming/python/hubs/python-l1-foundation-hub.html` | PCEP (Python Institute, entry level) | 45–60 h |
 | 3 | [ ] | **SQL & Databases L1 Foundation** | `technical/databases/sql/hubs/sql-l1-foundation-hub.html` | None required; LeetCode 'SQL 50' as a practice milestone | 30–40 h |
 | 4 | [ ] | **Qlik Sense L1 Foundation** | `technical/bi-analytics/qlik-sense/hubs/qlik-sense-l1-foundation-hub.html` | Qlik Sense Business Analyst Qualification; Data Literacy Qualification (optional) | 45–60 h |

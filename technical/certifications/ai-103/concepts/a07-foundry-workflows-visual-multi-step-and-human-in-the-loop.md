@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d2, a07]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-agents/Instructions/Exercises/06-build-workflow-ms-foundry.html
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ Add an **If/Else** node with a Power Fx condition such as `Local.TriageJson.conf
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The board-game path**
+
+Robo's help desk works like a board game. On square 1, a sorting robot reads each note and writes a label plus how sure it is. Square 2 is a fork: more than 6 out of 10 sure, go right; otherwise land on "Ask the child a question" and wait for a reply. Notes about money take the path to a grown-up helper. Maya photographs every finished board and never redraws an old one; she makes a new board instead.
+
+| In the story | In Foundry |
+|---|---|
+| Squares on the path | Workflow nodes (invoke agent, ask a question, send message) |
+| The fork with a rule | If/Else with a Power Fx condition |
+| "Ask the child" and wait | A human-in-the-loop pause (Ask a question node) |
+| The photo of each board | Immutable workflow versions |
+
+**Where the story breaks:** Foundry's visual workflows retire on 1 December 2026. New boards are built in code with Microsoft Agent Framework.
+
+## Mental model & story (grown-up version)
 A workflow is a **railway map** for work. Stations are **nodes**: invoke an agent, ask the user a question, send a message, set a variable, branch with If/Else, loop with For each, jump with Go to, end. Tracks are the order. Signals are **Power Fx** conditions that decide which branch a ticket takes.
 
 Tailspin Toys built a support workflow in **Build > Agents > Workflows**. Step one invokes a **triage agent** whose output is structured JSON (category and confidence), using a JSON-schema text format on the node, saved into variables (`Local.TriageOutputText`, `Local.TriageOutputJson`). An If/Else node checks the confidence: below 0.6, an **Ask a question** node requests more detail and loops back. Billing tickets go to a human escalation path; others go to a **resolution agent**.

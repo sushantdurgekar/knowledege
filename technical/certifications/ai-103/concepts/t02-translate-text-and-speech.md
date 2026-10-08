@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d4, t02]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-language/Instructions/Exercises/07-translation.html
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ Two bullets in D4 ask for translation: text (Azure Translator or LLM flows) and 
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The translation copier and the headset**
+
+Robo helps visitors from other countries. For a big box of instruction booklets he uses the translation copier. It copies every page into Spanish and keeps the pictures and tables in place, and its special word list keeps "SkyLink" as "SkyLink". For a fun poster for teenagers, he asks his creative robot friend, who makes it sound cool. At the town meeting, a headset listens to English and shows French and German words on two screens.
+
+| In the story | In Foundry |
+|---|---|
+| The translation copier that keeps the layout | Azure Translator document translation |
+| The special word list | Custom Translator or a glossary |
+| The creative friend | LLM translation with tone instructions |
+| The headset with two screens | Speech translation (`TranslationRecognizer`) with two target languages |
+
+**Where the story breaks:** The headset can only speak one translation aloud on its own (the synthesizing event); for two spoken languages you need a voice per language.
+
+## Mental model & story (grown-up version)
 Translation has two styles. **Azure Translator** is a professional agency: 90+ languages, fast and consistent at scale, with **transliteration** (change script, e.g. Japanese to Latin letters), **dictionary lookup**, **document translation** that preserves the layout of Word, PDF or HTML files, and **Custom Translator** for domain terminology.
 
 An **LLM** is a gifted bilingual copywriter. It can adapt tone ("friendly, for teenagers"), localise idioms and follow complex instructions, but it costs more per word and is less predictable for big batches.

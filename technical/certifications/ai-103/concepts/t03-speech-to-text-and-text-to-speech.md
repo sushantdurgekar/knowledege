@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d4, t03]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-language/Instructions/Exercises/04-azure-speech.html
     accessed: 2026-10-02
@@ -31,7 +31,21 @@ Audio was received, but **no speech could be recognised** (silence, noise, or th
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: The writer robot and the reader robot**
+
+In Town Hall, one robot writes down what people say and another reads text aloud. When the writer robot hears a cough but no words, it reports "I heard sound, but no words", which is different from "my pen broke". The reader robot follows a script with stage directions: "say this cheerfully", "pause here", "read 10/12 as a date". For words it keeps mishearing, like "SkyLink", the writer robot practises with recordings until it gets them right.
+
+| In the story | In Foundry |
+|---|---|
+| The writer robot | Speech to text (`SpeechRecognizer`) |
+| "Sound, but no words" vs "my pen broke" | `NoMatch` vs `Canceled` result reasons |
+| The script with stage directions | SSML (`express-as`, `break`, `say-as`) |
+| Practising with recordings | A custom speech model |
+
+**Where the story breaks:** The writer robot never asks "can you say that again?" by itself, so your app must confirm important numbers and dates.
+
+## Mental model & story (grown-up version)
 Speech has two directions. **Speech to text (STT)** is a court stenographer; **text to speech (TTS)** is a narrator. Azure gives you two families of each.
 
 The **Azure Speech** service (Speech SDK) is the mature stenographer: real-time recognition from a microphone or file, **continuous** recognition with events for long audio, **fast transcription** for files, and **batch transcription** for many stored recordings. When your callers use domain words (drug names, part numbers) or have noisy lines, train a **custom speech** model with sample audio plus human transcripts, or related text, and point the SDK at its endpoint.

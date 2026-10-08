@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d1, p02]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://learn.microsoft.com/en-us/training/modules/model-catalog-evaluate/
     accessed: 2026-10-02
@@ -31,7 +31,21 @@ sources:
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Picking the right helper**
+
+Robo has jobs to fill. To sort 1,000 apples from oranges, he uses the fruit-sorting machine: fast, cheap and never bored. To write a birthday poem, he asks the big chatty robot. For a tricky maze puzzle, he picks the slow thinker who checks every path before answering. For the camping trip with no Wi-Fi, he packs the pocket-sized robot that works offline. Before hiring anyone, Robo tests each helper on his own fruit, not just on their school report card.
+
+| In the story | In Foundry |
+|---|---|
+| Fruit-sorting machine | A Foundry Tool (e.g. Azure Language) for a fixed task |
+| Big chatty robot | A general LLM |
+| Slow careful thinker | A reasoning model |
+| Pocket robot for camping | A small language model that runs on-device |
+
+**Where the story breaks:** Report cards (benchmarks) are someone else's test. A model can top the leaderboard and still stumble on your own documents, so always evaluate on your data.
+
+## Mental model & story (grown-up version)
 Think of the model catalog as a **hiring agency** with thousands of candidates. Big generalists (LLMs such as GPT-5 or Mistral Large) can do almost anything but charge senior rates. Specialists are cheaper and faster: small language models (Phi-4, Llama 3 8B) for focused jobs or devices, **reasoning models** for multi-step problems, **embedding models** that turn text into vectors for search, image and video generators (gpt-image-2, Sora 2), and speech models (gpt-transcribe, gpt-4o-mini-tts).
 
 Then there are the **Foundry Tools** contractors: Language, Speech, Translator, Document Intelligence, Content Understanding. They do one job with a fixed price and predictable output. Hiring a senior generalist to detect the language of a million tickets is like paying a surgeon to take temperatures.

@@ -6,7 +6,7 @@ subject: ai-103
 tags: [exam-ai-103, d5, x02]
 status: new
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 sources:
   - url: https://microsoftlearning.github.io/mslearn-ai-information-extraction/Instructions/Exercises/03-document-intelligence.html
     accessed: 2026-10-02
@@ -29,7 +29,21 @@ sources:
 
 </details>
 
-## Mental model & story
+## 🍎 Story time (kid version)
+**Robo at Foundry Town Hall: Robo's reading glasses**
+
+Robo owns several pairs of reading glasses. The plain pair reads every word, even messy handwriting. The table pair also sees boxes, rows and tick boxes. Special pairs know famous forms such as receipts, and find "Total" and "Shop name" at once. For Town Hall's own form, which always looks the same, Robo makes stencil glasses from 5 examples. For forms that keep changing shape, he trains smarter, flexible glasses.
+
+| In the story | In Foundry |
+|---|---|
+| The plain pair | The Read model (OCR) |
+| The table pair | The Layout model (tables, selection marks, structure) |
+| Special pairs for famous forms | Prebuilt models (invoice, receipt, ID...) |
+| Stencil glasses vs flexible glasses | Custom template vs custom neural models |
+
+**Where the story breaks:** Stencil glasses fail as soon as a form's layout changes. That's when you need neural models or Content Understanding.
+
+## Mental model & story (grown-up version)
 Document Intelligence (DI) is a **precision scanner with specialist reading glasses**. The **Read** model sees printed and handwritten text and its language, line by line. The **Layout** model adds structure: paragraphs and their roles (title, section heading), tables, selection marks (checkboxes) and optional key-value pairs.
 
 Then come specialist glasses: **prebuilt models** for invoices, receipts, IDs, health insurance cards, US tax forms, mortgage documents, bank statements, cheques, pay stubs, credit cards, contracts and more. Each returns typed fields (e.g. `VendorName`, `InvoiceTotal` as a currency) with confidence.
