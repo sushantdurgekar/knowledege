@@ -44,7 +44,7 @@ Supporting docs: [hub-spec.md](hub-spec.md) (what every hub contains) · [story-
 Sushant asked for DSA and System Design as two separate hub series, all four levels each, straight after the AI-103 upgrade, with every algorithm and pattern shown in **both Python and JavaScript/Node.js**. Other hubs add Python + JavaScript examples where it's natural (SQL drivers, AI SDKs, Docker). Numbers are the build IDs from the queue table below.
 
 1. ~~#1 AI-103 story upgrade~~ (done 2026-10-08)
-2. ~~#8 DSA L1~~ (done 2026-10-09) → #20 DSA L2 → #33 DSA L3 → #46 DSA L4
+2. ~~#8 DSA L1~~ (done 2026-10-09) → ~~#20 DSA L2~~ (done 2026-10-09) → #33 DSA L3 → #46 DSA L4
 3. #9 System Design L1 → #21 L2 → #34 L3 → #47 L4
 4. L1 hubs: #2 Python → #3 SQL → #4 Qlik Sense → #5 Power BI → #6 AI Engineering → #7 JavaScript → #10 Node.js → #11 React → #12 Docker → #13 Next.js
 5. Then the rest of the queue in number order.
@@ -74,7 +74,7 @@ Hub tooling: bundles are applied with `python _meta/tools/apply_hub_bundle.py <b
 | 17 | [ ] | **Power BI L2 Proficient** | `technical/bi-analytics/power-bi/hubs/power-bi-l2-proficient-hub.html` | PL-300: Microsoft Power BI Data Analyst | 60–80 h |
 | 18 | [ ] | **AI Engineering L2 Proficient** | `technical/data-ai/ai-engineering/hubs/ai-engineering-l2-proficient-hub.html` | AI-103 Azure AI Apps and Agents Developer (hub ready); Optional: AWS MLA-C02 (GA 14 Jan 2027) | 80–100 h |
 | 19 | [ ] | **JavaScript (browser) L2 Proficient** | `technical/web-dev/javascript/hubs/javascript-l2-proficient-hub.html` | JSA-41-01 (JS Institute, associate); certificates.dev Mid-Level JavaScript (optional) | 60–80 h |
-| 20 | [ ] | **Data Structures & Algorithms L2 Proficient** | `technical/software-engineering/dsa/hubs/dsa-l2-proficient-hub.html` | None; milestone = 150 curated problems + mock interviews | 80–100 h |
+| 20 | [x] | **Data Structures & Algorithms L2 Proficient** | `technical/software-engineering/dsa/hubs/dsa-l2-proficient-hub.html` | None; milestone = 150 curated problems + mock interviews | 120–150 h |
 | 21 | [ ] | **System Design L2 Proficient** | `technical/software-engineering/system-design/hubs/system-design-l2-proficient-hub.html` | None | 60–80 h |
 | 22 | [ ] | **Node.js (server) L2 Proficient** | `technical/web-dev/nodejs/hubs/nodejs-l2-proficient-hub.html` | None current (see L1 note) | 60–80 h |
 | 23 | [ ] | **React L2 Proficient** | `technical/web-dev/react/hubs/react-l2-proficient-hub.html` | certificates.dev Mid-Level React (optional); Meta Front-End Developer Professional Certificate (Coursera, optional; check currency) | 60–80 h |

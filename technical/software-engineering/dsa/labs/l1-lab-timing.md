@@ -103,22 +103,15 @@ def best_time(fn, a, repeats=5):
         best = min(best, time.perf_counter() - t0)
     return best
 
-prev = None
-ratios = []
+times = {}
 for n in (500, 1000, 2000):
     data = [random.randint(0, 1000) for _ in range(n)]
-    t = best_time(quadratic, data, repeats=3)
-    if prev:
-        ratios.append(t / prev)
-    prev = t
-# doubling n should roughly quadruple the time of an O(n^2) function
-assert all(2.5 < r < 6.5 for r in ratios), ratios
-print("quadratic ratios look like ~4x")
-```
-
-Output:
-```text
-quadratic ratios look like ~4x
+    times[n] = best_time(quadratic, data, repeats=3)
+    print(n, f"{times[n] * 1000:.1f} ms")      # your numbers will differ
+# 4x the input should take roughly 16x the time for an O(n^2) function.
+# Timers are noisy, so only check the overall growth, loosely.
+growth = times[2000] / times[500]
+assert growth > 6, growth
 ```
 
 ```javascript
@@ -142,21 +135,17 @@ function bestTime(fn, a, repeats = 5) {
   return best;
 }
 
-let prev = null;
-const ratios = [];
+quadratic(Array.from({ length: 3000 }, (_, i) => i % 7));   // warm up the JIT first
+const times = {};
 for (const n of [2000, 4000, 8000]) {
   const data = Array.from({ length: n }, () => Math.floor(Math.random() * 1001));
-  const t = bestTime(quadratic, data, 3);
-  if (prev) ratios.push(t / prev);
-  prev = t;
+  times[n] = bestTime(quadratic, data, 3);
+  console.log(n, times[n].toFixed(1), "ms");             // your numbers will differ
 }
-if (!ratios.every(r => r > 2.2 && r < 7)) throw new Error("unexpected ratios " + ratios);
-console.log("quadratic ratios look like ~4x");
-```
-
-Output:
-```text
-quadratic ratios look like ~4x
+// 4x the input should take roughly 16x the time for an O(n^2) function.
+// Timers and the JIT are noisy, so only check the overall growth, loosely.
+const growth = times[8000] / times[2000];
+if (!(growth > 6)) throw new Error("unexpected growth " + growth);
 ```
 
 </details>

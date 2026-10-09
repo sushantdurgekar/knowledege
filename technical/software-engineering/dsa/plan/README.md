@@ -21,7 +21,7 @@ updated: 2026-10-09
 | Level | You can… | Hours | Certification(s) | Capstone | Hub (build #) |
 |---|---|---|---|---|---|
 | **L1 Foundation** | Analyse complexity and solve easy problems with arrays, hashing, two pointers, stacks, queues and binary search. | 50–70 | No widely recognised certification; milestone = 40 easy + 20 medium problems | Mini DS library | `hubs/dsa-l1-foundation-hub.html` (#8) |
-| **L2 Proficient** | Solve medium interview problems with trees, heaps, graphs, backtracking and core DP. | 80–100 | None; milestone = 150 curated problems + mock interviews | Interview-ready set | `hubs/dsa-l2-proficient-hub.html` (#20) |
+| **L2 Proficient** | Solve medium interview problems with trees, heaps, graphs, backtracking and core DP. | 120–150 | None; milestone = 150 curated problems + mock interviews | Interview-ready set | `hubs/dsa-l2-proficient-hub.html` (#20) |
 | **L3 Specialist** | Handle hard problems: advanced DP, shortest paths, range queries, strings and number theory; reach a solid contest rating. | 100–130 | None; milestone = contest rating | Contest track | `hubs/dsa-l3-specialist-hub.html` (#33) |
 | **L4 Expert** | Master advanced algorithms and teach problem-solving to others. | ongoing | None; milestone = Codeforces 1900+ or equivalent | Problem-setter pack | `hubs/dsa-l4-expert-hub.html` (#46) |
 
@@ -91,11 +91,11 @@ All links in both DSA workbooks were opened one by one ([full report](../../../.
   - [x] concept notes `concepts/l1-NN-*.md` (story + diagram + worked example)
   - [x] hub published + saved · independent fact/answer-key check · SRS deck `dsa-l1`
   - [x] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
-- [ ] **#20 Data Structures & Algorithms L2 Proficient hub** → `hubs/dsa-l2-proficient-hub.html`
-  - [ ] re-verify versions, cert facts and links · audit existing material for L2
-  - [ ] concept notes `concepts/l2-NN-*.md` (story + diagram + worked example)
-  - [ ] hub published + saved · independent fact/answer-key check · SRS deck `dsa-l2`
-  - [ ] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
+- [x] **#20 Data Structures & Algorithms L2 Proficient hub** → `hubs/dsa-l2-proficient-hub.html`
+  - [x] re-verify versions, cert facts and links · audit existing material for L2
+  - [x] concept notes `concepts/l2-NN-*.md` (story + diagram + worked example)
+  - [x] hub published + saved · independent fact/answer-key check · SRS deck `dsa-l2`
+  - [x] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
 - [ ] **#33 Data Structures & Algorithms L3 Specialist hub** → `hubs/dsa-l3-specialist-hub.html`
   - [ ] re-verify versions, cert facts and links · audit existing material for L3
   - [ ] concept notes `concepts/l3-NN-*.md` (story + diagram + worked example)
