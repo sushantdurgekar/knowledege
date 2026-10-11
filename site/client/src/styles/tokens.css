@@ -1,0 +1,35 @@
+/* Design tokens copied verbatim from the Study Hubs (the :root block at the top of
+   technical/software-engineering/dsa/hubs/dsa-l1-foundation-hub.html), so the shell and the hubs
+   look like one site. Light by default; dark follows prefers-color-scheme unless the page sets
+   data-theme="light", and data-theme="dark" forces it. Keep in sync with the hubs. */
+:root{color-scheme:light}
+:root{
+  --bg:#f2f4f7; --surface:#ffffff; --surface-2:#e8ecf2; --surface-3:#dde3eb; --line:#d0d8e2;
+  --fg:#121b26; --muted:#526072; --accent:#2343c4; --accent-ink:#ffffff; --accent-soft:#e2e8fb;
+  --good:#16774b; --good-soft:#d9f1e4; --bad:#b1232b; --bad-soft:#fae1e2; --trap:#965200; --trap-soft:#fcedd5;
+  --info:#1f5fa8; --info-soft:#dfeafa;
+  --d1:#6a44c2; --d1-soft:#ebe4fa; --d2:#0d7585; --d2-soft:#d9f0f2; --d3:#a8521a; --d3-soft:#f8e6d8;
+  --d4:#a72a62; --d4-soft:#f8e0eb; --d5:#3d6b22; --d5-soft:#e3efd9;
+  --code-bg:#0e1621; --code-fg:#d9e4f1; --code-line:#5b6b7d;
+  --tk-kw:#c7a8ff; --tk-str:#a3e39a; --tk-com:#7f8d9b; --tk-num:#ffbd7a; --tk-fn:#80cbff; --tk-key:#7fd6c2;
+  --f-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --f-body:"Atkinson Hyperlegible","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0c1117; --surface:#141b24; --surface-2:#1b2531; --surface-3:#22303e; --line:#2a3644;
+  --fg:#e3eaf2; --muted:#93a2b2; --accent:#8fa4ff; --accent-ink:#0c1117; --accent-soft:#1c2748;
+  --good:#4fc98d; --good-soft:#11301f; --bad:#ff7d86; --bad-soft:#3a1519; --trap:#f2b24c; --trap-soft:#33240c;
+  --info:#7fb3f5; --info-soft:#152a44;
+  --d1:#b89dff; --d1-soft:#271d40; --d2:#55cddd; --d2-soft:#0f2f34; --d3:#f2a46a; --d3-soft:#3a2312;
+  --d4:#f58cba; --d4-soft:#3c1628; --d5:#9fd77c; --d5-soft:#1d3010;
+  --code-bg:#0a0f14; --code-fg:#d6e2ef; --code-line:#4f5e6e; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0c1117; --surface:#141b24; --surface-2:#1b2531; --surface-3:#22303e; --line:#2a3644;
+  --fg:#e3eaf2; --muted:#93a2b2; --accent:#8fa4ff; --accent-ink:#0c1117; --accent-soft:#1c2748;
+  --good:#4fc98d; --good-soft:#11301f; --bad:#ff7d86; --bad-soft:#3a1519; --trap:#f2b24c; --trap-soft:#33240c;
+  --info:#7fb3f5; --info-soft:#152a44;
+  --d1:#b89dff; --d1-soft:#271d40; --d2:#55cddd; --d2-soft:#0f2f34; --d3:#f2a46a; --d3-soft:#3a2312;
+  --d4:#f58cba; --d4-soft:#3c1628; --d5:#9fd77c; --d5-soft:#1d3010;
+  --code-bg:#0a0f14; --code-fg:#d6e2ef; --code-line:#4f5e6e; color-scheme:dark;}

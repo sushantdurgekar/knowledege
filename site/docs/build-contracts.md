@@ -52,7 +52,9 @@ Vite must use `emptyOutDir: false`. It also removes its own old `assets/` before
 - `kind` is `"level"` (L1–L4 capability hubs) or `"cert"`.
 - `level` is 1–4 or null. `levelLabel` is "Foundation", "Proficient", "Specialist", "Expert" or null.
 - `engine` is `"v2"` (modern), `"legacy"` (AI-901) or `"static"` (unknown: served, local-only).
-- `catalog.internal.json` adds `source` (repo-relative path), `csp` (the full header value), and `servedSha256`.
+- `bytes`, `sha256` and `brBytes` describe the **original** file (`brBytes` is its brotli size, shown as the download size).
+- `modules`, `cert`, `blurb` and `accent` can be null (a `static` hub has `modules: null` and empty `storageKeys`). A legacy hub has `storageKeys: []`; its progress key is `legacyKeys[0]`.
+- `catalog.internal.json` has the same `{version, generatedAt, hubs}` shape. Each entry adds `source` (repo-relative path), `csp` (the full header value), `servedSha256` and `servedBytes`.
 - Slugs today: `dsa-l1-foundation`, `dsa-l2-proficient`, `dsa-l3-specialist`, `ab-620`, `ai-103`, `ai-500`, `ai-901`.
 - Ids: `dsa-l1`, `dsa-l2`, `dsa-l3`, `ab620`, `ai103`, `ai500`, and `ai901` (legacy, from config).
 
@@ -66,6 +68,7 @@ Legacy hubs get, as one inserted span:
 <script src="/_sh/bridge.js" data-hub-id="ai901" data-slug="ai-901" data-engine="legacy" data-legacy-keys="ai901hub.v1"></script><script src="/api/seed/ai901.js"></script>
 ```
 Invariant (tested): served bytes minus the inserted span equal the original bytes.
+The same rule applies to every engine: a `static` hub that has a `</head>` or a `<script` gets the bridge with `data-engine="static"`.
 
 ## 5. Server routes (M0)
 | Route | Behaviour |
@@ -76,9 +79,9 @@ Invariant (tested): served bytes minus the inserted span equal the original byte
 | `GET /api/seed/{hubId}.js` | Anonymous M0 body: `window.__studyhubsBridge&&__studyhubsBridge.legacySeed({signedIn:false});` with `Content-Type: text/javascript`, `Cache-Control: no-store`, `Vary: Cookie`. Unknown or non-legacy hub: 404 JS comment |
 | `GET /catalog.json` | Precompressed public catalog, `max-age=300, stale-while-revalidate=86400` |
 | `GET /h/{slug}` | Served variant. Content negotiation br > gzip > identity, strong ETag per encoding, 304 on `If-None-Match`, `Vary: Accept-Encoding`, `Cache-Control: public, max-age=300, stale-while-revalidate=86400`, per-hub CSP from the internal catalog. `/h/{slug}/` → 301 to `/h/{slug}`. An id used as slug → 301 to the slug. Unknown → 404 HTML page |
-| `GET /h/{slug}/download` | Original bytes. `Content-Disposition: attachment; filename="<ascii fallback>"; filename*=UTF-8''<pct-encoded downloadName>`, `Content-Security-Policy: sandbox`, `max-age=3600`, ETag = sha256 |
-| `GET /_sh/{file}` | bridge.js / fflate.js precompressed, `max-age=600, stale-while-revalidate=86400`, ETag |
-| `GET /assets/*` | `public, max-age=31536000, immutable` |
+| `GET /h/{slug}/download` | Original bytes (negotiated like the page; the browser saves the decoded original). `Content-Disposition: attachment; filename="<ascii fallback>"; filename*=UTF-8''<pct-encoded downloadName>`, `Content-Security-Policy: sandbox`, `max-age=3600`, ETag = sha256 (the identity ETag is `"<catalog sha256>"`; br/gzip responses carry the sha256 of the bytes sent, so each encoding has its own strong ETag) |
+| `GET /_sh/{file}` | bridge.js / fflate.js precompressed, `max-age=600, stale-while-revalidate=86400`, ETag. A miss is a plain-text 404 |
+| `GET /assets/*` | `public, max-age=31536000, immutable`. A miss is a plain-text 404, never the SPA shell |
 | SPA routes `/`, `/signin`, `/signup`, `/reset`, `/verify`, `/signout`, `/account`, `/admin`, `/admin/*`, `/privacy` | `index.html`, `no-cache` |
 | Any other non-API path | `index.html` with status 404 (the SPA shows its NotFound page) |
 | `/api/*` unknown | JSON `{"code":"not_found","message":"…"}` 404 |
@@ -115,7 +118,8 @@ Invariant (tested): served bytes minus the inserted span equal the original byte
   - Body: "Download this hub and use it in your own AI provider for Ask-AI features (for example, upload it to Claude and open it as an artifact). Your progress on this site isn't included in the file."
   - Buttons: **Download this hub** (`<a download href="/h/<slug>/download">`) and **Close**.
 - **Chrome:**
-  - A small floating pill at bottom-left in a closed shadow root. It follows the hub theme (`data-theme` / `prefers-color-scheme`), is safe-area padded and hidden in print.
+  - A small floating pill in a closed shadow root: bottom-left on phones and tablets, bottom-centre from 861 px (where the hubs' Learn rail becomes a sticky left column whose last items would otherwise sit under it). It follows the hub theme (`data-theme` / `prefers-color-scheme`), is safe-area padded and hidden in print.
+  - Notices stack above the pill. Within the stack's height (+ 64 px) of the end of the page, the stack steps aside (the pill stays) so the hub's last controls are never covered; it returns when the page scrolls up.
   - Items: "← All hubs" (`/`), "Sign in" (`/signin?next=/h/<slug>`), "Download".
   - It shows a dismissible notice "Progress is saved only in this browser — sign in to keep it" once the hub's LKEY first gets `U.main > 0`. Dismissal is stored in `studyhubs.ui.nudge.<hubId>`.
 - **`Storage.prototype.setItem` / `removeItem` wrapper** (installed in M0 because it is needed by M1/legacy). It calls the original first and rethrows. On a legacy-key write it records the sidecar `studyhubs.legacy.<key>.upd = Date.now()`. On `QuotaExceededError` for hub keys it shows the chrome notice "Browser storage is full".

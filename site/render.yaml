@@ -1,0 +1,67 @@
+# Render Blueprint for the Study Hubs site (https://render.com/docs/blueprint-spec).
+#
+# Render looks for render.yaml at the repo root by default. This file lives in
+# site/, so when creating the Blueprint set "Blueprint Path" to site/render.yaml.
+# If your Render workspace does not offer that field, create the web service by
+# hand with exactly these settings (site/README.md, "Deploy on Render").
+#
+# Deploys are triggered by CI (.github/workflows/site.yml) through the service's
+# deploy hook, only after the test and e2e jobs pass, so auto-deploy is off.
+services:
+  - type: web
+    name: study-hubs
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    # The build context is the repo root; /.dockerignore narrows it to site/ and
+    # the published hub files.
+    dockerContext: .
+    dockerfilePath: ./site/Dockerfile
+    healthCheckPath: /healthz
+    # CI calls the deploy hook after tests pass. (Newer Blueprints spell this
+    # `autoDeployTrigger: "off"`; use one or the other, not both.)
+    autoDeploy: false
+    # Only matters if auto-deploy is ever switched on: notes-only commits then
+    # still deploy nothing. Mirrors the CI path filter.
+    buildFilter:
+      paths:
+        - site/**
+        - technical/*/*/hubs/*-hub.html
+        - technical/certifications/*/*Study Hub.html
+        - .dockerignore
+    envVars:
+      # ── M0 (static site) ──────────────────────────────────────────────
+      - key: APP_ENV
+        value: production
+      # The exact public origin (scheme + host, no path), e.g.
+      # https://study-hubs.onrender.com. sync: false makes Render ask for it when the
+      # Blueprint is created and never overwrite it later, so it can be corrected in
+      # the dashboard if Render assigns another hostname or a custom domain is added.
+      - key: PUBLIC_ORIGIN
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
+      # PORT is injected by Render (10000). RENDER_GIT_COMMIT is set by Render
+      # and reported by /api/version, which the CI deploy job polls.
+
+      # ── M1 (accounts + Firestore sync): uncomment when that milestone ships ──
+      # - key: STORE
+      #   value: firestore
+      # - key: AUTH_MODE
+      #   value: firebase
+      # - key: SECRET_KEY
+      #   generateValue: true
+      # - key: FIREBASE_PROJECT_ID
+      #   sync: false
+      # - key: FIREBASE_WEB_CONFIG
+      #   sync: false
+      # - key: GOOGLE_APPLICATION_CREDENTIALS     # a Render Secret File
+      #   value: /etc/secrets/firebase-sa.json
+      # ── M2 (admin, maintenance, backups) ─────────────────────────────
+      # - key: ADMIN_EMAILS
+      #   sync: false
+      # - key: ADMIN_TZ
+      #   value: Asia/Kolkata
+      # - key: DATA_DIR
+      #   value: /tmp/studyhubs

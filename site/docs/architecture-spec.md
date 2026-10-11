@@ -450,7 +450,7 @@ Resolving `{text}` for chat input was rejected, because the hub would add a "Wri
 - `auth-changed`: hidden hub tabs reload; visible tabs show "Signed in — reload to sync" and reload on the next visibility change unless `studyhub.<id>.mockrun` exists.
 - `logout`: set `loggedOut`, wipe keys, `location.reload()`.
 
-**Chrome.** A 36 px pill at bottom-left, safe-area padded, hidden in print, in a closed shadow DOM that follows the hub's `data-theme` and `prefers-color-scheme`. It holds:
+**Chrome.** A 36 px pill at bottom-left (bottom-centre from 861 px, clear of the hubs' sticky Learn rail; build-contracts.md §6), safe-area padded, hidden in print, in a closed shadow DOM that follows the hub's `data-theme` and `prefers-color-scheme`. It holds:
 - ← All hubs
 - Sign in, or the user's initial with a menu: Account, Sign out (which goes to `/signout`)
 - Download this hub

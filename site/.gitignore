@@ -1,0 +1,31 @@
+# Study Hubs site: generated or local-only files. Never commit these.
+# (The vault's root .gitignore already ignores build/, dist/, node_modules/, .venv/,
+# *.gz, *.png and more repo-wide; build-contracts.md section 0 lists the traps.)
+
+# Generated output (build-contracts.md section 1): rebuilt by `make build`.
+/build/
+/server/public/
+
+# Dependencies and virtual environments
+node_modules/
+.venv/
+
+# Python and tool caches
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Playwright output (site/e2e)
+/e2e/test-results/
+/e2e/playwright-report/
+/e2e/blob-report/
+/e2e/playwright/.cache/
+
+# Local server log written by scripts/dev-e2e.sh
+/e2e/server.log
+
+# Service-account keys (M1 Firebase): keep them in Render's Secret Files, never in git
+*firebase-adminsdk*.json
+*-sa.json
+service-account*.json

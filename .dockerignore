@@ -1,0 +1,43 @@
+# Docker build context for site/Dockerfile (build context = repo root).
+#
+# ALLOW-LIST: exclude everything, then re-include only the site code and the
+# published hub files. Nothing else in the vault (_meta/, sessions/, practice/,
+# work/, softskills/, courses, notes, .git, ...) is sent to the builder.
+#
+# Rules (Docker: Go filepath.Match plus "**"; patterns are evaluated top to
+# bottom and the LAST matching line wins, so re-excludes must come after the
+# "!" lines). Spaces inside a pattern are literal and need no escaping.
+#
+# The two hub lines must stay identical to "include" in site/hubs.config.json
+# (site/scripts/test/config.test.mjs checks this). Do not add other "!" lines
+# outside site/: that test treats every one of them as a hub glob.
+# The real guarantee is site/scripts/verify-context.mjs, which the Dockerfile
+# runs on the copied tree; this file keeps the context small and private.
+
+**
+!site/**
+!technical/*/*/hubs/*-hub.html
+!technical/certifications/*/*Study Hub.html
+
+# Re-exclude local dependencies, caches and generated output inside site/.
+# The image always builds these fresh.
+site/**/node_modules
+site/**/.venv
+site/**/__pycache__
+site/**/*.pyc
+site/**/.pytest_cache
+site/**/.ruff_cache
+site/**/dist
+site/build
+site/server/public
+site/e2e/test-results
+site/e2e/playwright-report
+site/e2e/blob-report
+site/**/*.log
+
+# Never send secrets or OS noise, wherever they are.
+**/.env*
+**/*firebase-adminsdk*.json
+**/*-sa.json
+**/service-account*.json
+**/.DS_Store

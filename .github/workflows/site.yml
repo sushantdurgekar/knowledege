@@ -1,0 +1,287 @@
+# Study Hubs website (site/): test -> e2e -> deploy to Render.
+#
+# Runs only when the site, a published hub file, the Docker allow-list or this workflow
+# changes, so a notes-only commit to the vault tests and deploys nothing. The deploy job runs
+# on main after both test jobs pass, and only when the RENDER_DEPLOY_HOOK secret is set
+# (Settings -> Secrets and variables -> Actions). Optional repository variable PUBLIC_ORIGIN
+# (default https://study-hubs.onrender.com) is where the deploy job checks the new version.
+#
+# Third-party actions are pinned to full commit SHAs of releases at least two weeks old
+# (build-contracts.md section 0); the comment names the release.
+name: site
+
+on:
+  push:
+    branches: [main]
+    # Keep both lists equal to site/scripts/deploy-paths.mjs deployGlobs() (the hub globs come
+    # from site/hubs.config.json); site/scripts/test/config.test.mjs checks this.
+    paths:
+      - 'site/**'
+      - 'technical/*/*/hubs/*-hub.html'
+      - 'technical/certifications/*/*Study Hub.html'
+      - '.dockerignore'
+      - '.github/workflows/site.yml'
+  pull_request:
+    paths:
+      - 'site/**'
+      - 'technical/*/*/hubs/*-hub.html'
+      - 'technical/certifications/*/*Study Hub.html'
+      - '.dockerignore'
+      - '.github/workflows/site.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run per ref at a time. Pull requests cancel superseded runs; main queues them so a
+# deploy is never cut off halfway.
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: '22'
+  PYTHON_VERSION: '3.12' # the image runs python:3.12-slim
+  npm_config_audit: 'false'
+  npm_config_fund: 'false'
+
+jobs:
+  test:
+    name: Unit tests and collector
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            site/bridge/package-lock.json
+            site/client/package-lock.json
+            site/e2e/package-lock.json
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: site/server/requirements-dev.txt
+
+      - name: Bridge - install, build, test (incl. 14 KB gzip budget)
+        working-directory: site/bridge
+        run: |
+          npm ci
+          npm run build
+          npm test
+
+      - name: Client - install, build (type-check + size budgets), test
+        working-directory: site/client
+        run: |
+          npm ci
+          npm run build
+          npm test
+
+      - name: Collector and context-check tests
+        working-directory: site/scripts
+        run: npm test
+
+      - name: Collect hubs (strict)
+        run: node site/scripts/collect-hubs.mjs --src . --config site/hubs.config.json --out site/build --strict
+
+      - name: E2E suite type-check
+        working-directory: site/e2e
+        run: |
+          npm ci
+          npm run typecheck
+
+      - name: Server - ruff and pytest
+        working-directory: site/server
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --disable-pip-version-check -r requirements-dev.txt
+          .venv/bin/ruff check .
+          .venv/bin/ruff format --check .
+          .venv/bin/pytest
+
+  e2e:
+    name: E2E (uvicorn + Docker image)
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            site/bridge/package-lock.json
+            site/client/package-lock.json
+            site/e2e/package-lock.json
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: site/server/requirements-dev.txt
+
+      # Same steps as `make -C site build`: bridge -> client -> collector (--strict), plus the venv.
+      - name: Build the site
+        run: sh site/scripts/dev-build.sh --install --strict
+        env:
+          PYTHON: python
+
+      - name: Install Playwright Chromium
+        working-directory: site/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      # dev-e2e.sh starts uvicorn (APP_ENV=test), waits for /healthz, runs the suite, stops it.
+      - name: Playwright against uvicorn
+        run: sh site/scripts/dev-e2e.sh
+        env:
+          CI: 'true'
+
+      - name: Build the Docker image
+        run: docker build -f site/Dockerfile --build-arg GIT_COMMIT=${{ github.sha }} -t study-hubs:ci .
+
+      - name: Check the image holds no private files
+        run: bash site/scripts/check-image.sh study-hubs:ci
+
+      # The image as Render runs it (APP_ENV=production from the Dockerfile), smoke-tested.
+      - name: Smoke-test the container
+        working-directory: site/e2e
+        env:
+          CI: 'true'
+          BASE_URL: http://127.0.0.1:10001
+          E2E_EXPECT_HSTS: '1'
+        run: |
+          docker run -d --name study-hubs -p 127.0.0.1:10001:10000 \
+            -e PUBLIC_ORIGIN="$BASE_URL" study-hubs:ci
+          for i in $(seq 1 30); do
+            if curl -fsS "$BASE_URL/healthz" >/dev/null 2>&1; then break; fi
+            if [ "$i" = 30 ]; then echo "::error::container did not become healthy"; exit 1; fi
+            sleep 1
+          done
+          commit=$(curl -fsS "$BASE_URL/api/version" | jq -r .commit)
+          if [ "$commit" != "$GITHUB_SHA" ]; then
+            echo "::error::/api/version reports '$commit', expected $GITHUB_SHA"; exit 1
+          fi
+          npx playwright test --grep @smoke
+
+      - name: Container logs
+        if: ${{ always() }}
+        run: docker logs study-hubs 2>&1 | tail -n 200 || true
+
+      - name: Upload Playwright report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report
+          path: |
+            site/e2e/playwright-report
+            site/e2e/test-results
+            site/e2e/server.log
+          retention-days: 14
+          if-no-files-found: ignore
+
+  deploy:
+    name: Deploy to Render
+    needs: [test, e2e]
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+      PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN || 'https://study-hubs.onrender.com' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: No deploy hook configured
+        if: ${{ env.RENDER_DEPLOY_HOOK == '' }}
+        run: echo "::notice::RENDER_DEPLOY_HOOK is not set; skipping the deploy."
+
+      # Only the deploy-path rules (site/scripts, site/hubs.config.json): see the next step.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ env.RENDER_DEPLOY_HOOK != '' }}
+        with:
+          persist-credentials: false
+          sparse-checkout: site/scripts
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: ${{ env.RENDER_DEPLOY_HOOK != '' }}
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # A Render deploy hook builds the branch's newest commit, which may be newer than the one
+      # tested here. That is fine when nothing between the two affects the site (say a notes
+      # commit landed during this run: it starts no run of its own, so skipping here would leave
+      # the tested change undeployed). If something did, the newer commit's own run deploys it
+      # after its tests. When the comparison is not possible (force push, 300+ files), nothing
+      # is deployed and a warning says to run the workflow by hand.
+      - name: Decide which commit to deploy
+        id: head
+        if: ${{ env.RENDER_DEPLOY_HOOK != '' }}
+        run: |
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          echo "sha=$head" >> "$GITHUB_OUTPUT"
+          if [ "$head" = "$GITHUB_SHA" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/compare/$GITHUB_SHA...$head" \
+            --jq 'if .status != "ahead" or (.files | length) >= 300 then "UNSAFE"
+                  else .files[] | .filename, (.previous_filename // empty) end' > changed.txt
+          if grep -qx UNSAFE changed.txt; then
+            echo "::warning::main ($head) cannot be compared with $GITHUB_SHA; nothing deployed. Run Actions -> site -> Run workflow on main."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          status=0
+          node site/scripts/deploy-paths.mjs changed.txt > relevant.txt || status=$?
+          case $status in
+            0) echo "main is at $head; only files outside the site changed since $GITHUB_SHA, deploying it."
+               echo "deploy=true" >> "$GITHUB_OUTPUT" ;;
+            1) echo "::notice::main is at $head with site changes ($(head -n 3 relevant.txt | paste -sd ' ' -)); its own run deploys it."
+               echo "deploy=false" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$status" ;;
+          esac
+
+      - name: Trigger the Render deploy hook
+        if: ${{ steps.head.outputs.deploy == 'true' }}
+        run: curl -fsS -X POST --max-time 30 "$RENDER_DEPLOY_HOOK" -o /dev/null
+
+      # Render builds the head of main, so that is the commit /api/version must report.
+      - name: Wait until the site reports the deployed commit (10 min)
+        if: ${{ steps.head.outputs.deploy == 'true' }}
+        env:
+          TARGET: ${{ steps.head.outputs.sha }}
+        run: |
+          deadline=$((SECONDS + 600))
+          while :; do
+            live=$(curl -fsS --max-time 15 "$PUBLIC_ORIGIN/api/version" | jq -r '.commit // empty' 2>/dev/null || true)
+            if [ "$live" = "$TARGET" ]; then
+              echo "Deployed $TARGET to $PUBLIC_ORIGIN"
+              break
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::$PUBLIC_ORIGIN still reports commit '${live:-unreachable}' after 10 minutes (expected $TARGET)"
+              exit 1
+            fi
+            echo "live commit: ${live:-unreachable}; waiting for $TARGET"
+            sleep 15
+          done
+
+      - name: Post-deploy smoke check
+        if: ${{ steps.head.outputs.deploy == 'true' }}
+        run: |
+          curl -fsS --max-time 15 "$PUBLIC_ORIGIN/healthz"
+          echo
+          curl -fsS --max-time 30 "$PUBLIC_ORIGIN/catalog.json" | jq -e '.hubs | length > 0' >/dev/null
+          echo "catalog OK"

@@ -1,0 +1,8 @@
+# Development and test tools. Installs the runtime set too, at the same pins.
+-c requirements.txt
+-r requirements.in
+pytest==9.1.1
+# Starlette 1.7 TestClient prefers httpx2 (pydantic-maintained successor of httpx).
+httpx2==2.13.1
+ruff==0.16.9
+pip-tools==7.6.1

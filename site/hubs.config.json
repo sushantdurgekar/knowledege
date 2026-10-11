@@ -1,0 +1,92 @@
+{
+  "$comment": "Input for site/scripts/collect-hubs.mjs and verify-context.mjs. 'include' must stay identical to the hub allow-list lines in the root .dockerignore (a test checks this). Keys of 'legacy' and 'overrides' and the 'source' of each lintAllow entry are repo-relative hub paths.",
+  "version": 1,
+  "include": [
+    "technical/*/*/hubs/*-hub.html",
+    "technical/certifications/*/*Study Hub.html"
+  ],
+  "legacy": {
+    "technical/certifications/ai-901/AI-901 Study Hub.html": {
+      "id": "ai901",
+      "keys": ["ai901hub.v1"]
+    }
+  },
+  "reservedSlugs": [
+    "_sh",
+    "account",
+    "admin",
+    "api",
+    "assets",
+    "catalog",
+    "h",
+    "healthz",
+    "privacy",
+    "readyz",
+    "reset",
+    "signin",
+    "signout",
+    "signup",
+    "verify"
+  ],
+  "labels": {
+    "domains": {
+      "bi-analytics": "BI & Analytics",
+      "certifications": "Certifications",
+      "cloud": "Cloud",
+      "data-ai": "Data & AI",
+      "databases": "Databases",
+      "devops": "DevOps",
+      "programming": "Programming",
+      "security": "Security",
+      "software-engineering": "Software Engineering",
+      "web-dev": "Web Development"
+    },
+    "subjects": {
+      "agentic-ai": "Agentic AI",
+      "ai-engineering": "AI Engineering",
+      "anomaly-detection": "Anomaly Detection",
+      "claude-code": "Claude Code",
+      "competitive-programming": "Competitive Programming",
+      "data-science": "Data Science",
+      "docker": "Docker & Containers",
+      "dsa": "Data Structures & Algorithms",
+      "full-stack": "Full Stack",
+      "fundamentals": "Web Fundamentals",
+      "genai": "Generative AI",
+      "javascript": "JavaScript",
+      "machine-learning": "Machine Learning",
+      "nextjs": "Next.js",
+      "nodejs": "Node.js",
+      "power-bi": "Power BI",
+      "python": "Python",
+      "qlik-sense": "Qlik Sense",
+      "rag": "RAG",
+      "react": "React",
+      "seo": "SEO",
+      "sql": "SQL & Databases",
+      "system-design": "System Design",
+      "thoughtspot": "ThoughtSpot"
+    }
+  },
+  "overrides": {
+    "technical/certifications/ai-901/AI-901 Study Hub.html": {
+      "code": "AI-901",
+      "cert": "Microsoft Certified: Azure AI Fundamentals",
+      "blurb": "Pass Azure AI Fundamentals with a 3-day plan"
+    }
+  },
+  "lintAllow": [
+    {
+      "source": "technical/certifications/ai-500/AI-500 Study Hub.html",
+      "rule": "email",
+      "match": "x@evil.com",
+      "reason": "Made-up attacker address inside a prompt-injection exam scenario (hidden PDF text), not a real contact."
+    },
+    {
+      "source": "technical/certifications/ai-500/AI-500 Study Hub.html",
+      "rule": "email",
+      "match": "audit@ext.example",
+      "reason": "Illustrative address on the reserved .example TLD inside a prompt-injection exam question."
+    }
+  ]
+}

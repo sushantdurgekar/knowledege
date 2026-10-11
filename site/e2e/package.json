@@ -1,0 +1,22 @@
+{
+  "name": "study-hubs-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playwright end-to-end acceptance tests for the Study Hubs site (M0: static site, anonymous mode). Runs against a live server at BASE_URL.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "test:smoke": "playwright test --grep @smoke",
+    "typecheck": "tsc -p tsconfig.json",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/node": "22.20.4",
+    "typescript": "6.0.3"
+  }
+}

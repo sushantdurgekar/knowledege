@@ -1,0 +1,15 @@
+{
+  "name": "study-hubs-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hub collector and build-context guards for the Study Hubs site. Node 22 standard library only: no dependencies, nothing to install.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "collect": "node collect-hubs.mjs --src ../.. --config ../hubs.config.json --out ../build",
+    "collect:strict": "node collect-hubs.mjs --src ../.. --config ../hubs.config.json --out ../build --strict",
+    "test": "node --test test/*.test.mjs"
+  }
+}

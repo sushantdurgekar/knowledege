@@ -1,0 +1,11 @@
+# Runtime dependencies for the Study Hubs server (M0).
+# Direct dependencies are pinned exactly; requirements.txt is compiled from this
+# file with hashes (see pyproject.toml / README.md for the command).
+# M1 adds firebase-admin; M3 adds psycopg.
+fastapi==0.141.1
+uvicorn==0.54.0
+# uvicorn picks these up automatically: a faster HTTP parser and event loop.
+httptools==0.8.0
+uvloop==0.22.1 ; sys_platform != "win32"
+# IANA zone data for zoneinfo (the slim Docker image has no system tzdata).
+tzdata==2026.4

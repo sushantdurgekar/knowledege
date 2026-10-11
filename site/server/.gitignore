@@ -1,0 +1,6 @@
+# Generated or local-only; mirrors site/.gitignore so nothing slips into git.
+/public/
+/.venv/
+/.ruff_cache/
+/.pytest_cache/
+__pycache__/
