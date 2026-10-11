@@ -270,3 +270,85 @@ Sections are added by each hub level. Newest build replaces its own level's sect
 - **“Add the Grundy numbers to value a sum of games.”** Combine them with XOR, not +. Two games with Grundy number 1 make a losing sum (1 XOR 1 = 0), while 1 + 1 = 2 would wrongly suggest a win.
 - **“Digit DP can drop the tight flag after the first digit.”** tight must be carried the whole way: it stays true only while every digit so far equals n's digit. Dropping it counts numbers bigger than n.
 - **“Memoising on (position, tight) is always enough.”** The state must hold everything the rest depends on: the previous digit (no consecutive 1s), a count so far, a remainder. Leaving something out makes the cached answers wrong.
+
+## L4 Expert (2026-10-09)
+
+### Strongly connected components and 2-SAT
+- **“Any edge to a visited vertex can lower low[u] in Tarjan's algorithm.”** Only edges to vertices still on the stack count. An edge into a component that's already finished is a cross edge between components; letting it lower low[u] would merge SCCs that aren't mutually reachable.
+- **“The condensation can contain a cycle.”** Never: a cycle through two components would make every vertex in them mutually reachable, so they would be one SCC.
+- **“Kosaraju's second pass runs on the original graph.”** It runs on the reversed graph, taking vertices in decreasing finishing time. On the original graph the search would spill out of a source component into everything it reaches.
+- **“A recursive SCC algorithm is fine for 10⁵ vertices.”** A path of 10⁵ vertices recurses 10⁵ deep: RecursionError in Python and a stack overflow in Node.js. Keep an explicit stack of [vertex, next edge index].
+- **“2-SAT has no solution as soon as x can reach ¬x.”** x → ¬x alone only forces x to be false. There's no solution only when x and ¬x are in the same SCC, so each forces the other.
+- **“3-SAT can be solved the same way.”** A clause of three literals doesn't turn into implications between single literals, and 3-SAT is NP-complete. The SCC trick works only when every clause has at most two literals.
+
+### Maximum flow and minimum cut
+- **“Once flow is on an edge, it stays there.”** Augmenting paths may use reverse residual edges, which cancel earlier flow. Without them a bad first path can block the true maximum, as in the first diagram.
+- **“The minimum cut is every edge that ends up full.”** Plenty of full edges are in no minimum cut. Search from s in the residual graph; the cut is the edges from the vertices it reaches to the others.
+- **“Ford–Fulkerson is fast whatever paths it picks.”** With arbitrary paths it can need F augmentations for a flow of value F, which may be enormous, and with irrational capacities it may never stop. Shortest augmenting paths (Edmonds–Karp, Dinic) give bounds that don't depend on the capacities.
+- **“Capacity 1 on every edge gives vertex-disjoint routes.”** That gives edge-disjoint routes, which may share a vertex. For vertex-disjoint routes, split each vertex into v_in → v_out with capacity 1.
+- **“Flow values never overflow in JavaScript.”** Numbers are exact only up to 2⁵³ ≈ 9 × 10¹⁵. A flow of up to 1,000 edges × 10⁹ = 10¹² is safe, but bigger totals need BigInt. Python's integers never overflow.
+- **“Any large constant works as infinity.”** It must be larger than every finite cut, for example the sum of all |capacities| plus 1. Too small, and the cut may slice through a “never cut” edge and give a wrong answer.
+
+### Bipartite matching and the assignment problem
+- **“Pairing each person with the first free partner gives a maximum matching.”** A first-come choice can block someone else, as boy 0 does in the diagram. Only a search for augmenting paths, which may move several people one step each, guarantees the maximum.
+- **“Kőnig's theorem holds in any graph.”** Only in bipartite graphs. In a triangle the maximum matching has 1 edge, but every vertex cover needs 2 vertices; general graphs need Edmonds' blossom algorithm for matching.
+- **“Kuhn's `seen` array can be shared by every search.”** Clear it whenever the matching changes. Keeping it after a failed search is a safe speed-up, but after an augmentation a right vertex that was a dead end may now lead to a free one.
+- **“Giving every worker their cheapest job solves the assignment problem.”** Two workers may want the same job, as workers 0 and 1 do in the diagram. The Hungarian algorithm trades off globally in O(n³); trying all n! orders is hopeless beyond n ≈ 10.
+- **“Min-cost flow can use plain Dijkstra.”** Reverse residual edges have negative costs, which break Dijkstra. Use Bellman–Ford (or its queue version, SPFA), or Dijkstra with potentials (Johnson's trick) that make every reduced cost non-negative.
+- **“The fewest paths covering a DAG needs a search over all path choices.”** Split each vertex into an out-copy and an in-copy and match out-copies to in-copies along the edges. Each matched edge joins two paths into one, so the answer is V minus the maximum matching.
+
+### Binary lifting, LCA and Euler tours
+- **“Recursion is fine for the depths and the Euler tour.”** A path-shaped tree of 2 × 10⁵ vertices is 2 × 10⁵ calls deep, far past Python's limit and risky in Node.js. Use an explicit stack, as the prelude does, or BFS order.
+- **“⌊log₂ n⌋ levels are always enough.”** Depths reach n − 1, and k = n − 1 needs bit ⌊log₂(n − 1)⌋. For n = 9, ⌊log₂ 9⌋ = 3 levels can't make a jump of 8. Use the bit length of n − 1 (and at least 1).
+- **“In the LCA loop, jump while the two ancestors are equal.”** Equal ancestors only mean the jump reached some common ancestor, maybe far above the lowest one. Jump only while they differ; then the LCA is one parent step above either vertex.
+- **“dist(a, b) = depth[a] + depth[b] − depth[LCA].”** Both depths include the path from the root to the LCA, so subtract it twice: depth[a] + depth[b] − 2 · depth[LCA].
+- **“A subtree isn't a range, so subtree sums need a walk of the subtree.”** In preorder every subtree is the contiguous block [tin[v], tout[v]), so any range structure applies: O(log n) per update or query.
+- **“Marking the root's parent as −1 is safe in the jump table.”** Then a careless up[j − 1][−1] in Python reads the last vertex without any error. Point the root at itself, as the prelude does, or test for −1 before every jump, as the faded example does.
+
+### Suffix arrays and the LCP array
+- **“Sorting the suffixes with an ordinary string sort is fine.”** One comparison can cost O(n), so the sort costs O(n² log n) in the worst case (try “aaaa…”), and storing every suffix takes O(n²) memory. Prefix doubling compares two ranks in O(1) instead.
+- **“The LCP array compares each suffix with the next one in the text.”** lcp[i] compares sa[i − 1] and sa[i], neighbours in sorted order. Kasai only visits the suffixes in text order, which is what keeps the work linear.
+- **“The longest repeat needs every pair of suffixes compared.”** Two suffixes share at most what every neighbouring pair between them shares, so the best pair is always adjacent: the answer is max(lcp).
+- **“Any separator will do when joining two strings.”** It must occur in neither string, or a common prefix can run across the join. Use a character outside the alphabet, or, for arrays of numbers, a value bigger than any element.
+- **“The k-th distinct substring needs every substring listed and sorted.”** There are O(n²) of them. Walking the suffix array instead, suffix sa[i] adds exactly n − sa[i] − lcp[i] new ones, already in sorted order.
+- **“Python and JavaScript always sort strings the same way.”** Python compares code points and JavaScript compares UTF-16 units. They agree on ASCII and on most text, but characters such as emoji can sort differently; arrays of code points behave the same in both.
+
+### Sparse tables, square-root tricks and skip lists
+- **“A sparse table does range sums in O(1) too.”** Its two blocks overlap, which is harmless for min, max or gcd but counts the overlap twice in a sum. For static sums use prefix sums.
+- **“A sparse table can take updates.”** One changed element sits in O(n) of its blocks (one per start position and level), so an update costs O(n). With updates, use a Fenwick or segment tree.
+- **“Mo's algorithm works online.”** It reorders the queries, so it needs all of them first. If each query depends on the previous answer, as in encoded online queries, Mo's can't be used.
+- **“Any block size works for Mo's algorithm.”** The left end moves up to B per query and the right end up to n per block, about q × B + n² / B steps. B ≈ n / √q balances them at O(n √q); too small or too large a block can be many times slower.
+- **“Square-root decomposition is just a slow segment tree.”** It is slower per query, O(√n) against O(log n), but it handles summaries that don't merge, such as sorted blocks for “how many values ≤ x”, with very little code.
+- **“A skip list is only fast for lucky inputs.”** Its speed comes from its own coin flips, not from the input, so no input order makes it slow. The O(log n) is expected over the coin flips, for every input.
+
+### Computational geometry with exact arithmetic
+- **“Floating point is fine for geometry.”** Rounding can flip the sign of a nearly-zero cross product, calling three points in line a turn or the reverse (code block 1). With integer coordinates, keep everything in integers and compare signs.
+- **“A JavaScript Number holds any cross product of 10⁹ coordinates.”** Differences reach 2 × 10⁹ and products 4 × 10¹⁸, far past 2⁵³ ≈ 9 × 10¹⁵. Use BigInt, as the helper does, or Python's exact integers.
+- **“Two segments intersect exactly when their orientations differ.”** That's only a proper crossing. Touching at an endpoint, an endpoint on the other segment, and overlapping in one line all give an orientation of 0 and need the on-segment check.
+- **“The shoelace formula gives the area.”** It gives twice the signed area: halve it and take the absolute value. The sign is useful in itself: positive means the vertices run anticlockwise.
+- **“A convex hull never includes points in line.”** It depends on the question. Pop on ≤ 0 to keep corners only; pop on < 0 to keep points on the edges, as LeetCode 587 wants, and check the case where every point is on one line.
+- **“Ray casting just counts every edge the ray touches.”** A ray through a vertex would count it twice and a horizontal edge would confuse the count. Count an edge only when its ends lie on different sides of the ray's line (a half-open rule), and check the boundary first.
+
+### Matrix exponentiation, counting and probability
+- **“Matrix power works for any recurrence.”** Only for linear ones with fixed coefficients, such as f(n) = 2f(n − 1) + f(n − 3). f(n) = f(n − 1)², or a coefficient that depends on n, doesn't fit one fixed matrix.
+- **“JavaScript Numbers are fine for products modulo 10⁹ + 7.”** Two residues multiply to about 10¹⁸, past 2⁵³, so the low digits are lost before the % runs. Use BigInt, as the helper does, or split each multiplication into smaller parts.
+- **“An answer for n = 10¹⁸ needs 10¹⁸ steps.”** Repeated squaring needs only about log₂ n ≈ 60 squarings and at most 60 extra products: O(d³ log n) for d states.
+- **“Expected values need independent events.”** Linearity of expectation holds for any random variables: E[X + Y] = E[X] + E[Y]. That's why an expected count is just the sum of each event's probability, dependent or not.
+- **“Each probability state must sum all max_pts predecessors.”** When the predecessors form a sliding range, keep a running window sum: add the newest state, subtract the one leaving. O(n × max_pts) becomes O(n).
+- **“Floating-point probabilities can be compared with ==.”** They're rounded. Print the required decimals or compare with a tolerance, and when a problem wants p · q⁻¹ mod M, work in modular arithmetic instead.
+
+### DP optimisations: convex hull trick, divide and conquer, SOS
+- **“The convex hull trick speeds up any O(n²) DP.”** Only when the transition is a minimum or maximum of linear functions: dp[j] + cost(j, i) must split into (something of j) × (something of i) + (something of j). Expand the cost and check first.
+- **“Comparing crossing points with division is fine.”** Floating-point crossing points can misorder nearly-parallel lines. Compare fractions by cross-multiplying, in exact integers (BigInt in JavaScript once products pass 2⁵³).
+- **“A Li Chao tree needs its lines sorted by slope.”** It takes lines in any order and queries anywhere in its range, at O(log C) each. Sorted slopes are what the deque needs, and sorted queries too for O(1) amortised queries.
+- **“The divide and conquer optimisation works for every layered DP.”** It needs the best split point to move one way only (opt(i) ≤ opt(i + 1)), which follows from the quadrangle inequality, as for squared sums of positive numbers. Check it against a brute force before trusting it.
+- **“Enumerating the submasks of every mask is 2^b × 2^b work.”** Each bit is either in neither, in the mask only, or in both, so the total is 3^b steps; SOS DP gets the sums in 2^b · b.
+- **“DP values always fit in a JavaScript Number.”** Monster Game times reach about 2 × 10¹⁷ and squared sums about 9 × 10¹⁶, past 2⁵³. Use BigInt in JavaScript; Python's integers are exact.
+
+### Stress testing, problem setting and teaching
+- **“It passes the examples, so it's right.”** Examples are chosen to explain the problem, not to break solutions. Stress test against a brute force on thousands of small inputs, and add hand-made edge cases.
+- **“Big random tests are the best tests.”** Big inputs find time-limit problems, but a wrong answer on a 10⁵-element input is nearly impossible to debug. Tiny sizes and tiny value ranges hit edge cases far more often, and the failing case is readable.
+- **“The brute force can reuse the fast solution's helpers.”** Then a bug in a shared helper appears in both and the test passes anyway. The oracle must be independent and obviously correct, even if it's O(n³) or exponential.
+- **“Math.random is fine for reproducible tests.”** It can't be seeded. Use a small seeded generator, such as the helper's mulberry32, and print the seed or the input of every failure.
+- **“10,000 passing random tests prove the solution correct.”** They're evidence, not proof: some bugs need huge values (code block 2) or rare structures. Combine stress tests with a written proof idea and hand-made edge cases.
+- **“A problem's tests only need random inputs.”** Setters add edge cases (n = 1, all equal, maximum values), anti-heuristic cases that break plausible wrong ideas, maximum-size tests, and a validator run on every input file.

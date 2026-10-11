@@ -44,7 +44,7 @@ Supporting docs: [hub-spec.md](hub-spec.md) (what every hub contains) · [story-
 Sushant asked for DSA and System Design as two separate hub series, all four levels each, straight after the AI-103 upgrade, with every algorithm and pattern shown in **both Python and JavaScript/Node.js**. Other hubs add Python + JavaScript examples where it's natural (SQL drivers, AI SDKs, Docker). Numbers are the build IDs from the queue table below.
 
 1. ~~#1 AI-103 story upgrade~~ (done 2026-10-08)
-2. ~~#8 DSA L1~~ (done 2026-10-09) → ~~#20 DSA L2~~ (done 2026-10-09) → ~~#33 DSA L3~~ (done 2026-10-11) → #46 DSA L4
+2. ~~#8 DSA L1~~ (done 2026-10-09) → ~~#20 DSA L2~~ (done 2026-10-09) → ~~#33 DSA L3~~ (done 2026-10-11) → ~~#46 DSA L4~~ (done 2026-10-12)
 3. #9 System Design L1 → #21 L2 → #34 L3 → #47 L4
 4. L1 hubs: #2 Python → #3 SQL → #4 Qlik Sense → #5 Power BI → #6 AI Engineering → #7 JavaScript → #10 Node.js → #11 React → #12 Docker → #13 Next.js
 5. Then the rest of the queue in number order.
@@ -100,7 +100,7 @@ Hub tooling: bundles are applied with `python _meta/tools/apply_hub_bundle.py <b
 | 43 | [ ] | **Power BI L4 Expert** | `technical/bi-analytics/power-bi/hubs/power-bi-l4-expert-hub.html` | Optional: DP-700 Fabric Data Engineer (verify status) | 50–70 h |
 | 44 | [ ] | **AI Engineering L4 Expert** | `technical/data-ai/ai-engineering/hubs/ai-engineering-l4-expert-hub.html` | No single expert certification; evidence = blueprint, talks, delivered systems | 60–90 h |
 | 45 | [ ] | **JavaScript (browser) L4 Expert** | `technical/web-dev/javascript/hubs/javascript-l4-expert-hub.html` | No mainstream certification; evidence = design system + OSS contributions | 50–80 h |
-| 46 | [ ] | **Data Structures & Algorithms L4 Expert** | `technical/software-engineering/dsa/hubs/dsa-l4-expert-hub.html` | None; milestone = Codeforces 1900+ or equivalent | ongoing h |
+| 46 | [x] | **Data Structures & Algorithms L4 Expert** | `technical/software-engineering/dsa/hubs/dsa-l4-expert-hub.html` | None; milestone = Codeforces 1900+ or equivalent | 150–200 h |
 | 47 | [ ] | **System Design L4 Expert** | `technical/software-engineering/system-design/hubs/system-design-l4-expert-hub.html` | Optional: AWS Solutions Architect – Professional (SAP-C03 GA 17 Nov 2026) or AZ-305 | 50–70 h |
 | 48 | [ ] | **Node.js (server) L4 Expert** | `technical/web-dev/nodejs/hubs/nodejs-l4-expert-hub.html` | No mainstream certification; evidence = accelerator + architecture decision records | 50–70 h |
 | 49 | [ ] | **React L4 Expert** | `technical/web-dev/react/hubs/react-l4-expert-hub.html` | No mainstream certification beyond certificates.dev Senior | 40–60 h |

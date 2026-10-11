@@ -23,7 +23,7 @@ updated: 2026-10-09
 | **L1 Foundation** | Analyse complexity and solve easy problems with arrays, hashing, two pointers, stacks, queues and binary search. | 50–70 | No widely recognised certification; milestone = 40 easy + 20 medium problems | Mini DS library | `hubs/dsa-l1-foundation-hub.html` (#8) |
 | **L2 Proficient** | Solve medium interview problems with trees, heaps, graphs, backtracking and core DP. | 120–150 | None; milestone = 150 curated problems + mock interviews | Interview-ready set | `hubs/dsa-l2-proficient-hub.html` (#20) |
 | **L3 Specialist** | Handle hard problems: advanced DP, shortest paths, range queries, strings and number theory; reach a solid contest rating. | 120–150 | None; milestone = 89 hard problems + 6 virtual contests + 4 mock interviews | Contest track | `hubs/dsa-l3-specialist-hub.html` (#33) |
-| **L4 Expert** | Master advanced algorithms and teach problem-solving to others. | ongoing | None; milestone = Codeforces 1900+ or equivalent | Problem-setter pack | `hubs/dsa-l4-expert-hub.html` (#46) |
+| **L4 Expert** | Master advanced algorithms and teach problem-solving to others. | 150–200 | None; milestone = Codeforces 1900+ or equivalent | Problem-setter pack | `hubs/dsa-l4-expert-hub.html` (#46) |
 
 Full topic tree with skill keys: [levels.md](levels.md) · Rated sources: [../resources.md](../resources.md)
 
@@ -101,11 +101,11 @@ All links in both DSA workbooks were opened one by one ([full report](../../../.
   - [x] concept notes `concepts/l3-NN-*.md` (story + diagram + worked example)
   - [x] hub published + saved · independent fact/answer-key check · SRS deck `dsa-l3`
   - [x] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
-- [ ] **#46 Data Structures & Algorithms L4 Expert hub** → `hubs/dsa-l4-expert-hub.html`
-  - [ ] re-verify versions, cert facts and links · audit existing material for L4
-  - [ ] concept notes `concepts/l4-NN-*.md` (story + diagram + worked example)
-  - [ ] hub published + saved · independent fact/answer-key check · SRS deck `dsa-l4`
-  - [ ] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
+- [x] **#46 Data Structures & Algorithms L4 Expert hub** → `hubs/dsa-l4-expert-hub.html`
+  - [x] re-verify versions, cert facts and links · audit existing material for L4
+  - [x] concept notes `concepts/l4-NN-*.md` (story + diagram + worked example)
+  - [x] hub published + saved · fact/answer-key self-check (fresh-agent review still to do) · SRS deck `dsa-l4`
+  - [x] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
 
 **Start a build with:**
 > Use pro-instructor. Build hub #8 (Data Structures & Algorithms L1) from `_meta/hub-program/README.md`, following `hub-spec.md`.
