@@ -3,7 +3,7 @@ title: "Data Structures & Algorithms: interview questions"
 track: technical
 subject: dsa
 created: 2026-10-08
-updated: 2026-10-09
+updated: 2026-10-11
 ---
 # Data Structures & Algorithms: interview questions
 
@@ -195,3 +195,87 @@ I say so, then write the brute-force recursion: what choice do I make at each st
 _Behavioural (STAR)_
 
 Use STAR. Situation: the feature and the problem (slow lookups, a growing backlog, an ordering bug). Task: the target, such as under 100 ms. Action: how you measured it, which structure you chose (a heap, a trie, union-find, a graph traversal) and why, and the tests you wrote. Result: the before and after numbers. If you're new, use a lab from this hub, like the autocomplete trie or the graph toolkit.
+
+## L3 Specialist (2026-10-09)
+
+### Explain Dijkstra's algorithm and why it fails with negative edges.
+_Shortest paths_
+
+Dijkstra keeps tentative distances and a min-heap of (distance, vertex). It repeatedly pops the closest unfinished vertex, which is now final, and relaxes its edges, pushing any improved distance. With a binary heap and lazy deletion (skip popped entries whose distance is out of date) it takes O((V + E) log V) time and O(V + E) space. It relies on one fact: once the closest vertex is popped, no later path to it can be shorter. That holds only when weights are non-negative; a negative edge found later could lower a distance that's already final. With negative edges I use Bellman–Ford instead.
+
+Follow-ups: How would you return the path itself? · When is 0-1 BFS better?
+
+### When would you use Bellman–Ford or Floyd–Warshall instead of Dijkstra?
+_Shortest paths_
+
+Bellman–Ford handles negative edges and detects negative cycles: relax every edge V − 1 times, and if a V-th round still improves something, a negative cycle is reachable. It's O(V · E). Running only k rounds, each reading a copy of the previous round's distances, also solves “at most k edges” problems like Cheapest Flights Within K Stops. Floyd–Warshall gives all-pairs distances in O(V³) time and O(V²) space with three nested loops, the intermediate vertex outermost. It suits a few hundred vertices when I need every pair, or a transitive closure.
+
+### How do you adapt Dijkstra to minimise the largest single step instead of the total?
+_Shortest paths_
+
+I change how a path's cost combines: extending a path costs max(current cost, edge weight) instead of current + weight. Dijkstra still works, because the cost never decreases as a path grows. Path With Minimum Effort and Swim in Rising Water are this “bottleneck” version. Alternatives are binary search on the answer with a BFS check, or union-find adding edges in increasing order until the two ends connect.
+
+### What's the cut property, and how do Kruskal's and Prim's algorithms use it?
+_Graph structure_
+
+For any split of the vertices into two groups, a lightest edge crossing the split belongs to some minimum spanning tree. Kruskal sorts all the edges and adds each one that joins two different components, checked with union-find: O(E log E). Prim grows one tree from a start vertex, always adding the cheapest edge leaving it, using a min-heap: O(E log V), or a simple O(V²) array version for dense graphs. Both are greedy algorithms, and the cut property is what proves them correct.
+
+### How do you find bridges, and why does the iterative version matter in Python?
+_Graph structure_
+
+One DFS records each vertex's discovery time tin and its low-link value: the smallest tin its subtree can reach with one back edge. A tree edge u → v is a bridge when low[v] > tin[u], because nothing below v can get back to u or above without it. To handle repeated edges between the same two vertices, I skip only the edge I arrived by (by its id), not every edge to the parent. It's O(V + E). A recursive DFS on a 10⁵-vertex path passes Python's 1,000-frame limit, so I keep an explicit stack of (vertex, next-edge index).
+
+### How do you recognise an interval DP, and in what order do you fill it?
+_Advanced DP_
+
+The answer for a range i..j comes from splitting it at some k, or from peeling off its ends: palindromes, burst balloons, merging stones, triangulating a polygon. The state is dp[i][j], and the transition tries every split in between, so it's usually O(n³) time and O(n²) space. The table must be filled by increasing length, because each interval depends only on shorter intervals inside it. For burst balloons, the trick is to choose the *last* balloon to burst in the range, which makes the two sides independent.
+
+### When is bitmask DP the right tool?
+_Advanced DP_
+
+When the state must remember which items of a small set are used, with n up to about 20: assignments, the travelling salesman problem, covering problems. The state is a mask, often with an extra index such as the last city, so Held–Karp TSP is O(2ⁿ · n²) time and O(2ⁿ · n) space instead of O(n!). Enumerating every submask of every mask costs 3ⁿ. With 2²⁰ masks I keep the tables in flat lists in Python and typed arrays in JavaScript.
+
+### Explain rerooting with an example.
+_Advanced DP_
+
+Some tree problems ask for an answer with every node as the root, like the sum of distances from each node. Running a DFS from every node is O(n²). Instead, I compute the answer for root 0 with one DFS that also stores subtree sizes, then move the root across each edge: when the root moves from u to its child v, the size[v] nodes under v get one step closer and the other n − size[v] get one step further, so ans[v] = ans[u] − size[v] + (n − size[v]). That's two passes, O(n) in total, and in Python I do both iteratively with a precomputed DFS order.
+
+### What is digit DP?
+_Advanced DP_
+
+A way to count the numbers up to N with some digit property: no two consecutive 1s in binary, how many 1 digits, only allowed digits. I walk N's digits from the most significant, with a state like (position, tight, extra information), where tight means the prefix so far equals N's prefix, so the next digit can't exceed N's digit at that position. Memoising the states makes the cost about digits × states × 10, tiny compared with looping to N.
+
+### Fenwick tree or segment tree: how do you choose?
+_Range queries_
+
+A Fenwick tree does point updates and prefix queries for sums (or anything you can subtract) in O(log n) with about ten lines of code and n + 1 array slots. A segment tree is more general: any associative operation (min, max, gcd, sum), range updates through lazy propagation, and searching for the first position that meets a condition, all in O(log n), at the cost of more code and up to 4n nodes. Sums with point updates: Fenwick. Range min or max with updates, or range assignment: segment tree.
+
+### How does lazy propagation work?
+_Range queries_
+
+When an update covers a node's whole range, I apply it to that node's stored value and leave a pending tag, like “add 5”, instead of updating every node below. Whenever a later operation needs to go below that node, it first pushes the tag down to the two children. Each update or query then touches O(log n) nodes, so range add with range sum or range max costs O(log n) per operation.
+
+### How would you count, for each element, how many smaller elements come after it?
+_Range queries_
+
+I go through the array from the right, keeping a Fenwick tree over the values seen so far. For each element, the number of smaller values already seen is a prefix sum up to its value minus one; then I add the element. Values can be large or negative, so I first compress them to ranks 1..m by sorting the distinct values. That's O(n log n) time and O(n) space. A merge sort that counts how many right-half elements move past each left element works too.
+
+### Explain the KMP prefix function and one use beyond searching.
+_Strings & maths_
+
+π[i] is the length of the longest proper prefix of s[0..i] that is also a suffix of it. It's computed in O(n) by reusing earlier values: on a mismatch I fall back to π[k − 1] instead of starting over. Searching for p in t is the prefix function of p + “#” + t, where every position whose value equals len(p) ends a match: O(n + m) in total. Beyond searching, n − π[n − 1] gives the shortest period of a string, which answers Repeated Substring Pattern, and the prefix function of s + “#” + reverse(s) gives the longest palindromic prefix, which solves Shortest Palindrome.
+
+### How do you compute a^b mod m and a modular inverse, and what changes in JavaScript?
+_Strings & maths_
+
+Fast exponentiation squares the base and halves the exponent, so it needs O(log b) multiplications. When m is prime, Fermat's little theorem gives the inverse as a^(m − 2) mod m; otherwise I use the extended Euclidean algorithm. Python has both built in: pow(a, b, m) and pow(a, -1, m). In JavaScript, a product of two numbers near 10⁹ is about 10¹⁸, beyond 2⁵³, so it silently loses precision; I do the multiplication in BigInt (or split it into halves) and convert back.
+
+### How do you approach a hard problem you haven't seen before?
+_Problem-solving technique_
+
+I read the constraints first, because they hint at the intended complexity: n ≤ 20 suggests bitmasks, n ≤ 500 an O(n³) DP, n ≤ 10⁵ with updates a tree structure. Then I look for the L2 pattern underneath: a graph with weights, a DP whose state needs one more piece of information, a range query. I write a brute force for small inputs, both to understand the problem and to test my real solution against it on random cases. In an interview I explain the reduction and the complexity before I start coding.
+
+### Tell me about a time you made something much faster with a better algorithm.
+_Behavioural (STAR)_
+
+Use STAR. Situation: what was slow, how slow, and who noticed. Task: the target. Action: how you measured it, the complexity you found (an O(n²) scan, a shortest-path search repeated for every request), the algorithm or structure you replaced it with (a heap, a Fenwick tree, precomputation) and how you tested it against the old version. Result: the before and after numbers. If you're new, use a lab from this hub, like the shortest-path toolkit or the range-query lab.
