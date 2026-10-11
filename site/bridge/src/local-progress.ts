@@ -1,8 +1,10 @@
 /**
  * Browser-storage key names and progress summaries.
  *
- * Pure functions only (no DOM, no storage access), so the client copies this logic for the
- * catalog's "3 / 8 modules" badges and M1's outbox reuses the payload builders. The record
+ * Pure functions only: no DOM and no global storage access. Helpers that read or write take a
+ * `StorageLike` argument. The client imports this module directly (alias `@bridge-shared`) for
+ * the catalog's "3 / 8 modules" badges, sign-in reconcile and logout, and the bridge outbox
+ * reuses the payload builders, so both always build identical payloads. The record
  * shapes are documented in docs/hub-runtime-contract.md §3:
  *   studyhub.<id>.v2       {S, MOCKS, CARDS, U:{main,mocks,cards}}   (modern hubs)
  *   studyhub.<id>.mockrun  in-progress mock exam (local only)
@@ -173,12 +175,145 @@ export function dirtyParts(rec: HubRecord, synced: PartStamps): Part[] {
 
 /**
  * Keys to remove from this browser on logout (M1): every hub key, every legacy key and every
- * bridge-owned key except `studyhubs.ui.*`, which holds UI preferences only.
+ * bridge-owned key, except two preferences that hold no progress: `studyhubs.ui.*` and the
+ * DSA hubs' shared code-language choice `studyhub.codeLang` (architecture-spec §4.6 step 7).
  */
 export function keysToWipe(keys: Iterable<string>, legacyKeys: readonly string[] = []): string[] {
   const out: string[] = [];
   for (const k of keys) {
+    if (k === CODE_LANG_KEY) continue;
     if (isHubKey(k, legacyKeys) || (k.indexOf(BRIDGE_PREFIX) === 0 && k.indexOf(UI_PREFIX) !== 0)) out.push(k);
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Storage-taking helpers (M1). Shared by the bridge (which passes a wrapper that bypasses its own
+// setItem hook) and the client shell (which passes window.localStorage).
+
+/** The subset of the Web Storage API these helpers use. */
+export interface StorageLike {
+  readonly length: number;
+  key(index: number): string | null;
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+/** A synced part: the three modern-hub parts, or `legacy` for AI-901-style hubs. */
+export type AnyPart = Part | "legacy";
+
+/** What these helpers need from a catalog entry. */
+export interface HubRef {
+  id: string;
+  engine: string;
+  legacyKeys?: readonly string[];
+}
+
+/** The legacy part's payload: the hub's whole storage value, verbatim. */
+export interface LegacyPayload {
+  hub: string;
+  upd: number;
+  key: string;
+  raw: string;
+}
+
+/** Acknowledged stamps for every part, including `legacy` (all 0 when never synced). */
+export type SyncedStamps = PartStamps & { legacy: number };
+
+function safeGet(storage: StorageLike, key: string): string | null {
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** Every key currently in `storage` (a snapshot, safe to mutate storage while iterating it). */
+export function allKeys(storage: StorageLike): string[] {
+  const out: string[] = [];
+  try {
+    for (let i = 0; i < storage.length; i++) {
+      const k = storage.key(i);
+      if (k !== null) out.push(k);
+    }
+  } catch {
+    /* storage unavailable */
+  }
+  return out;
+}
+
+/** `studyhubs.synced.<id>` as stamps for all four parts. */
+export function readSynced(storage: StorageLike, hubId: string): SyncedStamps {
+  const raw = safeGet(storage, syncedKey(hubId));
+  const o = parseJson(raw);
+  const legacy = isObject(o) ? stamp(o.legacy) : 0;
+  return { ...parseSynced(raw), legacy };
+}
+
+/** Record that the server holds `part` at `upd` or newer. Never moves a stamp backwards. */
+export function markSynced(storage: StorageLike, hubId: string, part: AnyPart, upd: number): void {
+  const cur = readSynced(storage, hubId);
+  if (!(stamp(upd) > cur[part])) return;
+  cur[part] = upd;
+  try {
+    storage.setItem(syncedKey(hubId), JSON.stringify(cur));
+  } catch {
+    /* storage full or unavailable: the part is simply re-sent later (newest-wins makes it a duplicate) */
+  }
+}
+
+/** The account this browser's local progress belongs to (`publicId`), or null. */
+export function readOwner(storage: StorageLike): string | null {
+  return safeGet(storage, OWNER_KEY) || null;
+}
+
+export function writeOwner(storage: StorageLike, publicId: string): void {
+  try {
+    storage.setItem(OWNER_KEY, publicId);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Payloads for the parts of one hub that are newer locally than the last acknowledged stamp,
+ * exactly as the hub (or, for legacy hubs, the bridge) would send them. Static hubs have none.
+ */
+export function localHubParts(storage: StorageLike, hub: HubRef): Partial<Record<AnyPart, PartPayload | LegacyPayload>> {
+  const out: Partial<Record<AnyPart, PartPayload | LegacyPayload>> = {};
+  const synced = readSynced(storage, hub.id);
+  if (hub.engine === "v2") {
+    const rec = parseHubRecord(safeGet(storage, progressKey(hub.id)));
+    if (!rec) return out;
+    for (const part of dirtyParts(rec, synced)) {
+      const payload = buildPart(rec, part, hub.id);
+      if (payload) out[part] = payload;
+    }
+  } else if (hub.engine === "legacy") {
+    const key = (hub.legacyKeys || [])[0];
+    if (!key) return out;
+    const raw = safeGet(storage, key);
+    const upd = stamp(Number(safeGet(storage, legacySidecarKey(key))));
+    if (raw && upd > synced.legacy && isObject(parseJson(raw))) out.legacy = { hub: hub.id, upd, key, raw };
+  }
+  return out;
+}
+
+/** True when any hub in `hubs` has local progress the server has not acknowledged. */
+export function hasDirtyProgress(storage: StorageLike, hubs: readonly HubRef[]): boolean {
+  return hubs.some((h) => Object.keys(localHubParts(storage, h)).length > 0);
+}
+
+/** Logout / account-switch wipe: removes `keysToWipe` from storage and returns the removed keys. */
+export function wipeKeys(storage: StorageLike, legacyKeys: readonly string[] = []): string[] {
+  const keys = keysToWipe(allKeys(storage), legacyKeys);
+  for (const k of keys) {
+    try {
+      storage.removeItem(k);
+    } catch {
+      /* ignore */
+    }
+  }
+  return keys;
 }

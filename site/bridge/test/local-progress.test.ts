@@ -5,8 +5,16 @@ import {
   countDone,
   dirtyParts,
   hasMainProgress,
+  hasDirtyProgress,
   isHubKey,
   keysToWipe,
+  localHubParts,
+  markSynced,
+  readOwner,
+  readSynced,
+  wipeKeys,
+  writeOwner,
+  type StorageLike,
   legacyHasProgress,
   legacySidecarKey,
   mockRunKey,
@@ -111,6 +119,76 @@ describe("payloads (M1 outbox)", () => {
       "studyhubs.ui.nudge.ai103",
       "unrelated",
     ];
-    expect(keysToWipe(keys, ["ai901hub.v1"])).toEqual(keys.slice(0, 6));
+    expect(keysToWipe(keys, ["ai901hub.v1"])).toEqual([keys[0], ...keys.slice(2, 6)]);
+  });
+});
+
+/** A Map-backed Storage stand-in. */
+function memStorage(init: Record<string, string> = {}): StorageLike & { dump(): Record<string, string> } {
+  const m = new Map(Object.entries(init));
+  return {
+    get length() {
+      return m.size;
+    },
+    key: (i) => Array.from(m.keys())[i] ?? null,
+    getItem: (k) => (m.has(k) ? (m.get(k) as string) : null),
+    setItem: (k, v) => void m.set(k, String(v)),
+    removeItem: (k) => void m.delete(k),
+    dump: () => Object.fromEntries(m),
+  };
+}
+
+describe("storage helpers (shared with the client)", () => {
+  const v2 = { id: "ai103", engine: "v2" };
+  const legacy = { id: "ai901", engine: "legacy", legacyKeys: ["ai901hub.v1"] };
+  const record = JSON.stringify({ S: { done: { m1: true } }, MOCKS: [1, 2], CARDS: { c: [1, 2] }, U: { main: 5, mocks: 3, cards: 0 } });
+
+  it("lists only dirty v2 parts, as the hub would send them", () => {
+    const st = memStorage({ "studyhub.ai103.v2": record });
+    expect(localHubParts(st, v2)).toEqual({
+      main: { hub: "ai103", upd: 5, S: { done: { m1: true } } },
+      mocks: { hub: "ai103", upd: 3, list: [1, 2] },
+    });
+    markSynced(st, "ai103", "main", 5);
+    expect(Object.keys(localHubParts(st, v2))).toEqual(["mocks"]);
+  });
+
+  it("builds the legacy part from the sidecar stamp and raw value", () => {
+    const st = memStorage({ "ai901hub.v1": '{"done":{"m1":true}}', "studyhubs.legacy.ai901hub.v1.upd": "1700000000000" });
+    expect(localHubParts(st, legacy)).toEqual({
+      legacy: { hub: "ai901", upd: 1700000000000, key: "ai901hub.v1", raw: '{"done":{"m1":true}}' },
+    });
+    markSynced(st, "ai901", "legacy", 1700000000000);
+    expect(localHubParts(st, legacy)).toEqual({});
+    expect(hasDirtyProgress(st, [v2, legacy])).toBe(false);
+  });
+
+  it("never moves a synced stamp backwards", () => {
+    const st = memStorage();
+    markSynced(st, "ai103", "cards", 9);
+    markSynced(st, "ai103", "cards", 4);
+    expect(readSynced(st, "ai103")).toEqual({ main: 0, mocks: 0, cards: 9, legacy: 0 });
+  });
+
+  it("reads and writes the owner tag", () => {
+    const st = memStorage();
+    expect(readOwner(st)).toBeNull();
+    writeOwner(st, "pub123");
+    expect(readOwner(st)).toBe("pub123");
+  });
+
+  it("wipes progress but keeps UI state and the code-language choice", () => {
+    const st = memStorage({
+      "studyhub.ai103.v2": record,
+      "studyhub.ai103.mockrun": "{}",
+      "studyhub.codeLang": "python",
+      "ai901hub.v1": "{}",
+      "studyhubs.owner": "pub",
+      "studyhubs.synced.ai103": "{}",
+      "studyhubs.ui.nudge.ai103": "1",
+      "other": "x",
+    });
+    wipeKeys(st, ["ai901hub.v1"]);
+    expect(Object.keys(st.dump()).sort()).toEqual(["other", "studyhub.codeLang", "studyhubs.ui.nudge.ai103"]);
   });
 });

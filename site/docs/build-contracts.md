@@ -145,3 +145,258 @@ The same rule applies to every engine: a `static` hub that has a `</head>` or a 
 - **Footer:** Privacy link and a "Progress is saved in this browser" note.
 - **Styling:** plain CSS that copies the hub tokens (see `tokens.css` in the spec, §4.11). Fonts are Bricolage Grotesque, Atkinson Hyperlegible and JetBrains Mono from Google Fonts. Light and dark themes. Works at phone width with a 16 px gutter.
 - **Budgets:** main JS ≤ 90 KB gz, CSS ≤ 10 KB gz.
+
+---
+
+# M1: accounts and Firestore sync
+
+These sections are binding for M1. Where they are silent, follow [architecture-spec.md](architecture-spec.md):
+- §4.5 for the bridge
+- §4.6 for auth
+- §4.7 for the API
+- §4.8 for storage
+- §4.9 for quota
+
+## 8. Environment (M1 additions; every field optional with safe dev defaults)
+
+| Var | Default | Notes |
+|---|---|---|
+| `AUTH_MODE` | `firebase` in production, `fake` in test/development | `fake` is **refused** when `APP_ENV=production` |
+| `STORE` | `firestore` in production, `memory` otherwise | `memory` is refused in production. `postgres` arrives in M3 |
+| `SECRET_KEY` | dev/test: a fixed constant plus a warning | Production: required, ≥ 32 bytes. Used for `publicId` and fake session signing |
+| `SESSION_DAYS` | `14` | |
+| `FIREBASE_PROJECT_ID` | – | Required when `AUTH_MODE=firebase` or `STORE=firestore` |
+| `FIREBASE_WEB_CONFIG` | – | JSON `{"apiKey","authDomain","projectId","appId"}`, returned by `/api/config` |
+| `GOOGLE_APPLICATION_CREDENTIALS` / `FIREBASE_SERVICE_ACCOUNT_B64` | – | Service-account key: a file path (Render Secret File) or base64 JSON |
+| `FIRESTORE_EMULATOR_HOST` | – | Tests/CI only |
+| `TRUSTED_PROXY_HOPS` | `1` in production, `0` otherwise | Client IP for rate limits = the X-Forwarded-For entry at position `-hops` (right-most hops appended by the platform), else the socket peer |
+| `SYNC_TIERS` | `0.5:120:0:60,0.8:300:60:120,1.0:900:60:300` | `frac:flushS:hiddenMinS:refreshS`; at `f ≥ 1.0` the server pauses sync |
+| `QUOTA_ENFORCE` | `1` for firestore/memory | `0` disables tiers and the budget (Postgres later) |
+| `QUOTA_TZ`, `QUOTA_READS`, `QUOTA_WRITES`, `QUOTA_DELETES`, `QUOTA_RESERVE` | `America/Los_Angeles`, `50000`, `20000`, `20000`, `0.05` | The budget is `B = QUOTA_WRITES × (1 − QUOTA_RESERVE)` and `f = writesToday / B` |
+| `MAX_PART_GZ`, `MAX_DOC_GZ`, `MAX_BODY`, `MAX_BODY_DECOMPRESSED` | `131072`, `393216`, `2097152`, `8388608` | |
+| `CLOCK_SKEW_MS` | `900000` | |
+| `USER_WRITES_PER_DAY` | `300` | Accepted hub-doc writes per uid per Pacific day; then 429 `sync_paused` |
+| `MAINTENANCE_FORCE` | unset | `read_only` or `full`. M1 reads only this; M2 adds the admin setting |
+
+## 9. Auth, session cookies, CSRF
+- **Session cookie name:**
+  - `__Host-sh_session` when `PUBLIC_ORIGIN` is https.
+  - `sh_session` when it is http (local/test).
+  - Flags: `HttpOnly; SameSite=Lax; Path=/; Max-Age=SESSION_DAYS*86400`, plus `Secure` only on https.
+- **Hint cookie `sh_hint`:**
+  - Value: `publicId`.
+  - Readable by JS, with the same Secure, SameSite, Path and Max-Age rules.
+  - It is only a hint. The server never trusts it.
+- **`publicId`** = the first 22 characters of `base64url(HMAC-SHA256(SECRET_KEY, "publicId:" + uid))`. The raw uid never reaches hub JavaScript.
+- **`POST /api/auth/session` `{idToken}`:**
+  - `firebase` mode:
+    1. `auth.verify_id_token(idToken, check_revoked=True, clock_skew_seconds=10)`.
+    2. Require `auth_time` ≤ 300 s ago; otherwise 403 `stale_login`.
+    3. If the provider is `password` and `email_verified` is false: 403 `email_unverified`.
+    4. Upsert the user (`lastLoginAt` at most once per 24 h).
+    5. `create_session_cookie(idToken, SESSION_DAYS)`.
+    6. Set both cookies.
+    7. Respond 200 `{user}`.
+  - `fake` mode: `idToken` = `"fake:" + base64url(JSON {uid, email, name?, emailVerified?, provider?})`. The server mints an HMAC-signed session (`b64url(json).b64url(sig)` with `exp`) and runs the same checks (unverified password → 403). This is the only way e2e tests sign in, and the client's fake-mode test form uses it too.
+  - Rate limit: 10/min and 100/day per client IP. 401 `invalid_token`, 503 `maintenance` when the mode is `full`.
+- **`POST /api/auth/logout`:** 204, clears both cookies.
+- **Session checks on each request:**
+  - `verify_session_cookie(check_revoked=False)`, cached 5 min in an LRU (≤ 1000) keyed by sha256 of the cookie.
+  - An invalid or expired cookie is treated as anonymous, and **both cookies are cleared** in that response.
+- **CSRF:** every `/api/*` request that isn't GET/HEAD/OPTIONS must carry `X-StudyHubs: 1` **and** `Origin == PUBLIC_ORIGIN`. If Origin is absent, `Sec-Fetch-Site: same-origin` is accepted instead. Otherwise 403 `{code:"csrf"}`. No CORS headers, ever.
+- **`GET /api/config`:** `{"authMode":"firebase|fake","firebase":{apiKey,authDomain,projectId,appId}|null,"origin":PUBLIC_ORIGIN,"version":"…"}`, `Cache-Control: no-cache`.
+- **`GET /api/me`:**
+  - Anonymous: `{"signedIn":false}`.
+  - Signed in: `{"signedIn":true,"user":{"publicId","email","name","photo","provider","emailVerified"},"maintenance":{"mode","message","until"},"policy":{…}}`.
+- **Shell framing:** shell pages send `X-Frame-Options: DENY` and CSP `frame-ancestors 'none'` (the review's M1 note). The seed script gets `Cross-Origin-Resource-Policy: same-origin`.
+
+## 10. Progress API (`/api/progress`, `/api/sync`, seed)
+- **Parts by engine:**
+  - `v2`: `main`, `mocks`, `cards`. The payloads are exactly what the hub builds: `{hub,upd,S}`, `{hub,upd,list}` (≤ 40 items), `{hub,upd,map}`.
+  - `legacy`: `legacy` = `{hub,upd,key,raw}`. `key ∈ legacyKeys`; `raw` is a string that parses to a JSON object.
+  - `hub` must equal the hubId.
+  - `upd` must be an integer in `[1.6e12, now + CLOCK_SKEW_MS]`. Above the limit: 422 `clock_skew` for the whole request.
+- **`GET /api/progress/{hubId}?known=main:<upd>,mocks:<upd>,cards:<upd>`** (legacy: `known=legacy:<upd>`):
+
+  | Case | Response |
+  |---|---|
+  | Unknown hub (not in catalog) | 404 JSON |
+  | Anonymous or invalid session | 200 `{"signedIn":false}` (cookies cleared if one was sent) |
+  | Maintenance `full` | 503 `maintenance` |
+  | Signed in | 200 `{"signedIn":true,"hub":"<hubId>","user":{"publicId"},"parts":{"<part>": payload \| {"stub":true,"upd":n} \| null},"policy":{…},"maintenance":{"mode":…}}` |
+
+  - A part comes back as a **stub** when the stored `upd ≤ known`; a missing part is `null`.
+  - Reads: 1, plus 1 more only if some part is newer than known.
+- **`POST /api/sync`** (CSRF-protected; `Content-Encoding: gzip` accepted):
+  - Body: `{"hubs":{"<hubId>":{"<part>":payload}}}`. At most 25 hubs, wire ≤ `MAX_BODY`, decompressed ≤ `MAX_BODY_DECOMPRESSED`.
+  - Success: 200 `{"results":{"<hubId>":{"<part>":{"status":"accepted|duplicate|stale|rejected","upd":n,"code"?:"too_large|invalid"}}},"policy":{…}}`.
+    - `upd` in each result is the **stored** stamp after the decision.
+    - A part over `MAX_PART_GZ` (gzip of the compact JSON), or a doc over `MAX_DOC_GZ`, is `rejected` with `too_large`.
+  - Request-level errors: 401 `unauthenticated`, 403 `csrf`/`email_unverified`, 404 unknown hub, 413 `too_large` (body), 422 `invalid`/`clock_skew`, 429 `rate_limited`/`sync_paused` (with `retryAt` ISO + `Retry-After`), 503 `maintenance`/`unavailable`.
+  - Rate limit: 12/min burst 6 per uid, plus `USER_WRITES_PER_DAY`.
+- **Newest wins:** `decide(stored_upd, incoming_upd)` in `app/progress/decide.py`:
+  - no stored part → `accepted`
+  - incoming greater → `accepted`
+  - equal → `duplicate`
+  - lower → `stale`
+
+  Each hub is one transaction (read the `u_*` stamps, decide each part, write the accepted parts in one write).
+- **Policy:** `{"tier":1|2|3|"paused","flushMs":n,"hiddenMinMs":n,"refreshMs":n,"pausedUntil":ISO|null}`, sent with every progress, sync and me response.
+- **`GET /api/seed/{hubId}.js`** (legacy only):
+  - Signed in: `window.__studyhubsBridge&&__studyhubsBridge.legacySeed({signedIn:true,publicId:"…",policy:{…},parts:{legacy:{upd,raw}}|{}});`.
+  - Anonymous: the M0 body.
+  - Headers: `no-store`, `Vary: Cookie`, CORP `same-origin`.
+- **Error body** everywhere: `{"code","message","retryAfter"?,"retryAt"?}`.
+
+## 11. Store (Python, `app/store/`)
+- **`base.py`:**
+  - Error classes: `StoreError`, `QuotaExhausted(kind, retry_at)`, `Unavailable`, `TooLarge`, `Conflict`.
+  - Dataclasses `UserRecord`, `PartIn(upd, gz, raw_len, done)`, `PartOut(upd, gz|None)`, `PartResult(status, upd)`.
+  - The `Store` Protocol:
+
+| Method | M1 status |
+|---|---|
+| `kind`, `ping()` | implement |
+| `upsert_user(u, *, touch_login)`, `get_user(uid)`, `count_users()` | implement |
+| `get_hub(uid, hub, known) -> dict[part, PartOut]` | implement |
+| `put_parts(uid, hub, parts: dict[part, PartIn], now_ms) -> dict[part, PartResult]` | implement (transactional, newest-wins via `decide`) |
+| `add_usage(day, deltas)`, `get_usage(keys)` | implement |
+| `get_setting(key)`, `put_setting(key, value, *, expect_version)` | implement |
+| `list_hubs`, `delete_user`, `iter_*`, `restore_batch`, `wipe_for_replace`, `get_job`/`put_job`/`claim_job`, tombstones | declared, `raise NotImplementedError("M2/M3")` |
+
+- **`memory.py`:**
+  - Thread-safe dicts with the same semantics.
+  - Counts reads and writes like Firestore.
+  - Fault hooks: `fail_next(op, exc, count=1)` and `latency_ms`.
+  - Refuses `APP_ENV=production`.
+- **`firestore.py`** (data model per spec §4.8):
+  - **Documents:**
+    - `users/{uid}`
+    - `progress/{uid}~{hubId}`, with top-level fields `uid, hub, u_<part>` (int), `p_<part>` (bytes: gzip compact JSON), `n_<part>` (raw length), `done` (int), `t` (server timestamp)
+    - `usage/{YYYY-MM-DD}` (Pacific day) and `usage/m-{YYYY-MM}`, holding `reads, writes, deletes, fsEgress, appEgress` via `Increment`
+    - `meta/settings`
+  - **Client:**
+    - Every call passes `timeout=10` and a short `Retry` that **never retries `ResourceExhausted`**.
+    - `ResourceExhausted` → `QuotaExhausted(kind, next_pacific_midnight)`.
+    - `ServiceUnavailable`, `DeadlineExceeded` and `RetryError` → `Unavailable`.
+  - Firestore Security Rules deny everything. Index exemptions for every field live in `site/firebase/firestore.indexes.json` (`fieldOverrides`, `indexes: []`).
+- **Factory:** `factory.py` picks the store from `STORE`.
+- **Contract tests:** `tests/contract/` runs one parametrized suite on memory and on the Firestore emulator (skipped unless `FIRESTORE_EMULATOR_HOST` is set). It covers:
+  - round-trip
+  - partial merge
+  - known/stubs
+  - accepted, duplicate and stale
+  - concurrent `put_parts` (no older write ever lands)
+  - usage increments
+  - settings optimistic version
+
+## 12. Quota meter, tiers, guard (`app/quota/`)
+- **Pacific day:** `pacific.py` computes PT day keys and the next reset (handles the DST switch on 2026-11-01).
+- **Meter:**
+  - In-process counters per PT day: reads, writes, deletes and egress.
+  - Persisted to the store every 10 min and on shutdown, and loaded at boot.
+  - Memory store: in-process only.
+- **Guard:**
+  - `f = writes_today / B` → tier from `SYNC_TIERS`.
+  - At `f ≥ 1.0`: `/api/sync` returns 429 `sync_paused` with `retryAt` = the next PT midnight.
+  - On `QuotaExhausted` the breaker sets paused until the reset plus 0–5 min of jitter and fails fast; one probe goes through every 15 min.
+  - Reads at ≥ 90% of `QUOTA_READS` multiply `refreshMs` by 5.
+- **Per-user cap:** an in-memory per-uid daily accepted-write counter enforces `USER_WRITES_PER_DAY`.
+- With `QUOTA_ENFORCE=0`, the policy is always tier 1 and nothing is paused.
+
+## 13. Bridge signed-in mode (spec §4.5 is the detailed reference)
+- **Signed-in check:**
+  - `sh_hint` present → `publicId = sh_hint`.
+  - `owner = localStorage["studyhubs.owner"]`.
+  - `mismatch = owner && owner !== publicId`. On a mismatch, `use("db")` and `use("user")` resolve `null`, and the chrome shows "This browser has progress from another account" linking to `/account`.
+- **Prefetch** (only signed in, no mismatch, engine `v2`): `GET /api/progress/<hubId>?known=main:<tabU.main>,…`, 5 s timeout.
+  - `use("db")` and `use("user")` wait for it, up to 5 s, then resolve `null`.
+  - A response of `{"signedIn":false}` → anonymous behaviour, and the bridge clears `sh_hint`.
+  - After the first signed-in prefetch: if `owner` is absent, set it to `publicId`.
+  - `use("user")` → `{id: async () => "me", isOwner: async () => false}`.
+- **`db.doc(path)`, `get()`, `set()`:** exactly as spec §4.5, including:
+  - snapshot `exists` as a boolean **property**
+  - `data()` returns deep copies
+  - stub parts become `data: () => ({hub, upd})`
+  - read-your-writes
+  - handover of another tab's newer local record (never this tab's own record)
+  - waiters that resolve only when the server **acknowledges** a flush carrying `upd ≥ obj.upd`
+  - `freshen()`: payloads are rebuilt from `localStorage[progressKey(hubId)]` at flush time
+- **Outbox:**
+  - Driven by `policy` (`flushMs` anchored at the first unsent change; flush on hidden per `hiddenMinMs`).
+  - `pagehide` and `freeze` always flush if dirty.
+  - At most one request in flight.
+  - Unload uses `fetch(keepalive)` when the body is ≤ 60,000 B. Otherwise it lazy-loads `/_sh/fflate.js` (once the pending body passes 48 KB) and gzips synchronously, falling back to a normal fetch.
+  - Requests always carry `X-StudyHubs: 1` and `credentials: "same-origin"`.
+- **Acknowledgement and error mapping** per spec §4.5:
+  - 401 → `revoked`
+  - 403 → `not_granted`
+  - 400/404/422 `invalid` → `invalid_argument`
+  - 422 `clock_skew` → `unavailable` + notice
+  - 413 or per-part `too_large` → `quota_exceeded`
+  - 429/503/5xx/network → `unavailable`, with backoff of 15 s doubling to 10 min, honouring `Retry-After` / `retryAt`
+  - Any `get()` failure → `unavailable`.
+  - After a background success, if `#syncPill` has class `mid`, rewrite it to `<span class="dot"></span>Synced to your account` with `class="pill ok"`.
+- **BroadcastChannel `"studyhubs"`** message types:
+  - `{type:"flush"}`: flush now.
+  - `{type:"auth-changed"}`: hidden tabs reload; visible tabs show "Signed in — reload to sync" and reload on the next visibility change unless a mock run is in progress.
+  - `{type:"logout"}`: set `loggedOut`, wipe, `location.reload()`.
+- **Legacy (AI-901):**
+  - The seed script calls `legacySeed(cfg)` **before** the hub reads storage. Signed in: if `remote.upd > sidecar`, write `raw` with the original `setItem` and set the sidecar to `remote.upd`. Otherwise, if local exists and is newer, queue part `legacy`.
+  - Wrapped `setItem` on the legacy key → sidecar = `Date.now()` and queue `legacy`.
+  - Mid-session: on becoming visible after `refreshMs`, GET with `known=legacy:<sidecar>`. If the remote is newer, show a "Reload" notice; never reload automatically.
+- **Chrome when signed in:**
+  - The "Sign in" item becomes the user's initial with a menu: Account (`/account`), Sign out (`/signout`).
+  - Notices: sync paused (with the local reset time), session ended (→ sign in), clock ahead, account mismatch, maintenance.
+- **Shared module `src/local-progress.ts`** is imported directly by the client (Vite `server.fs.allow` + alias `@bridge-shared`).
+  - It must stay pure: no DOM or global side effects at import time; storage is passed in as a `Storage`-like argument.
+  - Exports the client relies on: the existing helpers plus
+    - `wipeKeys(storage, legacyKeys)`: removes `keysToWipe` but **keeps `studyhub.codeLang` and `studyhubs.ui.*`**
+    - `localHubParts(storage, hub:{id,engine,legacyKeys}) -> {[part]: payload}` for dirty parts only
+    - `markSynced(storage, hubId, part, upd)`
+    - `readOwner(storage)` / `writeOwner(storage, publicId)`
+
+## 14. Client (M1)
+- **Firebase:** `firebase@12.19.0`, lazy-loaded only on `/signin`, `/signup`, `/reset`, `/verify` and `/account`.
+  - `initializeAuth(app, {persistence: inMemoryPersistence, popupRedirectResolver: browserPopupRedirectResolver})`.
+  - Config comes from `GET /api/config`.
+  - In `authMode:"fake"` the SDK is never loaded. `/signin` shows a "Test sign-in" form (uid, email, verified checkbox) that posts a `fake:` token.
+- **Pages:**
+  - `/signin?next=`: Google popup button + email/password form, generic error messages.
+  - `/signup`: create account, `updateProfile`, `sendEmailVerification({url: origin + "/verify"})`, then show "check your email".
+  - `/reset`: `sendPasswordResetEmail`, 60 s cooldown, generic message.
+  - `/verify`: "I've verified" button; reloads the user, gets a fresh ID token and creates the session; resend with cooldown.
+  - `/signout`: the flow in spec §4.6 step 7.
+  - `/account` (M1 minimal): email, provider, publicId-free; local progress per hub with synced/dirty state; "Sign out"; the account-mismatch resolution ("Discard this browser's progress" after confirm); placeholders for M2 export/delete.
+- **Sign-in completion** (spec §4.6 step 6):
+  1. `POST /api/auth/session`.
+  2. If `owner` exists, differs from the new `publicId` and local data is dirty: dialog [Download it as a file] [Discard and continue], then wipe.
+  3. `reconcileUp`: one or more `POST /api/sync` calls with every hub's dirty parts, batched ≤ 1 MiB, gzip via `CompressionStream` when available. Then `markSynced` the accepted/duplicate/stale results.
+  4. `writeOwner(publicId)`.
+  5. Broadcast `auth-changed`.
+  6. `location.assign(next)`. `next` must match `^/(h/[a-z0-9-]+)?$` or a known SPA route, else `/`.
+- **Header:** user initial + menu (Account, Sign out) from a `MeProvider` around `/api/me`.
+- **Budgets:** main ≤ 90 KB gz, Firebase chunk ≤ 80 KB gz.
+
+## 15. Test-only routes (mounted only when `APP_ENV=test`)
+- `POST /api/test/faults {op:"get"|"put"|"any", status, code, retryAfter?, count?}`: the next N progress/sync calls fail as specified.
+- `POST /api/test/clock {offsetMs}`: shifts the server clock (skew tests).
+- `POST /api/test/quota {writes?, reads?}`: sets today's meter (tier tests).
+- `POST /api/test/reset`: wipes the memory store, meters, rate limits and faults.
+- `GET /api/test/store`: dump of users and decoded progress `{uid, hub, part, upd, data}` plus usage.
+
+All require `X-StudyHubs: 1`. They are never mounted outside test (a unit test asserts this).
+
+## 16. M1 e2e scenarios (`site/e2e/tests/sync-*.spec.ts`; fake auth + memory store)
+- **S3:** signed-in sync, with the single-request coalescing count.
+- **S4:** remote newer than local is adopted.
+- **S5:** anonymous progress merges on first sign-in (both via the hub on reload and via `reconcileUp`).
+- **S6:** fault matrix (503, 429 `sync_paused`, 401, 413) → the right pill, toast and notice, no data loss, and recovery.
+- **S8:** cost — 10 answers at learner pace give ≤ 2 sync requests at tier 1. Close right after an answer → the server has the latest (keepalive). A large state (> 60 KB) is sent gzipped.
+- **S9:** AI-901 legacy round trip across two browser contexts.
+- **S10:** logout wipes hub keys (keeps `studyhub.codeLang`), and the server keeps the data. Signing back in restores it.
+- **S12:** a scripted session (`page.clock`) stays within the write budget per tier.
+- **S13:** account switch on one browser → the dialog. No cross-uid write ever reaches the store (checked through `/api/test/store`).
+- **S14:** device clock +1 day → notice, nothing stored.
+- **S16:** quota at budget → "Sync paused", no "storage full" toast, a reset-time notice, and the outbox drains after `/api/test/reset`.
+- **Every M0 spec must still pass.**
