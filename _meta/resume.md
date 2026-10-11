@@ -7,7 +7,7 @@ updated: 2026-10-11
 - **Active track:** AI-103 (technical/certifications/ai-103) · hub https://claude.ai/artifact/TdpMZLFYA9knTdjNyCms9F
 - **Hub program:** 52-build queue in `_meta/hub-program/README.md`. **Current run order:** DSA L1–L4 → System Design L1–L4 (both with every example in Python + JavaScript) → L1 hubs: Python, SQL, Qlik, Power BI, AI Engineering, JavaScript, Node.js, React, Docker, Next.js.
 - **Hubs built:** DSA L1 https://claude.ai/artifact/SWv6N1Uh2oiFNH1mxefcNr · DSA L2 https://claude.ai/artifact/DQhszKFoe8qbiNbSpWkqM5 · DSA L3 https://claude.ai/artifact/JfuakQWBwAvSgLi1rcuJUk (`technical/software-engineering/dsa/hubs/`).
-- **Next build:** #46 DSA L4 Expert, then System Design L1–L4 (#9, #21, #34, #47).
+- **Next build:** #46 DSA L4 Expert (in progress 2026-10-12: modules 1–6 of 10 written and tested; hub sources backed up in `.inbox/hubwork-backup/hubwork-src.tgz`), then System Design L1–L4 (#9, #21, #34, #47).
 - **Tools:** `_meta/tools/apply_hub_bundle.py <bundle.tgz>` (files + merged notes + parked cards); `_meta/tools/activate_deck.py <deck>` (start a deck, 8 cards a day).
 - **Audits done:** SD + DSA sheet links (cleaned `-verified.xlsx`); Qlik framework (8 issues).
 - **Cert facts to re-check at build:** PCEP-30-03 / PCAP-31-04 (Q3 2026), Qlik System Administrator status, Mirantis DCA, DP-600/DP-800 outlines from 19 Oct 2026, Node JSNAD/JSNSD retired.
