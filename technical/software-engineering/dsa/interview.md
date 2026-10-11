@@ -279,3 +279,117 @@ I read the constraints first, because they hint at the intended complexity: n �
 _Behavioural (STAR)_
 
 Use STAR. Situation: what was slow, how slow, and who noticed. Task: the target. Action: how you measured it, the complexity you found (an O(n²) scan, a shortest-path search repeated for every request), the algorithm or structure you replaced it with (a heap, a Fenwick tree, precomputation) and how you tested it against the old version. Result: the before and after numbers. If you're new, use a lab from this hub, like the shortest-path toolkit or the range-query lab.
+
+## L4 Expert (2026-10-09)
+
+### How do you find strongly connected components, and what are they good for?
+_Graph structure_
+
+An SCC is a largest set of vertices that can all reach each other, and shrinking each one to a node leaves a DAG, the condensation. Tarjan's algorithm finds them in one depth-first search: it tracks discovery times and low-link values, lowers low[u] only through vertices still on its stack, and pops a whole component when low[u] equals tin[u]. Kosaraju's does two searches, one on the graph for finishing order and one on the reversed graph. Both are O(V + E), and I'd write them with an explicit stack, because a long path would overflow the recursion. They're useful whenever cycles get in the way: DP over the condensation, deadlock detection, and 2-SAT.
+
+Follow-ups: In what order does Tarjan's algorithm output the components? · How would you collect the most coins in a graph with cycles?
+
+### How does 2-SAT work, and why is it linear?
+_Graph structure_
+
+Each clause (a ∨ b) becomes two implications: if a is false then b must be true, and if b is false then a must be. That gives a graph on 2n literals with 2m edges. The formula is unsatisfiable exactly when some variable and its negation are in the same SCC, because then each forces the other. Otherwise I set each variable to whichever of x and ¬x comes later in topological order of the condensation, which with Tarjan's numbering is comp[x] < comp[¬x]. One SCC pass makes the whole thing O(n + m).
+
+Follow-ups: Why doesn't the same trick work for 3-SAT? · How would you encode “exactly one of a and b”?
+
+### State the max-flow min-cut theorem and explain how you'd find a minimum cut.
+_Flows & matching_
+
+The largest flow from s to t equals the smallest total capacity of edges whose removal separates s from t. Every flow is at most every cut, because all flow has to cross it, and when no augmenting path is left, the vertices s still reaches in the residual graph form a cut whose edges are all full, so the two are equal. To find the cut I run a max-flow algorithm such as Dinic, which is O(V² E), then search from s using only edges with spare capacity; the cut is the edges from the reached vertices to the rest. With unit capacities, the cut size is the number of links an attacker must remove.
+
+Follow-ups: Why do the algorithms use shortest augmenting paths? · How would you model a vertex with limited capacity?
+
+### Why does the residual graph need reverse edges?
+_Flows & matching_
+
+Because a greedy first choice can block the true maximum. In the diamond s → a → b → t, sending the first unit through the middle edge leaves no forward path for a second unit, even though two units fit. The residual graph adds a reverse edge for every unit of flow, so a later path can send flow back along a → b, which cancels it and reroutes it. Storing each edge next to its reverse, at indexes e and e ^ 1, makes a push two updates: cap[e] −= f and cap[e ^ 1] += f.
+
+Follow-ups: What would plain greedy path-finding return on the diamond? · Does Dinic ever use that middle edge there?
+
+### How would you count routes between two servers that share no link? And no machine?
+_Flows & matching_
+
+For routes that share no link, I give every link capacity 1 and run max flow from one server to the other; by Menger's theorem the flow value is the number of link-disjoint routes, and following the full edges from the source recovers them. If a link works both ways, I add it as two directed edges. For routes that share no machine, I split every machine v into v_in → v_out with capacity 1, send incoming links to v_in and outgoing links from v_out, and run the same flow from the source's out-copy to the sink's in-copy. Both are max flows on unit networks, which Dinic handles quickly.
+
+Follow-ups: How do you recover the actual routes? · What changes if each link can carry up to c routes?
+
+### How would you assign tasks to workers at the least total cost?
+_Flows & matching_
+
+If it's n workers and n tasks with a cost per pair, that's the assignment problem, and the Hungarian algorithm solves it in O(n³): it keeps potentials that make every reduced cost non-negative and adds one worker at a time along zero-cost edges. For maximising a score, I negate the scores. If there are capacities or some workers can take several tasks, I'd use min-cost flow instead: s → worker, worker → task with the cost, task → t, and successive shortest paths with Bellman–Ford, because the reverse edges have negative costs. Without costs, plain bipartite matching (Kuhn, or Hopcroft–Karp for large graphs) is enough.
+
+Follow-ups: Why can't min-cost flow use plain Dijkstra? · How would you handle a pair that isn't allowed?
+
+### How does binary lifting answer lowest common ancestor queries?
+_Trees_
+
+I store, for every vertex, its 2^j-th ancestor for each j: up[0] is the parent and up[j][v] = up[j − 1][up[j − 1][v]], which takes O(n log n) time and memory. For a query, I lift the deeper vertex to the other's depth using the bits of the depth difference. If they meet, that's the answer; otherwise I try jumps from the largest down and take one only when it lands the two vertices on different ancestors, and then the LCA is the parent of either. Each query is O(log n), and distance is depth[a] + depth[b] − 2 · depth[LCA].
+
+Follow-ups: How many levels do you need for n vertices? · How would you get O(1) queries instead?
+
+### How do you answer subtree-sum and path-sum queries on a tree that gets point updates?
+_Trees_
+
+I flatten the tree with a DFS preorder: each vertex gets an entry time, and its subtree is the contiguous range [tin, tout). A Fenwick tree over those positions gives point updates and subtree sums in O(log n). For sums from the root to a vertex, I add each vertex's value over its whole subtree range instead, so the value at a vertex's position is the sum of its ancestors; a path between two vertices then combines four of those values using the LCA. The DFS must be iterative, because a path-shaped tree is as deep as it is long.
+
+Follow-ups: How would you support updates on whole paths? · What changes if the values are on edges instead of vertices?
+
+### What is a suffix array, and what can you do with it?
+_Strings_
+
+It's the start positions of all suffixes of a string in sorted order. I'd build it by prefix doubling, sorting by pairs of ranks of the first k and the next k characters, which is O(n log² n) with a normal sort or O(n log n) with radix sort, and then build the LCP array of neighbouring suffixes with Kasai's algorithm in O(n). Since every substring is a prefix of a suffix, the pair answers a lot: distinct substrings are n(n + 1)/2 minus the sum of the LCP array, the longest repeat is the largest LCP, a pattern's occurrences are one block found by binary search, and joining two strings with a separator gives their longest common substring.
+
+Follow-ups: Why does Kasai's algorithm run in linear time? · When would you rather use rolling hashes?
+
+### When would you choose a sparse table, a segment tree, square-root decomposition or Mo's algorithm?
+_Data structures_
+
+A sparse table is for static data with an idempotent operation such as min, max or gcd: O(n log n) to build and O(1) per query, but no updates. With updates and an operation that merges neatly, I'd use a Fenwick or segment tree at O(log n) per operation. When the per-block summary is easy but merging is awkward, like counting values below x with updates, blocks of about √n cost O(√n) per operation with very little code. And when every query is known in advance and I can add or remove one element cheaply, like counting distinct values, Mo's algorithm sorts the queries and slides one window across them in about O(n √q).
+
+Follow-ups: Why can't a sparse table do range sums in O(1)? · Which block size does Mo's algorithm use?
+
+### How does a skip list work, and where is it used?
+_Data structures_
+
+It's a sorted linked list with express lanes: every node also joins the level above with probability one half, so each level has about half the nodes of the one below and there are about log₂ n levels. A search starts at the top, moves right while the next value is smaller than the target, and drops a level when it can't, so search, insert and delete take expected O(log n) time and expected O(n) space. Inserting records the last smaller node on each level and splices the new node in after them; there are no rotations at all. Redis uses one for sorted sets, and LevelDB and RocksDB for their in-memory write buffers.
+
+Follow-ups: What does “expected” mean here, and can an input make it slow? · How would you find the k-th element quickly?
+
+### How would you check whether a point is inside a polygon, robustly?
+_Geometry_
+
+With integer coordinates I'd use only exact orientation tests. First I check every edge: if the cross product of the edge and the point is zero and the point is within the edge's bounding box, it's on the boundary. Otherwise I cast a ray to the right and count crossings, counting an edge only when its two ends are on different sides of the ray's line, a half-open rule that counts a vertex on the ray once and skips flat edges; an odd count means inside. Each point is O(n). In JavaScript I'd compute the cross products with BigInt, because coordinates near 10⁹ give products near 10¹⁸, past 2⁵³.
+
+Follow-ups: How would you speed this up for a convex polygon? · What goes wrong with floating point?
+
+### How would you compute the 10¹⁸-th Fibonacci number modulo 10⁹ + 7?
+_Maths_
+
+The pair (F(n), F(n − 1)) comes from (F(n − 1), F(n − 2)) by multiplying by the matrix [[1, 1], [1, 0]], so F(n) is an entry of that matrix to the n-th power. Repeated squaring computes the power with about 60 squarings and at most 60 extra products for n = 10¹⁸, each a 2 × 2 product reduced modulo 10⁹ + 7. The same idea works for any linear recurrence of order d in O(d³ log n), and for counting walks of length k with an adjacency matrix. In JavaScript the products of two residues reach about 10¹⁸, so I'd use BigInt.
+
+Follow-ups: Which recurrences can't be done this way? · How would you count walks of length k between two vertices?
+
+### When does the convex hull trick apply, and what does it cost?
+_DP optimisation_
+
+When a DP transition is a minimum (or maximum) over earlier states of linear functions of something about the current state: dp[i] = min over j of m_j · x_i + c_j. Each earlier state is a line and each query is a point, so dp[i] is the lowest line at x_i. If slopes arrive in sorted order and the queries are sorted too, a deque keeps the lower envelope, and each line is added and removed once: O(n) overall. Otherwise a Li Chao tree takes lines in any order at O(log C) per insert and query. I compare crossing points by cross-multiplying, with BigInt in JavaScript, so nothing is rounded.
+
+Follow-ups: How do you decide that a middle line is useless? · What would you use if the best split point is monotone instead?
+
+### How do you make sure a tricky solution is correct before you submit it?
+_Testing_
+
+I write a brute force straight from the definition, independent of my solution and as slow as it needs to be, and a seeded generator of small random inputs with tiny value ranges, so duplicates and edge cases come up often. A loop runs both on thousands of inputs and stops at the first disagreement, printing the input; I shrink it to a minimal failing case before debugging. Then I add hand-made edge cases and a few tests at the maximum values and sizes, because small tests miss overflow and time limits. Passing all that is strong evidence, not proof, so I also write down why the solution is correct.
+
+Follow-ups: Why use small inputs rather than large ones? · How do you make the random tests reproducible in JavaScript?
+
+### Tell me about a time a bug got past your tests.
+_Behavioural (STAR)_
+
+Situation: I had a range-query solution that passed every example and my own tests, and failed on a hidden test. Task: find the bug quickly without seeing the test. Action: I wrote a brute force from the problem's definition and a seeded generator of tiny arrays, and within seconds they disagreed on a three-element array with two equal values; shrinking it showed I'd used < where the merge needed ≤. I fixed it, added the case to my tests and made stress testing part of my routine for anything clever. Result: the fix was accepted, and I've caught several similar bugs before submitting since.
+
+Follow-ups: What would you do differently next time? · How do you decide when a solution needs a stress test?
