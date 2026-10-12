@@ -317,3 +317,33 @@ export function wipeKeys(storage: StorageLike, legacyKeys: readonly string[] = [
   }
   return keys;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Profile hint (M1): the signed-in menu shows the user's initial. The bridge caches it per
+// publicId in `studyhubs.profile` (wiped on logout like every non-UI bridge key); the client
+// shell may prime it at sign-in with writeProfile() so hub pages never need GET /api/me.
+
+export const PROFILE_KEY = `${BRIDGE_PREFIX}profile`;
+
+/** First letter of a display name or email, upper-cased ("" when there is none). */
+export function initialOf(nameOrEmail: unknown): string {
+  const s = typeof nameOrEmail === "string" ? nameOrEmail.trim() : "";
+  const ch = s ? Array.from(s)[0] : "";
+  return ch ? ch.toUpperCase() : "";
+}
+
+/** The cached initial for `publicId`, or null when absent or cached for another account. */
+export function readProfile(storage: StorageLike, publicId: string): string | null {
+  const o = parseJson(safeGet(storage, PROFILE_KEY));
+  return isObject(o) && o.id === publicId && typeof o.initial === "string" && o.initial ? o.initial : null;
+}
+
+export function writeProfile(storage: StorageLike, publicId: string, nameOrEmail: unknown): void {
+  const initial = initialOf(nameOrEmail);
+  if (!initial) return;
+  try {
+    storage.setItem(PROFILE_KEY, JSON.stringify({ id: publicId, initial }));
+  } catch {
+    /* ignore */
+  }
+}

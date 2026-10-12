@@ -1,0 +1,447 @@
+"""Firestore store (build-contracts.md section 11, architecture-spec.md section 4.8).
+
+Data model (every field top-level and index-exempt, see site/firebase/):
+
+    users/{uid}              email, emailVerified, name, photo, provider, createdAt, lastLoginAt
+    progress/{uid}~{hubId}   uid, hub, u_<part> (int), p_<part> (bytes, gzip of compact JSON),
+                             n_<part> (raw length), done (int), t (server timestamp)
+    usage/{YYYY-MM-DD}       reads, writes, deletes, fsEgress, appEgress  (Increment)
+    usage/m-{YYYY-MM}        the same per month
+    meta/{key}               the setting's fields plus `v` (optimistic version)
+
+Cost per operation: `get_hub` 1 read (+1 only when some part is newer than `known`);
+`put_parts` 1 read + at most 1 write, in one transaction that reads only the `u_*`
+stamps through a field mask.
+
+Every RPC carries `timeout=10` and a short `Retry` that never retries
+`ResourceExhausted`; the transaction's own begin/commit/rollback RPCs are bounded the
+same way (the library's defaults would retry `ResourceExhausted` for 60 s).
+`ResourceExhausted` becomes `QuotaExhausted(kind, next Pacific midnight)`;
+`ServiceUnavailable`, `DeadlineExceeded`, `RetryError` and other transport failures
+become `Unavailable`.
+
+The client is created lazily on the first call, so a server whose credentials are
+broken still starts and answers /healthz and the hubs.
+"""
+
+from __future__ import annotations
+
+import logging
+import threading
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from google.api_core import exceptions as gexc
+from google.api_core.retry import Retry, if_exception_type
+from google.auth import exceptions as auth_exc
+from google.cloud.firestore_v1 import Increment
+from google.cloud.firestore_v1.client import Client
+from google.cloud.firestore_v1.transaction import Transaction, transactional
+from google.cloud.firestore_v1.transforms import SERVER_TIMESTAMP
+
+from app.progress.decide import decide
+from app.store.base import (
+    PARTS,
+    LaterMethods,
+    OpCounter,
+    PartIn,
+    PartOut,
+    PartResult,
+    QuotaExhausted,
+    StoreError,
+    TooLarge,
+    Unavailable,
+    UserRecord,
+    check_setting_version,
+    merged_done,
+    progress_doc_id,
+)
+
+logger = logging.getLogger(__name__)
+
+TIMEOUT = 10.0
+RETRY = Retry(
+    predicate=if_exception_type(
+        gexc.ServiceUnavailable, gexc.DeadlineExceeded, gexc.InternalServerError
+    ),
+    initial=0.2,
+    maximum=2.0,
+    multiplier=2.0,
+    timeout=8.0,
+)
+TX_ATTEMPTS = 3
+LOGIN_TOUCH_INTERVAL = timedelta(hours=24)
+STAMP_FIELDS = [f"u_{p}" for p in PARTS]
+USER_FIELDS = ["email", "emailVerified", "name", "photo", "provider", "createdAt", "lastLoginAt"]
+# Rough serialized size of a document read through the stamp mask (egress estimate).
+STAMPS_BYTES = 16 * len(PARTS) + 32
+_SIZE_HINTS = ("exceeds the maximum", "too big", "too large", "maximum allowed size", "longer than")
+
+
+class _BoundedTransaction(Transaction):
+    """A Transaction whose begin/commit/rollback RPCs carry our timeout and retry."""
+
+    def _begin(self, retry_id: bytes | None = None) -> None:
+        if self.in_progress:
+            raise ValueError("transaction already in progress")
+        response = self._client._firestore_api.begin_transaction(
+            request={
+                "database": self._client._database_string,
+                "options": self._options_protobuf(retry_id),
+            },
+            metadata=self._client._rpc_metadata,
+            retry=RETRY,
+            timeout=TIMEOUT,
+        )
+        self._id = response.transaction
+
+    def _rollback(self) -> None:
+        if not self.in_progress:
+            raise ValueError("no transaction in progress")
+        try:
+            self._client._firestore_api.rollback(
+                request={"database": self._client._database_string, "transaction": self._id},
+                metadata=self._client._rpc_metadata,
+                retry=RETRY,
+                timeout=TIMEOUT,
+            )
+        finally:
+            self._clean_up()
+
+    def _commit(self) -> list[Any]:
+        if not self.in_progress:
+            raise ValueError("no transaction in progress")
+        response = self._client._firestore_api.commit(
+            request={
+                "database": self._client._database_string,
+                "writes": self._write_pbs,
+                "transaction": self._id,
+            },
+            metadata=self._client._rpc_metadata,
+            retry=RETRY,
+            timeout=TIMEOUT,
+        )
+        self._clean_up()
+        self.write_results = list(response.write_results)
+        self.commit_time = response.commit_time
+        return self.write_results
+
+
+def _chain(exc: BaseException) -> Iterator[BaseException]:
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        yield current
+        current = current.__cause__ or current.__context__
+
+
+class FirestoreStore(LaterMethods):
+    kind = "firestore"
+
+    def __init__(
+        self,
+        *,
+        project_id: str,
+        reset_at: Callable[[], datetime],
+        credentials_file: str | None = None,
+        credentials_info: dict[str, Any] | None = None,
+        emulator_host: str | None = None,
+        client: Client | None = None,
+    ) -> None:
+        self.ops = OpCounter()
+        self._project_id = project_id
+        self._reset_at = reset_at
+        self._credentials_file = credentials_file
+        self._credentials_info = credentials_info
+        self._emulator_host = emulator_host
+        self._db: Client | None = client
+        self._lock = threading.Lock()
+
+    # -- client ----------------------------------------------------------------------
+
+    def _make_client(self) -> Client:
+        if self._emulator_host:
+            from google.auth.credentials import AnonymousCredentials
+
+            client = Client(project=self._project_id, credentials=AnonymousCredentials())
+            client._emulator_host = self._emulator_host  # the library only reads the env var
+            return client
+        credentials = None
+        if self._credentials_file or self._credentials_info:
+            from google.oauth2 import service_account
+
+            scopes = ["https://www.googleapis.com/auth/datastore"]
+            if self._credentials_file:
+                credentials = service_account.Credentials.from_service_account_file(
+                    self._credentials_file, scopes=scopes
+                )
+            else:
+                credentials = service_account.Credentials.from_service_account_info(
+                    self._credentials_info, scopes=scopes
+                )
+        return Client(project=self._project_id, credentials=credentials)  # ADC when None
+
+    @property
+    def db(self) -> Client:
+        if self._db is None:
+            with self._lock:
+                if self._db is None:
+                    with self._mapped("reads"):
+                        self._db = self._make_client()
+        return self._db
+
+    def close(self) -> None:
+        if self._db is not None:
+            try:
+                self._db.close()
+            except Exception:  # noqa: BLE001 - best effort on shutdown
+                logger.debug("Firestore client close failed", exc_info=True)
+
+    # -- error mapping ---------------------------------------------------------------
+
+    @contextmanager
+    def _mapped(self, kind: str) -> Iterator[None]:
+        try:
+            yield
+        except StoreError:
+            raise
+        except Exception as exc:
+            raise self._translate(exc, kind) from exc
+
+    def _translate(self, exc: BaseException, kind: str) -> StoreError:
+        chain = list(_chain(exc))
+        for item in chain:
+            if isinstance(item, gexc.ResourceExhausted):
+                logger.warning("Firestore ResourceExhausted (%s): %s", kind, item)
+                return QuotaExhausted(kind, self._reset_at(), str(item.message or "quota exhausted"))
+        for item in chain:
+            if isinstance(item, gexc.InvalidArgument) and any(
+                hint in str(item).lower() for hint in _SIZE_HINTS
+            ):
+                return TooLarge(str(item))
+        for item in chain:
+            if isinstance(
+                item,
+                gexc.ServiceUnavailable
+                | gexc.DeadlineExceeded
+                | gexc.RetryError
+                | gexc.InternalServerError
+                | gexc.Aborted
+                | auth_exc.GoogleAuthError,
+            ):
+                logger.warning("Firestore unavailable (%s): %s", kind, item)
+                return Unavailable(str(item))
+        if isinstance(exc, ValueError) and "attempts" in str(exc):
+            return Unavailable("transaction contention: " + str(exc))  # max_attempts exhausted
+        logger.error("Firestore error (%s): %r", kind, exc)
+        return Unavailable(f"Firestore error: {type(exc).__name__}")
+
+    # -- health and users ------------------------------------------------------------
+
+    def ping(self) -> None:
+        with self._mapped("reads"):
+            self.db.collection("meta").document("settings").get(
+                field_paths=["v"], retry=RETRY, timeout=TIMEOUT
+            )
+        self.ops.add(reads=1)
+
+    def upsert_user(self, u: UserRecord, *, touch_login: bool) -> None:
+        now = u.last_login_at or datetime.now(UTC)
+        ref = self.db.collection("users").document(u.uid)
+        with self._mapped("reads"):
+            snap = ref.get(field_paths=USER_FIELDS, retry=RETRY, timeout=TIMEOUT)
+        self.ops.add(reads=1, fs_egress=128)
+        profile = {
+            "email": u.email,
+            "emailVerified": bool(u.email_verified),
+            "name": u.name,
+            "photo": u.photo,
+            "provider": u.provider,
+        }
+        if not snap.exists:
+            data: dict[str, Any] = {**profile, "createdAt": now, "lastLoginAt": now if touch_login else None}
+        else:
+            current = snap.to_dict() or {}
+            data = {k: v for k, v in profile.items() if current.get(k) != v}
+            last = current.get("lastLoginAt")
+            if touch_login and (not isinstance(last, datetime) or now - last >= LOGIN_TOUCH_INTERVAL):
+                data["lastLoginAt"] = now
+            if not data:
+                return
+        with self._mapped("writes"):
+            ref.set(data, merge=True, retry=RETRY, timeout=TIMEOUT)
+        self.ops.add(writes=1)
+
+    def get_user(self, uid: str) -> UserRecord | None:
+        with self._mapped("reads"):
+            snap = self.db.collection("users").document(uid).get(retry=RETRY, timeout=TIMEOUT)
+        self.ops.add(reads=1, fs_egress=128)
+        if not snap.exists:
+            return None
+        d = snap.to_dict() or {}
+        return UserRecord(
+            uid=uid,
+            email=d.get("email"),
+            email_verified=bool(d.get("emailVerified")),
+            name=d.get("name"),
+            photo=d.get("photo"),
+            provider=d.get("provider"),
+            created_at=d.get("createdAt"),
+            last_login_at=d.get("lastLoginAt"),
+        )
+
+    def count_users(self) -> int:
+        with self._mapped("reads"):
+            result = self.db.collection("users").count().get(retry=RETRY, timeout=TIMEOUT)
+        n = int(result[0][0].value)
+        self.ops.add(reads=max(1, -(-n // 1000)))
+        return n
+
+    # -- progress --------------------------------------------------------------------
+
+    def _progress_ref(self, uid: str, hub: str) -> Any:
+        return self.db.collection("progress").document(progress_doc_id(uid, hub))
+
+    def get_hub(self, uid: str, hub: str, known: dict[str, int]) -> dict[str, PartOut]:
+        ref = self._progress_ref(uid, hub)
+        with self._mapped("reads"):
+            snap = ref.get(field_paths=STAMP_FIELDS, retry=RETRY, timeout=TIMEOUT)
+        self.ops.add(reads=1, fs_egress=STAMPS_BYTES if snap.exists else 0)
+        if not snap.exists:
+            return {}
+        stamps = _stamps(snap.to_dict())
+        changed = [p for p, upd in stamps.items() if upd > known.get(p, 0)]
+        out = {p: PartOut(upd, None) for p, upd in stamps.items()}
+        if not changed:
+            return out
+        with self._mapped("reads"):
+            full = ref.get(
+                field_paths=STAMP_FIELDS + [f"p_{p}" for p in changed], retry=RETRY, timeout=TIMEOUT
+            )
+        data = full.to_dict() or {} if full.exists else {}
+        egress = STAMPS_BYTES
+        latest = _stamps(data)
+        for part in changed:
+            blob = data.get(f"p_{part}")
+            upd = latest.get(part)
+            if isinstance(blob, bytes) and upd is not None and upd > known.get(part, 0):
+                out[part] = PartOut(upd, blob)
+                egress += len(blob)
+            elif upd is None:
+                out.pop(part, None)  # vanished between the two reads
+            # otherwise keep the first read's stub: never a stub newer than `known`
+        self.ops.add(reads=1, fs_egress=egress)
+        return out
+
+    def put_parts(self, uid: str, hub: str, parts: dict[str, PartIn], now_ms: int) -> dict[str, PartResult]:
+        ref = self._progress_ref(uid, hub)
+        outcome: dict[str, Any] = {}
+
+        def run(tx: Transaction) -> dict[str, PartResult]:
+            outcome["phase"] = "reads"
+            snap = ref.get(field_paths=STAMP_FIELDS, transaction=tx, retry=RETRY, timeout=TIMEOUT)
+            self.ops.add(reads=1, fs_egress=STAMPS_BYTES if snap.exists else 0)
+            stored = _stamps(snap.to_dict()) if snap.exists else {}
+            results: dict[str, PartResult] = {}
+            accepted: set[str] = set()
+            update: dict[str, Any] = {}
+            for part, incoming in parts.items():
+                status = decide(stored.get(part), incoming.upd)
+                if status == "accepted":
+                    accepted.add(part)
+                    results[part] = PartResult(status, incoming.upd)
+                    update[f"u_{part}"] = incoming.upd
+                    update[f"p_{part}"] = incoming.gz
+                    update[f"n_{part}"] = incoming.raw_len
+                else:
+                    results[part] = PartResult(status, stored[part])
+            if update:
+                done = merged_done(parts, accepted)
+                if done is not None:
+                    update["done"] = done
+                update.update({"uid": uid, "hub": hub, "t": SERVER_TIMESTAMP})
+                tx.set(ref, update, merge=True)
+            outcome["write"] = bool(update)
+            outcome["phase"] = "writes"
+            return results
+
+        tx = _BoundedTransaction(self.db, max_attempts=TX_ATTEMPTS)
+        try:
+            results = transactional(run)(tx)
+        except StoreError:
+            raise
+        except Exception as exc:
+            raise self._translate(exc, outcome.get("phase", "reads")) from exc
+        if outcome.get("write"):
+            self.ops.add(writes=1)
+        return results
+
+    # -- usage and settings ------------------------------------------------------------
+
+    def add_usage(self, day: str, deltas: dict[str, int]) -> None:
+        fields = {name: Increment(int(value)) for name, value in deltas.items() if value}
+        if not fields:
+            return
+        with self._mapped("writes"):
+            self.db.collection("usage").document(day).set(fields, merge=True, retry=RETRY, timeout=TIMEOUT)
+        self.ops.add(writes=1)
+
+    def get_usage(self, keys: list[str]) -> dict[str, dict[str, int]]:
+        if not keys:
+            return {}
+        refs = [self.db.collection("usage").document(key) for key in keys]
+        out: dict[str, dict[str, int]] = {}
+        with self._mapped("reads"):
+            for snap in self.db.get_all(refs, retry=RETRY, timeout=TIMEOUT):
+                if snap.exists:
+                    out[snap.id] = {k: int(v) for k, v in (snap.to_dict() or {}).items() if isinstance(v, int)}
+        self.ops.add(reads=len(keys), fs_egress=64 * len(out))
+        return out
+
+    def get_setting(self, key: str) -> tuple[dict[str, Any], int] | None:
+        with self._mapped("reads"):
+            snap = self.db.collection("meta").document(key).get(retry=RETRY, timeout=TIMEOUT)
+        self.ops.add(reads=1, fs_egress=256 if snap.exists else 0)
+        if not snap.exists:
+            return None
+        data = snap.to_dict() or {}
+        version = int(data.pop("v", 0))
+        return data, version
+
+    def put_setting(self, key: str, value: dict[str, Any], *, expect_version: int | None) -> int:
+        if "v" in value:
+            raise ValueError("setting values must not use the reserved field 'v'")
+        ref = self.db.collection("meta").document(key)
+        outcome: dict[str, Any] = {}
+
+        def run(tx: Transaction) -> int:
+            outcome["phase"] = "reads"
+            snap = ref.get(field_paths=["v"], transaction=tx, retry=RETRY, timeout=TIMEOUT)
+            self.ops.add(reads=1)
+            current = int((snap.to_dict() or {}).get("v", 0)) if snap.exists else None
+            version = check_setting_version(current, expect_version)  # raises Conflict
+            tx.set(ref, {**value, "v": version})
+            outcome["phase"] = "writes"
+            return version
+
+        tx = _BoundedTransaction(self.db, max_attempts=TX_ATTEMPTS)
+        try:
+            version = transactional(run)(tx)
+        except StoreError:
+            raise
+        except Exception as exc:
+            raise self._translate(exc, outcome.get("phase", "reads")) from exc
+        self.ops.add(writes=1)
+        return version
+
+
+def _stamps(data: dict[str, Any] | None) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for part in PARTS:
+        value = (data or {}).get(f"u_{part}")
+        if isinstance(value, int) and not isinstance(value, bool):
+            out[part] = value
+    return out
