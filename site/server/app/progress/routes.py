@@ -13,7 +13,17 @@ from app.auth import ratelimit
 from app.auth.csrf import csrf_protect
 from app.auth.deps import get_viewer, require_user
 from app.errors import ApiError
-from app.progress.validate import Limits, loads, parse_known, parse_sync, parts_for, read_body, syncable_hub
+from app.progress.validate import (
+    HubBatch,
+    Limits,
+    decode_body,
+    loads,
+    parse_known,
+    parse_sync,
+    parts_for,
+    read_wire_body,
+    syncable_hub,
+)
 from app.runtime import Runtime, get_runtime
 from app.state import get_state
 
@@ -76,7 +86,13 @@ async def get_progress(request: Request, hub_id: str, known: str | None = None) 
     injected_fault(runtime, "get")
     blocked_until = runtime.guard.read_block()
     if blocked_until is not None:
-        raise ApiError(503, "unavailable", "Sync is paused until the quota resets", retry_at=blocked_until)
+        raise ApiError(
+            503,
+            "unavailable",
+            "Sync is paused until the quota resets",
+            retry_at=blocked_until,
+            now=runtime.clock.now(),
+        )
     known_map = parse_known(known, parts_for(hub))
     parts = await run_in_threadpool(runtime.progress.get_parts, uid, hub, known_map)
     body: dict[str, Any] = {
@@ -109,10 +125,8 @@ async def sync(request: Request) -> JSONResponse:
             retry_at=paused_until,
             now=runtime.clock.now(),
         )
-    raw = await read_body(
-        request, max_wire=settings.max_body, max_decompressed=settings.max_body_decompressed
-    )
-    data = loads(raw)
+    raw = await read_wire_body(request, max_wire=settings.max_body)
+    encoding = request.headers.get("content-encoding")
     now_ms = runtime.clock.now_ms()
     limits = Limits(
         now_ms=now_ms,
@@ -120,6 +134,13 @@ async def sync(request: Request) -> JSONResponse:
         max_part_gz=settings.max_part_gz,
         max_doc_gz=settings.max_doc_gz,
     )
-    batches = await run_in_threadpool(parse_sync, data, get_state(request).catalog, limits)
+    catalog = get_state(request).catalog
+
+    def prepare() -> list[HubBatch]:
+        # Inflating, parsing and gzipping up to 8 MiB is CPU work: keep it off the event loop.
+        data = loads(decode_body(raw, encoding, max_decompressed=settings.max_body_decompressed))
+        return parse_sync(data, catalog, limits)
+
+    batches = await run_in_threadpool(prepare)
     results = await run_in_threadpool(runtime.progress.sync, uid, batches, now_ms)
     return JSONResponse({"results": results, "policy": runtime.guard.policy(uid).to_json()}, headers=NO_STORE)

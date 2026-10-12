@@ -114,8 +114,8 @@ def gunzip_bounded(data: bytes, limit: int) -> bytes:
         raise invalid("gzip body is corrupt") from None
 
 
-async def read_body(request: Request, *, max_wire: int, max_decompressed: int) -> bytes:
-    """The request body, size-capped on the wire and after `Content-Encoding: gzip`."""
+async def read_wire_body(request: Request, *, max_wire: int) -> bytes:
+    """The raw request body as sent, refused (413) as soon as it passes `max_wire` bytes."""
     declared = request.headers.get("content-length")
     if declared is not None and declared.isdigit() and int(declared) > max_wire:
         raise ApiError(413, "too_large", "Request body is too large")
@@ -126,8 +126,12 @@ async def read_body(request: Request, *, max_wire: int, max_decompressed: int) -
         if total > max_wire:
             raise ApiError(413, "too_large", "Request body is too large")
         chunks.append(chunk)
-    raw = b"".join(chunks)
-    encoding = request.headers.get("content-encoding", "").strip().lower()
+    return b"".join(chunks)
+
+
+def decode_body(raw: bytes, content_encoding: str | None, *, max_decompressed: int) -> bytes:
+    """Undo `Content-Encoding: gzip` within `max_decompressed` bytes (CPU-bound: run in a thread)."""
+    encoding = (content_encoding or "").strip().lower()
     if encoding in ("", "identity"):
         if len(raw) > max_decompressed:
             raise ApiError(413, "too_large", "Request body is too large")
@@ -135,6 +139,12 @@ async def read_body(request: Request, *, max_wire: int, max_decompressed: int) -
     if encoding == "gzip":
         return gunzip_bounded(raw, max_decompressed)
     raise ApiError(415, "unsupported_media_type", "Content-Encoding must be gzip or absent")
+
+
+async def read_body(request: Request, *, max_wire: int, max_decompressed: int) -> bytes:
+    """Small bodies (sign-in, test routes): read and decode in one step."""
+    raw = await read_wire_body(request, max_wire=max_wire)
+    return decode_body(raw, request.headers.get("content-encoding"), max_decompressed=max_decompressed)
 
 
 def _reject_constant(name: str) -> Any:
