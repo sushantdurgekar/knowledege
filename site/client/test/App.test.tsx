@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App';
+import { resetConfigCache } from '../src/lib/api';
 import { catalogFetch, rawCatalog } from './fixtures';
 
 /** Shows the router's current search string so tests can assert URL state. */
@@ -25,7 +26,19 @@ function renderAt(path: string) {
 const location = () => screen.getByTestId('location').textContent;
 
 beforeEach(() => {
-  vi.stubGlobal('fetch', vi.fn(catalogFetch()));
+  resetConfigCache();
+  const catalog = catalogFetch();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/api/config')
+        ? new Response(JSON.stringify({ authMode: 'fake', firebase: null, origin: 'http://localhost:3000', version: 't' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        : catalog(input),
+    ),
+  );
 });
 
 describe('layout', () => {
@@ -44,7 +57,7 @@ describe('layout', () => {
   it('moves focus to the main landmark after client-side navigation', async () => {
     const { user } = renderAt('/privacy');
     await user.click(within(screen.getByRole('banner')).getByRole('link', { name: 'Sign in' }));
-    expect(screen.getByRole('heading', { level: 1, name: 'Accounts are coming soon' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in' })).toBeInTheDocument();
     expect(screen.getByRole('main')).toHaveFocus();
     expect(document.title).toBe('Sign in · Study Hubs');
   });
@@ -59,22 +72,27 @@ describe('routes', () => {
     expect(document.title).toBe('Page not found · Study Hubs');
   });
 
-  it.each(['/signin', '/signup', '/reset', '/verify', '/signout', '/account', '/admin', '/admin/backup'])(
-    'shows the accounts placeholder at %s',
-    (path) => {
-      renderAt(path);
-      expect(screen.getByRole('heading', { level: 1, name: 'Accounts are coming soon' })).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Browse all hubs' })).toHaveAttribute('href', '/');
-    },
-  );
+  it.each([
+    ['/signin', 'Sign in'],
+    ['/signup', 'Create an account'],
+    ['/reset', 'Reset your password'],
+    ['/verify', 'Verify your email'],
+    ['/signout', 'You’re signed out'],
+    ['/account', 'You’re not signed in'],
+    ['/admin', 'Coming soon'],
+    ['/admin/backup', 'Coming soon'],
+  ])('renders the page at %s', async (path, heading) => {
+    renderAt(path);
+    expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument();
+  });
 
-  it('offers a way back to the hub only for a safe ?next= hub path', () => {
+  it('carries only a safe ?next= over to the sign-up link', async () => {
     const { unmount } = renderAt('/signin?next=/h/ai-103');
-    expect(screen.getByRole('link', { name: 'Back to the hub' })).toHaveAttribute('href', '/h/ai-103');
+    expect(await screen.findByRole('link', { name: 'Create an account' })).toHaveAttribute('href', '/signup?next=%2Fh%2Fai-103');
     unmount();
-    for (const next of ['//evil.example', 'https://evil.example/h/x', '/h/x/../../admin', '/account']) {
+    for (const next of ['//evil.example', 'https://evil.example/h/x', '/h/x/../../admin', '/signout']) {
       const view = renderAt(`/signin?next=${encodeURIComponent(next)}`);
-      expect(screen.queryByRole('link', { name: 'Back to the hub' })).not.toBeInTheDocument();
+      expect(await screen.findByRole('link', { name: 'Create an account' })).toHaveAttribute('href', '/signup');
       view.unmount();
     }
   });
@@ -184,7 +202,7 @@ describe('catalog page', () => {
     act(() => {
       window.dispatchEvent(new StorageEvent('storage', { key: 'studyhub.dsa-l2.v2' }));
     });
-    expect(screen.getByText(/1 \/ 12 modules/)).toBeInTheDocument();
+    expect(await screen.findByText(/1 \/ 12 modules/)).toBeInTheDocument();
   });
 
   it('shows an error with a working retry when the catalog fails to load', async () => {

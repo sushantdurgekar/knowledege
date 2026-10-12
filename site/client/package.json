@@ -2,7 +2,7 @@
   "name": "study-hubs-client",
   "version": "0.1.0",
   "private": true,
-  "description": "React shell for the Study Hubs site: catalog, account placeholders, privacy and 404 pages. Builds into ../server/public.",
+  "description": "React shell for the Study Hubs site: catalog, account pages, privacy and 404 pages. Builds into ../server/public.",
   "license": "UNLICENSED",
   "type": "module",
   "engines": {
