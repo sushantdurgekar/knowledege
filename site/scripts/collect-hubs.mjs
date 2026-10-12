@@ -416,6 +416,12 @@ const titleCase = (name) =>
   name.split('-').filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
 
 /** Run every lint rule over the text; returns findings with allow-list status. */
+/** True for addresses on domains reserved for documentation and tests (RFC 2606, RFC 6761). */
+export function isReservedEmailDomain(address) {
+  const domain = address.slice(address.lastIndexOf('@') + 1).toLowerCase();
+  return /(^|\.)example\.(com|org|net)$/.test(domain) || /\.(example|test|invalid|localhost)$/.test(domain);
+}
+
 export function lintText(text, source, lintAllow) {
   const lineStarts = [0];
   for (let i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) lineStarts.push(i + 1);
@@ -432,6 +438,8 @@ export function lintText(text, source, lintAllow) {
   for (const { rule, re, secret } of LINT_RULES) {
     for (const m of text.matchAll(re)) {
       const raw = m[0];
+      // RFC 2606 / 6761 reserved names can never be real mailboxes (ana@example.com in a lesson).
+      if (rule === 'email' && isReservedEmailDomain(raw)) continue;
       const digest = sha256Hex(Buffer.from(raw, 'utf8'));
       const allowIdx = lintAllow.findIndex((a) =>
         (a.source === source || a.source === '*') && a.rule === rule &&

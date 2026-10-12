@@ -53,7 +53,7 @@ function buildFixtures(root) {
     bodyExtra: `<style>${SUBJECT_ACCENT_CSS}</style>\n`,
     dataScripts: [jsonHub({
       id: 'dsa-l1', code: 'DSA · L1', title: 'DSA L1 Foundation Hub', cert: 'Data Structures & Algorithms · L1 Foundation',
-      hero: { title: 'Think in **Big-O**, then solve', sub: 'x' }, contact: 'demo@example.org', modules: modules(8),
+      hero: { title: 'Think in **Big-O**, then solve', sub: 'x' }, contact: 'demo@studyhubs-demo.dev', modules: modules(8),
     })],
   });
   // 2. Engine v2, object literal plus a second data script using the bare HUB global, CRLF line endings.
@@ -114,7 +114,7 @@ function configFor(root, { withLint = true } = {}) {
   writeConfig(file, {
     legacy: { [P.legacy]: { id: 'ai901', keys: ['ai901hub.v1'] } },
     overrides: { [P.legacy]: { code: 'AI-901', cert: 'Made-up Fundamentals', blurb: 'Three-day sprint' } },
-    lintAllow: [{ source: P.dsa, rule: 'email', match: 'demo@example.org', reason: 'test fixture address' }],
+    lintAllow: [{ source: P.dsa, rule: 'email', match: 'demo@studyhubs-demo.dev', reason: 'test fixture address' }],
   });
   if (!withLint) fs.rmSync(path.join(root, ...P.lint.split('/')));
   return file;
@@ -348,7 +348,7 @@ describe('collect-hubs end to end (synthetic repo)', () => {
   it('honours a precise lintAllow entry', () => {
     const r = report.hubs.find((x) => x.source === P.dsa);
     assert.equal(r.status, 'published');
-    assert.deepEqual(r.lint.map((f) => [f.rule, f.match, f.allowed]), [['email', 'demo@example.org', true]]);
+    assert.deepEqual(r.lint.map((f) => [f.rule, f.match, f.allowed]), [['email', 'demo@studyhubs-demo.dev', true]]);
   });
 
   it('--strict exits 1 on the same input, and still writes the report', () => {
@@ -627,5 +627,17 @@ describe('collect-hubs units', () => {
 
   it('accepts lintAllow entries for every lint rule, and only those', () => {
     assert.deepEqual([...LINT_RULE_IDS].sort(), LINT_RULES.map((r) => r.rule).sort());
+  });
+});
+
+describe('publish lint: reserved example domains', () => {
+  it('skips RFC 2606/6761 example addresses but still flags real ones', async () => {
+    const { lintText, isReservedEmailDomain } = await import('../collect-hubs.mjs');
+    assert.ok(isReservedEmailDomain('ana@example.com'));
+    assert.ok(isReservedEmailDomain('ops@mail.example.org'));
+    assert.ok(isReservedEmailDomain('x@corp.test'));
+    assert.ok(!isReservedEmailDomain('ana@examples.com'));
+    const { findings } = lintText('mail ana@example.com or bob@gmail.com', 'hub.html', []);
+    assert.deepEqual(findings.map((f) => f.match), ['bob@gmail.com']);
   });
 });

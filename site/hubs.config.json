@@ -81,12 +81,6 @@
       "rule": "email",
       "match": "x@evil.com",
       "reason": "Made-up attacker address inside a prompt-injection exam scenario (hidden PDF text), not a real contact."
-    },
-    {
-      "source": "technical/certifications/ai-500/AI-500 Study Hub.html",
-      "rule": "email",
-      "match": "audit@ext.example",
-      "reason": "Illustrative address on the reserved .example TLD inside a prompt-injection exam question."
     }
   ]
 }
