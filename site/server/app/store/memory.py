@@ -2,7 +2,8 @@
 
 - One lock guards every dict, so `put_parts` is as atomic as a Firestore transaction.
 - Reads and writes are counted the way Firestore bills them: `get_hub` is 1 read
-  (+1 when some part is newer than `known`), `put_parts` is 1 read + at most 1 write.
+  (+1 when some part is newer than a non-empty `known`), `put_parts` is 1 read + at
+  most 1 write.
 - Fault hooks: `fail_next(op, exc, count=1)` raises `exc` from the next `count` calls of
   `op` ("any" matches every operation) and `latency_ms` sleeps before each call.
 - Refuses to exist when APP_ENV=production.
@@ -151,8 +152,10 @@ class MemoryStore(LaterMethods):
         self._enter("get_hub")
         with self._lock:
             doc = self._progress.get(progress_doc_id(uid, hub))
-            self.ops.add(reads=1, fs_egress=_stamps_size(doc))
+            # Nothing known yet: one full read (as the Firestore adapter does).
+            single = not any(v > 0 for v in known.values())
             if doc is None:
+                self.ops.add(reads=1)
                 return {}
             out: dict[str, PartOut] = {}
             newer = 0
@@ -162,8 +165,12 @@ class MemoryStore(LaterMethods):
                     newer += len(stored.gz) + PART_OVERHEAD
                 else:
                     out[part] = PartOut(stored.upd, None)
-            if newer:
+            if single:
                 self.ops.add(reads=1, fs_egress=_stamps_size(doc) + newer)
+            else:
+                self.ops.add(reads=1, fs_egress=_stamps_size(doc))
+                if newer:
+                    self.ops.add(reads=1, fs_egress=_stamps_size(doc) + newer)
             return out
 
     def put_parts(self, uid: str, hub: str, parts: dict[str, PartIn], now_ms: int) -> dict[str, PartResult]:

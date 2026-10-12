@@ -38,7 +38,7 @@ STORES = ("firestore", "memory")  # "postgres" arrives in M3
 MAINTENANCE_MODES = ("read_only", "full")
 
 # Development/test only. Production refuses to start without its own SECRET_KEY.
-DEV_SECRET_KEY = "studyhubs-development-secret-key-never-use-in-production"
+DEV_SECRET_KEY = "studyhubs-development-secret-key-never-use-in-production"  # noqa: S105
 MIN_SECRET_BYTES = 32
 # Firebase session cookies live 5 minutes to 2 weeks.
 MAX_SESSION_DAYS = 14
@@ -208,7 +208,7 @@ class Settings:
         set_(self, "hubs_dir", Path(self.hubs_dir))
         self._check_m1()
 
-    def _check_m1(self) -> None:  # noqa: C901 - one flat list of independent checks
+    def _check_m1(self) -> None:
         set_ = object.__setattr__
         prod = self.is_production
 
@@ -321,7 +321,7 @@ class Settings:
         return self.quota_writes * (1 - self.quota_reserve)
 
     @classmethod
-    def from_env(cls, environ: Mapping[str, str] | None = None) -> Settings:  # noqa: C901
+    def from_env(cls, environ: Mapping[str, str] | None = None) -> Settings:
         """Build settings from `environ` (default: os.environ). Empty values count as unset."""
         env = os.environ if environ is None else environ
 

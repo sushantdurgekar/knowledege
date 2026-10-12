@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import SECRET_TEXT, FakeBuild, FakePublic
+from tests.support import PROD_ENV, SECRET_TEXT, FakeBuild, FakePublic
 
 SERVER_DIR = Path(__file__).resolve().parents[1]
 
@@ -39,7 +39,10 @@ def server(build: FakeBuild, public: FakePublic, secret_file: Path, tmp_path: Pa
         "HUBS_DIR": str(build.root),
         "RENDER_GIT_COMMIT": "smoke42",
         "PORT": str(port),
+        **PROD_ENV,  # M1: production refuses to start without these
     }
+    for name in ("FIRESTORE_EMULATOR_HOST", "GOOGLE_APPLICATION_CREDENTIALS", "STORE", "AUTH_MODE"):
+        env.pop(name, None)
     command = [
         sys.executable, "-m", "uvicorn", "app.main:app",
         "--host", "127.0.0.1", "--port", str(port), "--workers", "1",

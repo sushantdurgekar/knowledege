@@ -9,7 +9,8 @@ Data model (every field top-level and index-exempt, see site/firebase/):
     usage/m-{YYYY-MM}        the same per month
     meta/{key}               the setting's fields plus `v` (optimistic version)
 
-Cost per operation: `get_hub` 1 read (+1 only when some part is newer than `known`);
+Cost per operation: `get_hub` 1 read (+1 only when some part is newer than a
+non-empty `known`; with nothing known it is one read with the full field mask);
 `put_parts` 1 read + at most 1 write, in one transaction that reads only the `u_*`
 stamps through a field mask.
 
@@ -63,9 +64,7 @@ logger = logging.getLogger(__name__)
 
 TIMEOUT = 10.0
 RETRY = Retry(
-    predicate=if_exception_type(
-        gexc.ServiceUnavailable, gexc.DeadlineExceeded, gexc.InternalServerError
-    ),
+    predicate=if_exception_type(gexc.ServiceUnavailable, gexc.DeadlineExceeded, gexc.InternalServerError),
     initial=0.2,
     maximum=2.0,
     multiplier=2.0,
@@ -74,6 +73,7 @@ RETRY = Retry(
 TX_ATTEMPTS = 3
 LOGIN_TOUCH_INTERVAL = timedelta(hours=24)
 STAMP_FIELDS = [f"u_{p}" for p in PARTS]
+PAYLOAD_FIELDS = [f"p_{p}" for p in PARTS]
 USER_FIELDS = ["email", "emailVerified", "name", "photo", "provider", "createdAt", "lastLoginAt"]
 # Rough serialized size of a document read through the stamp mask (egress estimate).
 STAMPS_BYTES = 16 * len(PARTS) + 32
@@ -197,7 +197,7 @@ class FirestoreStore(LaterMethods):
         if self._db is not None:
             try:
                 self._db.close()
-            except Exception:  # noqa: BLE001 - best effort on shutdown
+            except Exception:
                 logger.debug("Firestore client close failed", exc_info=True)
 
     # -- error mapping ---------------------------------------------------------------
@@ -307,6 +307,21 @@ class FirestoreStore(LaterMethods):
 
     def get_hub(self, uid: str, hub: str, known: dict[str, int]) -> dict[str, PartOut]:
         ref = self._progress_ref(uid, hub)
+        if not any(v > 0 for v in known.values()):
+            # Nothing known yet (first load, the legacy seed): every stored part is
+            # newer, so one read with the full mask beats stamps-then-payloads.
+            with self._mapped("reads"):
+                snap = ref.get(field_paths=STAMP_FIELDS + PAYLOAD_FIELDS, retry=RETRY, timeout=TIMEOUT)
+            data = (snap.to_dict() or {}) if snap.exists else {}
+            out: dict[str, PartOut] = {}
+            egress = STAMPS_BYTES if snap.exists else 0
+            for part, upd in _stamps(data).items():
+                blob = data.get(f"p_{part}")
+                if isinstance(blob, bytes):
+                    out[part] = PartOut(upd, blob)
+                    egress += len(blob)
+            self.ops.add(reads=1, fs_egress=egress)
+            return out
         with self._mapped("reads"):
             snap = ref.get(field_paths=STAMP_FIELDS, retry=RETRY, timeout=TIMEOUT)
         self.ops.add(reads=1, fs_egress=STAMPS_BYTES if snap.exists else 0)
@@ -321,7 +336,7 @@ class FirestoreStore(LaterMethods):
             full = ref.get(
                 field_paths=STAMP_FIELDS + [f"p_{p}" for p in changed], retry=RETRY, timeout=TIMEOUT
             )
-        data = full.to_dict() or {} if full.exists else {}
+        data = (full.to_dict() or {}) if full.exists else {}
         egress = STAMPS_BYTES
         latest = _stamps(data)
         for part in changed:
@@ -397,7 +412,9 @@ class FirestoreStore(LaterMethods):
         with self._mapped("reads"):
             for snap in self.db.get_all(refs, retry=RETRY, timeout=TIMEOUT):
                 if snap.exists:
-                    out[snap.id] = {k: int(v) for k, v in (snap.to_dict() or {}).items() if isinstance(v, int)}
+                    out[snap.id] = {
+                        k: int(v) for k, v in (snap.to_dict() or {}).items() if isinstance(v, int)
+                    }
         self.ops.add(reads=len(keys), fs_egress=64 * len(out))
         return out
 

@@ -1,7 +1,4 @@
-"""Health and the small M0 JSON endpoints.
-
-M1 replaces /api/me with the session-aware version (auth/) and adds /api/config.
-"""
+"""Health and version. /api/me and /api/config live in app/auth/routes.py (M1)."""
 
 from __future__ import annotations
 
@@ -27,9 +24,3 @@ async def version(request: Request) -> JSONResponse:
     return JSONResponse(
         {"version": __version__, "commit": get_state(request).settings.git_commit}, headers=NO_STORE
     )
-
-
-@router.get("/api/me")
-async def me() -> JSONResponse:
-    """M0 has no accounts: everyone is anonymous."""
-    return JSONResponse({"signedIn": False}, headers=NO_STORE)

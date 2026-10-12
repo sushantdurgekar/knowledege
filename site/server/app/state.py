@@ -8,12 +8,16 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from starlette.requests import Request
 
 from app.catalog import Catalog, CatalogError, load_catalog
 from app.config import Settings
 from app.precompressed import IDENTITY, AssetDirectory, FileHasher
+
+if TYPE_CHECKING:
+    from app.runtime import Runtime
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +42,7 @@ class AppState:
     catalog: Catalog | None = None
     catalog_error: str | None = "not loaded yet"
     public: PublicFiles | None = None
+    runtime: Runtime | None = None  # M1 services (store, auth, quota), set by create_app
 
     def load(self) -> None:
         """Load the catalog and scan PUBLIC_DIR. Never raises for a missing build."""

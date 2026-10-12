@@ -32,6 +32,8 @@ from app.state import PublicFiles, get_state
 SH_CACHE = "public, max-age=600, stale-while-revalidate=86400"
 ASSET_CACHE = "public, max-age=31536000, immutable"
 SHELL_CACHE = "no-cache"
+# The shell must never be framed (clickjacking on sign-in and account pages).
+SHELL_FRAMING = {"X-Frame-Options": "DENY", "Content-Security-Policy": "frame-ancestors 'none'"}
 ROOT_FILE_CACHE = "public, max-age=3600"
 GET_HEAD = ["GET", "HEAD"]
 
@@ -90,7 +92,12 @@ async def _shell(request: Request, status_code: int) -> Response:
     if index is None:
         return pages.shell_unavailable()
     return await asset_response(
-        request, index, get_state(request).hasher, cache_control=SHELL_CACHE, status_code=status_code
+        request,
+        index,
+        get_state(request).hasher,
+        cache_control=SHELL_CACHE,
+        headers=SHELL_FRAMING,
+        status_code=status_code,
     )
 
 

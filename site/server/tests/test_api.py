@@ -86,8 +86,8 @@ def test_seed_unknown_or_non_legacy_is_404_js(client: TestClient, url: str) -> N
         ("GET", "/api/nope"),
         ("GET", "/api/me/"),
         ("GET", "/api/seed/ai901"),
-        ("GET", "/api/progress/ai103"),
-        ("POST", "/api/sync"),
+        ("GET", "/api/progress"),  # M1: /api/progress/{hubId} and POST /api/sync exist
+        ("POST", "/api/sync/x"),
         ("PUT", "/api/nope"),
         ("DELETE", "/api/me/x"),
         ("OPTIONS", "/api/nope"),

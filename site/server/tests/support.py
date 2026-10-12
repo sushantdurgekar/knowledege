@@ -22,6 +22,22 @@ import httpx2
 from fastapi.testclient import TestClient
 
 SECRET_TEXT = b"TOP-SECRET-DO-NOT-SERVE"
+
+# What APP_ENV=production needs since M1 (build-contracts.md section 8). The project id
+# uses the emulator-only "demo-" prefix, so nothing here could reach a real project.
+PROD_SECRET_KEY = "production-test-secret-key-0123456789abcdef"
+PROD_PROJECT_ID = "demo-studyhubs-prod"
+PROD_WEB_CONFIG = {
+    "apiKey": "test-api-key",
+    "authDomain": "demo-studyhubs-prod.firebaseapp.com",
+    "projectId": PROD_PROJECT_ID,
+    "appId": "1:000000000000:web:0000000000000000",
+}
+PROD_ENV = {
+    "SECRET_KEY": PROD_SECRET_KEY,
+    "FIREBASE_PROJECT_ID": PROD_PROJECT_ID,
+    "FIREBASE_WEB_CONFIG": json.dumps(PROD_WEB_CONFIG),
+}
 _INLINE_SCRIPT_RE = re.compile(rb"<script\b([^>]*)>([\s\S]*?)</script\s*>", re.IGNORECASE)
 
 

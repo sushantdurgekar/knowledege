@@ -1,20 +1,26 @@
-"""One JSON error shape for the whole API: {"code", "message", "retryAfter"?}.
+"""One JSON error shape for the whole API: {"code", "message", "retryAfter"?, "retryAt"?}.
 
 Raise `ApiError` from any route. Framework errors (404/405 from routing, request
 validation, unhandled exceptions) are mapped onto the same shape here, so clients
-only ever parse one format. `Retry-After` is sent whenever `retryAfter` is.
+only ever parse one format. `Retry-After` is sent whenever `retryAfter` is; an error
+with a `retry_at` moment (sync paused until the quota reset, M1) carries both
+`retryAt` (ISO, UTC) and the matching `retryAfter` seconds.
 """
 
 from __future__ import annotations
 
 import http
+import math
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from app.quota.pacific import iso_utc
 
 NO_STORE = "no-store"
 
@@ -46,13 +52,19 @@ class ApiError(Exception):
         message: str,
         *,
         retry_after: int | None = None,
+        retry_at: datetime | None = None,
+        now: datetime | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.code = code
         self.message = message
+        if retry_at is not None and retry_after is None:
+            seconds = (retry_at - (now or datetime.now(UTC))).total_seconds()
+            retry_after = max(1, math.ceil(seconds))
         self.retry_after = retry_after
+        self.retry_at = retry_at
         self.headers = dict(headers or {})
 
 
@@ -62,6 +74,7 @@ def error_response(
     message: str,
     *,
     retry_after: int | None = None,
+    retry_at: datetime | None = None,
     headers: Mapping[str, str] | None = None,
 ) -> JSONResponse:
     body: dict[str, Any] = {"code": code, "message": message}
@@ -69,6 +82,8 @@ def error_response(
     if retry_after is not None:
         body["retryAfter"] = int(retry_after)
         response_headers["Retry-After"] = str(int(retry_after))
+    if retry_at is not None:
+        body["retryAt"] = iso_utc(retry_at)
     return JSONResponse(body, status_code=status_code, headers=response_headers)
 
 
@@ -81,7 +96,12 @@ def _reason(status_code: int) -> str:
 
 async def _handle_api_error(_request: Request, exc: ApiError) -> JSONResponse:
     return error_response(
-        exc.status_code, exc.code, exc.message, retry_after=exc.retry_after, headers=exc.headers
+        exc.status_code,
+        exc.code,
+        exc.message,
+        retry_after=exc.retry_after,
+        retry_at=exc.retry_at,
+        headers=exc.headers,
     )
 
 

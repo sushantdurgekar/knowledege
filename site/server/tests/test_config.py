@@ -8,6 +8,7 @@ import pytest
 
 from app import config
 from app.config import ConfigError, Settings
+from tests.support import PROD_ENV
 
 
 def test_defaults() -> None:
@@ -33,6 +34,7 @@ def test_reads_environment(tmp_path: Path) -> None:
             "GIT_COMMIT": "1234abc",
             "RENDER_GIT_COMMIT": "ignored",
             "LOG_LEVEL": "debug",
+            **PROD_ENV,  # M1: production also needs a secret and the Firebase settings
         }
     )
     assert settings.is_production

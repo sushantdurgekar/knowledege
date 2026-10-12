@@ -5,27 +5,44 @@ Run:  uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-heade
 
 Routes are tried in order (API, hubs, static files); a request that matches no
 route at all goes to `static_routes.fallback_app` (SPA shell, JSON 404 under /api).
-M1+ routers go where marked.
+
+Middleware, outermost first: security headers, app egress meter, session-cookie
+clearing, /api gzip. The M1 services (store, auth, quota) live in one `Runtime`;
+the lifespan loads the quota meter in the background, persists it every 10 minutes
+and once more on shutdown.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
+import anyio
 from fastapi import FastAPI
 from starlette.types import ASGIApp
 
 from app import __version__, api_routes, hubs_routes, static_routes
 from app.api_gzip import ApiGZipMiddleware
+from app.auth import routes as auth_routes
+from app.auth.identity import Authenticator
+from app.auth.session import SessionCookieMiddleware
+from app.clock import Clock
 from app.config import Settings
 from app.errors import install_error_handlers
 from app.logging_setup import configure_logging
+from app.progress import routes as progress_routes
 from app.progress import seed
+from app.quota.egress import AppEgressMiddleware
+from app.quota.meter import PERSIST_INTERVAL_S
+from app.runtime import Runtime, build_runtime
 from app.security import SecurityHeadersMiddleware
 from app.state import AppState
+from app.store.base import Store
 
 logger = logging.getLogger(__name__)
 
@@ -46,26 +63,74 @@ class StudyHubsApp(FastAPI):
         return SecurityHeadersMiddleware(super().build_middleware_stack(), hsts=self._hsts)
 
 
+async def _persist_meter_forever(runtime: Runtime, interval_s: float) -> None:
+    while True:
+        await asyncio.sleep(interval_s)
+        try:
+            await anyio.to_thread.run_sync(runtime.meter.persist, abandon_on_cancel=True)
+        except Exception:  # never let the loop die
+            logger.exception("Quota meter persist failed")
+
+
+async def _shutdown_runtime(runtime: Runtime, task: asyncio.Task[None] | None) -> None:
+    if task is not None:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+    with anyio.move_on_after(10):
+        try:
+            await anyio.to_thread.run_sync(runtime.meter.persist, abandon_on_cancel=True)
+        except Exception:
+            logger.exception("Quota meter persist on shutdown failed")
+    try:
+        runtime.store.close()
+    except Exception:
+        logger.exception("Store close failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     state: AppState = app.state.studyhubs
     state.load()  # a missing build is logged, not fatal: /healthz must still answer
-    if state.settings.is_production and not state.settings.public_origin.startswith("https://"):
-        logger.warning("PUBLIC_ORIGIN should be https in production, got %s", state.settings.public_origin)
+    settings = state.settings
+    if settings.is_production and not settings.public_origin.startswith("https://"):
+        logger.warning("PUBLIC_ORIGIN should be https in production, got %s", settings.public_origin)
+    if settings.uses_dev_secret:
+        logger.warning("SECRET_KEY is not set: using the development key (never in production)")
     logger.info(
-        "Study Hubs %s (%s) env=%s public=%s hubs=%s",
+        "Study Hubs %s (%s) env=%s public=%s hubs=%s auth=%s store=%s",
         __version__,
-        state.settings.git_commit,
-        state.settings.app_env,
-        state.settings.public_dir,
-        state.settings.hubs_dir,
+        settings.git_commit,
+        settings.app_env,
+        settings.public_dir,
+        settings.hubs_dir,
+        settings.auth_mode,
+        settings.store,
     )
-    yield
+    runtime = state.runtime
+    task: asyncio.Task[None] | None = None
+    if runtime is not None and runtime.meter.persist_enabled:
+        # Load in a daemon thread: a slow or unreachable backend must not delay startup.
+        threading.Thread(target=runtime.meter.load, name="quota-meter-load", daemon=True).start()
+        task = asyncio.create_task(_persist_meter_forever(runtime, PERSIST_INTERVAL_S))
+    try:
+        yield
+    finally:
+        if runtime is not None:
+            await _shutdown_runtime(runtime, task)
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    store: Store | None = None,
+    auth: Authenticator | None = None,
+    clock: Clock | None = None,
+) -> FastAPI:
+    """Build the app. `store`, `auth` and `clock` replace the configured ones (tests)."""
     settings = settings or Settings.from_env()
     configure_logging(settings.log_level)
+    runtime = build_runtime(settings, store=store, auth=auth, clock=clock)
 
     app = StudyHubsApp(
         hsts=settings.is_production,
@@ -79,13 +144,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Trailing slashes are handled explicitly (301 for hubs and SPA routes).
         redirect_slashes=False,
     )
-    app.state.studyhubs = AppState(settings=settings)
+    app.state.studyhubs = AppState(settings=settings, runtime=runtime)
     install_error_handlers(app)
+    # add_middleware puts each new one outside the previous ones.
     app.add_middleware(ApiGZipMiddleware)
+    app.add_middleware(SessionCookieMiddleware, settings=settings)
+    app.add_middleware(AppEgressMiddleware, meter=runtime.meter)
 
     app.include_router(api_routes.router)
+    app.include_router(auth_routes.router)
+    app.include_router(progress_routes.router)
     app.include_router(seed.router)
-    # M1+: auth, progress, account and admin routers are included here.
+    if settings.is_test:  # never mounted outside APP_ENV=test (asserted by a unit test)
+        from app.testing import routes as testing_routes
+
+        app.include_router(testing_routes.router)
+    # M2+: account and admin routers are included here.
     app.include_router(hubs_routes.router)
     app.include_router(static_routes.router)
     # No catch-all route: a path match with the wrong method must still get a 405.

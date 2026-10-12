@@ -1,0 +1,126 @@
+"""The M1 services one process shares: clock, store, auth, quota meter and guard,
+rate limits, and the test-only fault queue.
+
+`create_app` builds one `Runtime` per app (tests can inject a store, an
+authenticator or a clock) and routes reach it through `get_runtime(request)`.
+"""
+
+from __future__ import annotations
+
+import threading
+from dataclasses import dataclass, field
+from functools import cached_property
+from typing import Any
+
+from starlette.requests import Request
+
+from app.auth.fake import FakeAuthenticator
+from app.auth.identity import Authenticator
+from app.auth.ratelimit import RateLimiter
+from app.clock import Clock
+from app.config import Settings
+from app.progress.service import ProgressService
+from app.quota.guard import Guard
+from app.quota.meter import Meter
+from app.store.base import Store
+from app.store.factory import make_store
+
+MAINTENANCE_MESSAGES = {
+    "read_only": "Sync is paused for maintenance. Your progress is saved in this browser.",
+    "full": "Study Hubs is under maintenance. Your progress is saved in this browser.",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class Fault:
+    op: str  # "get" | "put" | "any"
+    status: int
+    code: str
+    retry_after: int | None
+
+
+class Faults:
+    """Injected failures for the next N progress/sync calls (`POST /api/test/faults`)."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._queue: list[list[Any]] = []  # [Fault, remaining]
+
+    def add(self, fault: Fault, count: int = 1) -> None:
+        with self._lock:
+            self._queue.append([fault, count])
+
+    def take(self, op: str) -> Fault | None:
+        with self._lock:
+            for entry in self._queue:
+                fault, remaining = entry
+                if remaining > 0 and fault.op in (op, "any"):
+                    entry[1] -= 1
+                    self._queue = [e for e in self._queue if e[1] > 0]
+                    return fault
+        return None
+
+    def clear(self) -> None:
+        with self._lock:
+            self._queue.clear()
+
+    def __len__(self) -> int:
+        with self._lock:
+            return sum(entry[1] for entry in self._queue)
+
+
+def make_authenticator(settings: Settings, clock: Clock) -> Authenticator:
+    if settings.auth_mode == "fake":
+        return FakeAuthenticator(settings.secret, clock, session_days=settings.session_days)
+    from app.auth.firebase import FirebaseAuthenticator
+
+    return FirebaseAuthenticator(settings, clock)
+
+
+@dataclass
+class Runtime:
+    settings: Settings
+    clock: Clock
+    store: Store
+    auth: Authenticator
+    meter: Meter
+    guard: Guard
+    limiter: RateLimiter = field(default_factory=RateLimiter)
+    faults: Faults = field(default_factory=Faults)
+
+    @cached_property
+    def progress(self) -> ProgressService:
+        return ProgressService(self.store, self.guard)
+
+    @property
+    def maintenance_mode(self) -> str:
+        return self.settings.maintenance_force or "off"
+
+    def maintenance(self) -> dict[str, Any]:
+        mode = self.maintenance_mode
+        return {"mode": mode, "message": MAINTENANCE_MESSAGES.get(mode), "until": None}
+
+
+def build_runtime(
+    settings: Settings,
+    *,
+    store: Store | None = None,
+    auth: Authenticator | None = None,
+    clock: Clock | None = None,
+) -> Runtime:
+    clock = clock or Clock()
+    store = store or make_store(settings, clock)
+    meter = Meter(store, clock, tz=settings.quota_tz, persist_enabled=store.kind != "memory")
+    return Runtime(
+        settings=settings,
+        clock=clock,
+        store=store,
+        auth=auth or make_authenticator(settings, clock),
+        meter=meter,
+        guard=Guard(settings, meter, clock),
+    )
+
+
+def get_runtime(request: Request) -> Runtime:
+    runtime: Runtime = request.app.state.studyhubs.runtime
+    return runtime

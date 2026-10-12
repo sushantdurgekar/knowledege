@@ -20,6 +20,9 @@ _BASE_HEADERS: tuple[tuple[bytes, bytes], ...] = (
     (b"x-content-type-options", b"nosniff"),
     (b"referrer-policy", b"strict-origin-when-cross-origin"),
     (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
+    # No page of this site is meant to be framed (M1 review note; hubs also send
+    # CSP frame-ancestors 'none', and the shell adds it in static_routes).
+    (b"x-frame-options", b"DENY"),
 )
 
 
