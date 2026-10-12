@@ -63,7 +63,7 @@ Hub tooling: bundles are applied with `python _meta/tools/apply_hub_bundle.py <b
 | 6 | [ ] | **AI Engineering L1 Foundation** | `technical/data-ai/ai-engineering/hubs/ai-engineering-l1-foundation-hub.html` | AI-901 Azure AI Fundamentals: passed 7 Oct 2026 (883); Optional: AWS Certified AI Practitioner | 40–55 h |
 | 7 | [ ] | **JavaScript (browser) L1 Foundation** | `technical/web-dev/javascript/hubs/javascript-l1-foundation-hub.html` | JSE-40-01 (JS Institute, entry); certificates.dev Junior JavaScript (optional) | 50–70 h |
 | 8 | [x] | **Data Structures & Algorithms L1 Foundation** | `technical/software-engineering/dsa/hubs/dsa-l1-foundation-hub.html` | No credible certification; milestone = 40 easy + 20 medium problems | 50–70 h |
-| 9 | [ ] | **System Design L1 Foundation** | `technical/software-engineering/system-design/hubs/system-design-l1-foundation-hub.html` | No certification; evidence = design docs | 35–45 h |
+| 9 | [x] | **System Design L1 Foundation** | `technical/software-engineering/system-design/hubs/system-design-l1-foundation-hub.html` | No certification; evidence = design docs | 45–55 h |
 | 10 | [ ] | **Node.js (server) L1 Foundation** | `technical/web-dev/nodejs/hubs/nodejs-l1-foundation-hub.html` | None current: OpenJS JSNAD and JSNSD were retired on 30 Sep 2025 | 40–55 h |
 | 11 | [ ] | **React L1 Foundation** | `technical/web-dev/react/hubs/react-l1-foundation-hub.html` | certificates.dev Junior React (optional, not endorsed by Meta) | 40–55 h |
 | 12 | [ ] | **Docker & Containers L1 Foundation** | `technical/devops/docker/hubs/docker-l1-foundation-hub.html` | None at L1 | 20–30 h |
