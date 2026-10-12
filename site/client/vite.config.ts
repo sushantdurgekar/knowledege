@@ -8,6 +8,7 @@
 // automatically (br > gzip > identity).
 import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { brotliCompress, constants as zlib, gzip } from 'node:zlib';
 import react from '@vitejs/plugin-react';
@@ -16,6 +17,15 @@ import { defineConfig, type Plugin } from 'vite';
 // FastAPI backend for the dev-server proxy; override with STUDY_HUBS_BACKEND=http://host:port.
 const BACKEND = process.env.STUDY_HUBS_BACKEND ?? 'http://127.0.0.1:10000';
 const OUT_DIR = '../server/public';
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+// The bridge's pure storage helpers, shared verbatim with the shell (build-contracts.md §13):
+// key names, payload builders, synced stamps, owner tag, wipe. Never copy them into src/.
+const BRIDGE_SHARED = path.resolve(HERE, '../bridge/src/local-progress.ts');
+
+/** Firebase (app + auth and their helpers) goes into one lazy chunk, `assets/firebase-<hash>.js`. */
+function firebaseChunk(id: string): string | undefined {
+  return /[\\/]node_modules[\\/](?:firebase|@firebase|idb|tslib)[\\/]/.test(id) ? 'firebase' : undefined;
+}
 
 /** Before each build, delete the previous shell build (index.html, assets/) but keep _sh/. */
 function cleanShellOutput(): Plugin {
@@ -92,13 +102,21 @@ function precompress(): Plugin {
 
 export default defineConfig({
   plugins: [react(), cleanShellOutput(), precompress()],
+  resolve: {
+    alias: { '@bridge-shared': BRIDGE_SHARED },
+  },
   build: {
     outDir: OUT_DIR,
     emptyOutDir: false, // public/_sh (bridge) lives here too
+    rollupOptions: {
+      output: { manualChunks: firebaseChunk },
+    },
   },
   server: {
     port: 5173,
     strictPort: true,
+    // The dev server may serve the client and the one shared bridge module, nothing else above it.
+    fs: { allow: [HERE, BRIDGE_SHARED] },
     proxy: {
       '/api': BACKEND,
       '^/h(?:/|$)': BACKEND, // hub pages and downloads (regex so /help-like paths stay local)

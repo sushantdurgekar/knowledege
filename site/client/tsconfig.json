@@ -15,7 +15,10 @@
     "verbatimModuleSyntax": true,
     "useDefineForClassFields": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@bridge-shared": ["../bridge/src/local-progress.ts"]
+    }
   },
   "include": ["src", "test"]
 }

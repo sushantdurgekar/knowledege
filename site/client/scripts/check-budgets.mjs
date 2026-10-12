@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-// Checks the built shell against its size budgets (build-contracts.md §7):
-//   main JS  <= 90 KB gzipped   (entry script + every chunk index.html preloads)
-//   CSS      <= 10 KB gzipped   (every stylesheet index.html links)
-// Lazy chunks are listed for information only. Sizes use gzip level 9, like the build's .gz files.
+// Checks the built shell against its size budgets (build-contracts.md §7, §14):
+//   main JS      <= 90 KB gzipped   (entry script + every chunk index.html preloads)
+//   CSS          <= 10 KB gzipped   (every stylesheet index.html links)
+//   Firebase JS  <= 80 KB gzipped   (assets/firebase-*.js: the SDK chunk + the shell's wrapper)
+// and that the main JS holds no Firebase code (the SDK must stay a lazy chunk).
+// Other lazy chunks are listed for information only. Sizes use gzip level 9, like the build's .gz files.
 //
 // Usage: node scripts/check-budgets.mjs [publicDir]    (default: ../server/public)
 import { readdir, readFile } from 'node:fs/promises';
@@ -11,14 +13,18 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 const KB = 1024;
-const BUDGETS = { js: 90 * KB, css: 10 * KB };
+const BUDGETS = { js: 90 * KB, css: 10 * KB, firebase: 80 * KB };
+// Lazy Firebase chunks: `firebase` (vite.config.ts manualChunks) and the `firebase-auth` wrapper.
+const FIREBASE_CHUNK = /^assets\/firebase-.*\.js$/;
+// Strings only the Firebase Auth SDK contains; none may appear in the main JS.
+const FIREBASE_MARKERS = ['identitytoolkit.googleapis.com', 'securetoken.googleapis.com'];
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(process.argv[2] ?? path.join(here, '..', '..', 'server', 'public'));
 
 const gz = async (rel) => {
   const body = await readFile(path.join(publicDir, rel));
-  return { rel, raw: body.length, gz: gzipSync(body, { level: 9 }).length };
+  return { rel, raw: body.length, gz: gzipSync(body, { level: 9 }).length, text: body.toString('utf8') };
 };
 const fmt = (n) => `${(n / KB).toFixed(1)} KB`;
 
@@ -50,26 +56,36 @@ const mainJs = await Promise.all([...scripts].map(gz));
 const css = await Promise.all([...styles].map(gz));
 const initial = new Set([...scripts, ...styles]);
 const assetNames = await readdir(path.join(publicDir, 'assets')).catch(() => []);
-const lazy = await Promise.all(
+const lazyAll = await Promise.all(
   assetNames
     .map((name) => `assets/${name}`)
     .filter((rel) => /\.(?:js|css)$/.test(rel) && !initial.has(rel))
     .map(gz),
 );
+const firebase = lazyAll.filter((file) => FIREBASE_CHUNK.test(file.rel));
+const lazy = lazyAll.filter((file) => !FIREBASE_CHUNK.test(file.rel));
 
 const sum = (files) => files.reduce((total, file) => total + file.gz, 0);
 const rows = [
   ['main JS', mainJs, BUDGETS.js],
   ['CSS', css, BUDGETS.css],
+  ['Firebase', firebase, BUDGETS.firebase],
 ];
 
 let failed = false;
+for (const file of mainJs) {
+  const hits = FIREBASE_MARKERS.filter((marker) => file.text.includes(marker));
+  if (FIREBASE_CHUNK.test(file.rel) || hits.length > 0) {
+    failed = true;
+    console.error(`check-budgets: main JS ${file.rel} contains Firebase (${hits.join(', ') || 'preloaded chunk'}).`);
+  }
+}
 console.log(`Budgets for ${path.relative(process.cwd(), publicDir) || '.'} (gzip -9):`);
 for (const [label, files, budget] of rows) {
   const total = sum(files);
   const ok = total <= budget;
   failed ||= !ok;
-  console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${label.padEnd(8)} ${fmt(total).padStart(9)} / ${fmt(budget)}`);
+  console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${label.padEnd(9)} ${fmt(total).padStart(9)} / ${fmt(budget)}`);
   for (const file of files) console.log(`         ${file.rel}  ${fmt(file.raw)} raw, ${fmt(file.gz)} gz`);
 }
 if (lazy.length > 0) {

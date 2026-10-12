@@ -1,12 +1,12 @@
-// Read-only summary of the progress a hub keeps in this browser's localStorage.
-//
-// Mirrors the bridge's local-progress summary (build-contracts.md §6-7, hub-runtime-contract.md §3):
+// Read-only summary of the progress a hub keeps in this browser's localStorage, for the catalog
+// cards and the account page. The record shapes and parsing live in the bridge's shared module
+// (`@bridge-shared`, build-contracts.md §13), so the shell and the bridge always agree:
 //   v2 hubs     localStorage[storageKeys[0]] = {S, MOCKS, CARDS, U}; done = truthy entries of S.done
 //   legacy hubs localStorage["ai901hub.v1"]  = {done, plan, mistakes, mockHist}; done = truthy entries of done
 //
-// The hubs own these keys: site code must never write the `studyhub.` or `ai901hub.` prefixes,
-// so this module only ever calls getItem(). Every access is defensive: storage can be blocked
-// (throws SecurityError), missing, or hold hand-edited / truncated JSON.
+// The hubs own these keys: site code never writes the `studyhub.` or `ai901hub.` prefixes. This
+// module only reads; every access is defensive (storage can be blocked, missing or hand-edited).
+import { summarizeHub, summarizeLegacy, type StorageLike } from '@bridge-shared';
 import type { HubEntry } from './catalog';
 
 export interface LocalProgress {
@@ -22,6 +22,11 @@ type Readable = Pick<Storage, 'getItem'>;
 
 /** `window.localStorage`, or null when the browser blocks it (the getter itself can throw). */
 export function browserStorage(): Readable | null {
+  return localStore();
+}
+
+/** `window.localStorage` as the shared helpers' `StorageLike`, or null when it is blocked. */
+export function localStore(): StorageLike | null {
   try {
     return typeof window !== 'undefined' ? window.localStorage : null;
   } catch {
@@ -29,35 +34,17 @@ export function browserStorage(): Readable | null {
   }
 }
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-/** JSON.parse of `storage[key]`, or undefined when the key is missing, unreadable or not JSON. */
-function readJson(storage: Readable, key: string): unknown {
+function read(storage: Readable, key: string): string | null {
   try {
-    const raw = storage.getItem(key);
-    return raw === null ? undefined : (JSON.parse(raw) as unknown);
+    return storage.getItem(key);
   } catch {
-    return undefined;
+    return null;
   }
 }
 
-/** Number of truthy values in a `{moduleId: boolean}` map; anything that isn't a map counts as 0. */
-function countDone(done: unknown): number {
-  return isObject(done) ? Object.values(done).filter(Boolean).length : 0;
-}
-
-/** Which key holds this hub's progress, and how to find the `done` map inside it. */
-function progressSource(hub: HubEntry): { key: string; doneOf: (record: Record<string, unknown>) => unknown } | null {
-  if (hub.engine === 'v2') {
-    const key = hub.storageKeys[0];
-    return key ? { key, doneOf: (record) => (isObject(record.S) ? record.S.done : undefined) } : null;
-  }
-  if (hub.engine === 'legacy') {
-    const key = hub.legacyKeys[0] ?? (hub.id === 'ai901' ? AI901_LEGACY_KEY : undefined);
-    return key ? { key, doneOf: (record) => record.done } : null;
-  }
-  return null; // "static" or unknown engines: no known storage layout
+/** The legacy progress key of a hub (its first legacy key, or AI-901's well-known one). */
+export function legacyKeyOf(hub: Pick<HubEntry, 'id' | 'legacyKeys'>): string | undefined {
+  return hub.legacyKeys[0] ?? (hub.id === 'ai901' ? AI901_LEGACY_KEY : undefined);
 }
 
 /**
@@ -66,14 +53,15 @@ function progressSource(hub: HubEntry): { key: string; doneOf: (record: Record<s
  */
 export function readLocalProgress(hub: HubEntry, storage: Readable | null = browserStorage()): LocalProgress | null {
   if (!storage) return null;
-  const source = progressSource(hub);
-  if (!source) return null;
-
-  const record = readJson(storage, source.key);
-  if (!isObject(record)) return null;
-  if (hub.engine === 'v2' && !isObject(record.S)) return null;
-
-  const done = countDone(source.doneOf(record));
-  const total = hub.modules;
-  return { done: total > 0 ? Math.min(done, total) : done, total };
+  const total = hub.modules > 0 ? hub.modules : null;
+  let summary = null;
+  if (hub.engine === 'v2') {
+    const key = hub.storageKeys[0];
+    summary = key ? summarizeHub(read(storage, key), total) : null;
+  } else if (hub.engine === 'legacy') {
+    const key = legacyKeyOf(hub);
+    summary = key ? summarizeLegacy(read(storage, key), total) : null;
+  }
+  // "static" or unknown engines: no known storage layout.
+  return summary ? { done: summary.done, total: hub.modules } : null;
 }

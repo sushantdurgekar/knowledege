@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
-/** `/privacy`: a short, honest placeholder for M0. It is rewritten before accounts launch (M1/M2). */
+/** `/privacy`: what is stored and why (M1: accounts and sync). M2 adds export and delete. */
 export function Privacy() {
   useDocumentTitle('Privacy');
 
@@ -10,21 +10,45 @@ export function Privacy() {
       <p className="eyebrow">Privacy</p>
       <h1 id="page-title">What this site stores</h1>
       <p className="lede">
-        Short version: today there are no accounts, and your study progress never leaves your browser.
+        Short version: without an account, your study progress never leaves your browser. With an account, it is also
+        saved to your account so it syncs across devices.
       </p>
 
       <h2>In your browser</h2>
       <ul>
         <li>
           Each hub saves your progress (modules done, answers, flashcards, mock exams) in this browser’s local
-          storage for this site. It stays on this device and is not sent to us.
+          storage for this site.
         </li>
-        <li>The site also keeps a few small display preferences there, such as notices you have dismissed.</li>
         <li>
-          Clearing this site’s data in your browser settings deletes that progress. A downloaded hub file does not
-          include it.
+          The site also keeps a few small items there: notices you have dismissed, which account this browser’s
+          progress belongs to, and what has already been synced.
+        </li>
+        <li>
+          When you sign in, two cookies are set: an HttpOnly session cookie that keeps you signed in for up to 14 days,
+          and a small readable cookie that tells the hub pages you are signed in. Signing out removes both, and removes
+          the hub progress from this browser after saving it to your account.
         </li>
         <li>There are no advertising or analytics cookies, and no tracking scripts.</li>
+      </ul>
+
+      <h2>With an account</h2>
+      <ul>
+        <li>
+          Sign-in uses Google’s Firebase Authentication, with Google or with an email and password. Firebase handles
+          your password; we never see it.
+        </li>
+        <li>
+          We store your email address, display name, profile picture link, sign-in method, whether your email is
+          verified and when you last signed in.
+        </li>
+        <li>
+          We store your progress for each hub you use (the same records the hub keeps in your browser), compressed, in
+          Google Cloud Firestore. Only our server can read it.
+        </li>
+        <li>
+          Downloading your data and deleting your account from the account page arrive in the next update.
+        </li>
       </ul>
 
       <h2>On the server</h2>
@@ -38,13 +62,7 @@ export function Privacy() {
         </li>
       </ul>
 
-      <h2>Accounts, later</h2>
-      <p>
-        Signing in (with Google or email) is coming so you can sync progress across devices. Before it launches, this
-        page will explain exactly what is stored with your account, why, and how to export or delete it.
-      </p>
-
-      <p className="muted small">Last updated 11 October 2026.</p>
+      <p className="muted small">Last updated 12 October 2026.</p>
       <p className="actions">
         <Link className="btn" to="/">
           Browse all hubs
