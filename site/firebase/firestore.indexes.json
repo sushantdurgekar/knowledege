@@ -1,0 +1,197 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "users",
+      "fieldPath": "email",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "users",
+      "fieldPath": "emailVerified",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "users",
+      "fieldPath": "name",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "users",
+      "fieldPath": "photo",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "users",
+      "fieldPath": "provider",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "users",
+      "fieldPath": "createdAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "users",
+      "fieldPath": "lastLoginAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "uid",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "hub",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "done",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "t",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "u_main",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "u_mocks",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "u_cards",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "u_legacy",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "p_main",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "p_mocks",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "p_cards",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "p_legacy",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "n_main",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "n_mocks",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "n_cards",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "progress",
+      "fieldPath": "n_legacy",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "usage",
+      "fieldPath": "reads",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "usage",
+      "fieldPath": "writes",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "usage",
+      "fieldPath": "deletes",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "usage",
+      "fieldPath": "fsEgress",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "usage",
+      "fieldPath": "appEgress",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "meta",
+      "fieldPath": "v",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "meta",
+      "fieldPath": "tz",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "meta",
+      "fieldPath": "notice",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "meta",
+      "fieldPath": "maintenance",
+      "ttl": false,
+      "indexes": []
+    }
+  ]
+}

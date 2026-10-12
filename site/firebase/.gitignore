@@ -1,0 +1,5 @@
+# Local Firebase CLI state and emulator logs. Copy .firebaserc.example to .firebaserc
+# (kept out of git: it names the real project) before `firebase deploy`.
+.firebaserc
+.firebase/
+*-debug.log
