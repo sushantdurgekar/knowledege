@@ -97,3 +97,35 @@ All 51 links in the L3 hub were opened or confirmed while building each module; 
 | [Zanzibar (USENIX ATC 2019)](https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/) | paper | 5 | 4 | 5 | free | relationship-based authorization | OK |
 | [Stripe API reference: Idempotent requests](https://docs.stripe.com/api/idempotent_requests) | docs | 5 | 5 | 4 | free | key reuse rules, keys pruned after 24 h | OK |
 | [Apple: HTTP Live Streaming](https://developer.apple.com/streaming/) | docs | 5 | 5 | 4 | free | HLS playlists and segments | OK |
+
+## Used by the L4 hub (opened 2026-10-12)
+
+All 40 links in the L4 hub were opened while building each module; the key ones are below. Certification facts (SAP-C02 until 16 Nov 2026, SAP-C03 from 17 Nov 2026, AZ-305) were checked the same day.
+
+| Resource | Kind | A | R | D | Cost | Note | Checked |
+|---|---|---|---|---|---|---|---|
+| [Nygard: Documenting Architecture Decisions (2011)](https://www.cognitect.com/blog/2011/11/15/documenting-architecture-decisions) | article | 5 | 3 | 4 | free | the original ADR format | OK |
+| [MADR: Markdown Architectural Decision Records](https://adr.github.io/madr/) | template | 4 | 5 | 4 | free | drivers and options in the ADR | OK |
+| [SEI: ATAM, method for architecture evaluation](https://www.sei.cmu.edu/library/atam-method-for-architecture-evaluation/) | method | 5 | 3 | 5 | free | risks, sensitivity and trade-off points | OK |
+| [Amazon 2015 letter to shareholders (SEC exhibit 99.1)](https://www.sec.gov/Archives/edgar/data/1018724/000119312516530910/d168744dex991.htm) | primary source | 5 | 2 | 3 | free | one-way and two-way doors | OK |
+| [AWS Well-Architected: the pillars](https://docs.aws.amazon.com/wellarchitected/latest/framework/the-pillars-of-the-framework.html) | docs | 5 | 5 | 4 | free | six pillars | OK |
+| [Azure Well-Architected: pillars and reliability trade-offs](https://learn.microsoft.com/en-us/azure/well-architected/pillars) | docs | 5 | 5 | 4 | free | five pillars; trade-off pages | OK |
+| [Google SRE book: Introduction (capacity planning)](https://sre.google/sre-book/introduction/) | book | 5 | 3 | 4 | free | the three mandatory steps | OK |
+| [Grafana k6: load test types, open and closed models](https://grafana.com/docs/k6/latest/testing-guides/test-types/) | docs | 5 | 5 | 4 | free | test types; coordinated omission | OK |
+| [Treat: Everything You Know About Latency Is Wrong (2015)](https://bravenewgeek.com/everything-you-know-about-latency-is-wrong/) | article | 4 | 3 | 4 | free | coordinated omission, after Gil Tene | OK |
+| [Gunther: The Universal Scalability Law](http://www.perfdynamics.com/Manifesto/USLscalability.html) | reference | 5 | 3 | 4 | free | contention, coherency, the peak | OK |
+| [FinOps Foundation: principles and phases](https://www.finops.org/framework/principles/) | framework | 5 | 5 | 4 | free | six principles; Inform, Optimize, Operate | OK |
+| [Fowler: Strangler Fig Application (2024)](https://martinfowler.com/bliki/StranglerFigApplication.html) | article | 5 | 5 | 4 | free | incremental replacement | OK |
+| [Sato: Parallel Change (2014)](https://martinfowler.com/bliki/ParallelChange.html) | article | 5 | 3 | 3 | free | expand, migrate, contract | OK |
+| [Stripe: Online migrations at scale (2017)](https://stripe.com/blog/online-migrations) | article | 5 | 3 | 5 | free | dual writes, backfill, Scientist | OK |
+| [Confluent: Schema evolution and compatibility](https://docs.confluent.io/platform/current/schema-registry/fundamentals/schema-evolution.html) | docs | 5 | 5 | 5 | free | compatibility modes and upgrade order | OK |
+| [Google AIP-180: Backwards compatibility](https://google.aip.dev/180) | standard | 5 | 4 | 4 | free | source, wire and semantic compatibility | OK |
+| [Conway: How Do Committees Invent? (1968)](https://www.melconway.com/Home/Committees_Paper.html) | paper | 5 | 1 | 4 | free | the original argument | OK |
+| [Team Topologies: key concepts](https://teamtopologies.com/key-concepts) | reference | 5 | 5 | 4 | free | four team types, three interaction modes | OK |
+| [CNCF: Platforms white paper](https://tag-app-delivery.cncf.io/whitepapers/platforms/) | white paper | 5 | 4 | 4 | free | platform as a product | OK |
+| [Kwon et al.: PagedAttention / vLLM (SOSP 2023)](https://arxiv.org/abs/2309.06180) | paper | 5 | 4 | 5 | free | KV cache paging | OK |
+| [Yu et al.: Orca (OSDI 2022)](https://www.usenix.org/conference/osdi22/presentation/yu) | paper | 5 | 4 | 5 | free | iteration-level scheduling | OK |
+| [Cormack, Clarke, Büttcher: Reciprocal Rank Fusion (SIGIR 2009)](https://cormack.uwaterloo.ca/cormacksigir09-rrf.pdf) | paper | 5 | 2 | 4 | free | RRF with k = 60 | OK |
+| [Anthropic: Building effective agents (2024)](https://www.anthropic.com/engineering/building-effective-agents) | article | 5 | 4 | 4 | free | workflows before agents | OK |
+| [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/) | reference | 5 | 5 | 4 | free | prompt injection, excessive agency | OK |
+| [Willison: The lethal trifecta (2025)](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/) | article | 4 | 5 | 4 | free | private data, untrusted content, a way out | OK |

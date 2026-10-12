@@ -100,11 +100,10 @@ All 1,433 unique links in the system design and DSA workbooks were opened one by
   - [x] concept notes `concepts/l3-NN-*.md` (story + diagram + worked example)
   - [x] hub published + saved · fact/answer-key self-check (fresh-agent review still to do) · SRS deck `system-design-l3`
   - [x] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
-- [ ] **#47 System Design L4 Expert hub** → `hubs/system-design-l4-expert-hub.html`
-  - [ ] re-verify versions, cert facts and links · audit existing material for L4
-  - [ ] concept notes `concepts/l4-NN-*.md` (story + diagram + worked example)
-  - [ ] hub published + saved · independent fact/answer-key check · SRS deck `system-design-l4`
-  - [ ] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
+- [x] **#47 System Design L4 Expert hub** → `hubs/system-design-l4-expert-hub.html` ([open](https://claude.ai/artifact/C3GSn1y8nTQ24VT25d5S3X), built 2026-10-12)
+  - [x] re-verify versions, cert facts and links · audit existing material for L4
+  - [x] concept notes `concepts/l4-NN-*.md` (story + diagram + worked example)
+  - [x] hub published + saved · fact/answer-key self-check (fresh-agent review still to do) · SRS deck `system-design-l4`
+  - [x] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
 
-**Start a build with:**
-> Use pro-instructor. Build hub #9 (System Design L1) from `_meta/hub-program/README.md`, following `hub-spec.md`.
+**All four hubs are built (2026-10-12).** Study them in order, L1 → L4: activate each deck when you start its hub (`python _meta/tools/activate_deck.py system-design-l1`), take the hub's diagnostic, and follow its roadmap.

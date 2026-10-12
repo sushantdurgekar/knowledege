@@ -334,3 +334,117 @@ _Designs_
 Consistent hashing with virtual nodes places each key on N replicas and moves few keys when nodes join or leave. Writes and reads use tunable quorums, W + R > N for reading your own writes; sloppy quorums and hinted handoff keep writes available while a replica is down; vector clocks or last-writer-wins resolve conflicting versions; Merkle trees let replicas find and repair differences cheaply; and gossip spreads membership and failure suspicion. Each node stores data in an LSM engine.
 
 Follow-ups: What does a sloppy quorum give up? · How would you add strongly consistent operations?
+
+## L4 Expert (2026-10-12)
+
+### How do you make, and record, a significant architecture decision?
+_Decisions and reviews_
+
+I start by agreeing the decision drivers with the stakeholders, the quality attributes that matter and how much each counts, before anyone argues for a technology. Then I write at least three options, including doing nothing, score them against the drivers, and look for the sensitivity points where a small change in a weight would flip the answer; those are where the real disagreement is. How reversible the decision is sets how much evidence I want first. I record it as an ADR in the repository: context, options, decision, consequences, and what would make us revisit it.
+
+Follow-ups: What would you do if the team's favourite option loses the matrix? · How do you stop ADRs from becoming bureaucracy?
+
+### How do you decide how quickly to make a decision?
+_Decisions and reviews_
+
+By how expensive it is to undo. One-way doors, such as a primary database, a public API contract or a data model shared by many teams, deserve slow, careful decisions: written options, a spike or prototype, and a review. Two-way doors, such as a library choice inside one service or a feature-flagged experiment, should be made quickly by the people closest to them, because being slow costs more than being occasionally wrong. Many big decisions can be turned into two-way doors by adding a seam, an abstraction or an expand-and-contract path.
+
+Follow-ups: Give an example of turning a one-way door into a two-way door. · Who should make two-way-door decisions?
+
+### How do you run an architecture review of another team's design?
+_Decisions and reviews_
+
+As a conversation about risk rather than an exam. I ask for the context and drivers first, then walk the design through the scenarios that matter: peak load, a zone or region failure, a bad deploy, a security incident, ten times the data. I look for single points of failure, unclear ownership, missing numbers and one-way doors taken lightly. The output is a short list of risks with suggested mitigations, agreed with the team, plus any decisions that need ADRs, and a follow-up date. The team owns the design; the review makes its risks visible.
+
+Follow-ups: What do you do if the team disagrees with a high-risk finding? · How do you scale reviews across 50 teams?
+
+### How do you decide how much reliability to buy?
+_Well-architected and reliability_
+
+From the cost of downtime. I estimate what a minute of unavailability costs the business, in lost revenue, penalties and trust, and compare designs by total cost: infrastructure plus expected downtime cost. A single zone might be right for an internal tool, three zones for most customer-facing services, and active-active regions only where downtime costs thousands a minute. Then I set the availability target and error budget from that, rather than defaulting to as many nines as possible.
+
+Follow-ups: How do you estimate downtime cost for a service with no direct revenue? · What does an error budget change in practice?
+
+### How do you plan capacity for next year?
+_Capacity and cost_
+
+I forecast the peak hour forward: organic growth from the trend, plus inorganic events such as launches, campaigns and seasonal peaks, far enough ahead to cover the lead time for getting capacity. I convert demand into instances using a load test that measures requests per second within the latency target, because CPU percentages don't scale linearly and the first bottleneck may be the database or a quota. I add headroom for the latency target and for losing a zone, check quotas and lead times, and compare actual demand with the forecast every month.
+
+Follow-ups: What if the forecast is badly wrong in month two? · Which parts of a system can't scale on demand, and how do you plan for them?
+
+### Why does latency rise so sharply as a service approaches full utilisation?
+_Capacity and cost_
+
+Because requests arrive randomly, so queues form whenever arrivals bunch up, and the closer the servers are to busy all the time, the longer those queues take to drain. For a single server with random arrivals the mean time in the system is the service time divided by one minus the utilisation: twice the service time at 50%, ten times at 90%, and the tail grows faster still. Pooling servers behind one queue helps, and so does reducing variability, but latency-sensitive services still keep headroom.
+
+Follow-ups: What does Little's law tell you about a thread pool? · Why can adding nodes stop increasing throughput?
+
+### How do you design a load test you can trust?
+_Capacity and cost_
+
+I decide the question first: average load, stress above the expected peak, a soak over hours, a spike, or a breakpoint search. I use an open model, a fixed arrival rate, so that the test keeps sending when the system slows, and measure latency from the intended send time; otherwise coordinated omission hides the stalls. I use production-like data and request mixes, test the whole path including databases and third parties or realistic stand-ins, watch every resource to find the first bottleneck, and check the tool by pausing the system mid-test.
+
+Follow-ups: How would you load-test a service that calls a partner with a strict rate limit? · What's the difference between a stress test and a breakpoint test?
+
+### The CFO asks you to cut the cloud bill by 20% without hurting reliability. What do you do?
+_Capacity and cost_
+
+First make the spending visible: allocate every cost to a team and service with tags and accounts, and track unit costs such as cost per order, so growth that isn't explained by the business stands out. Then go after waste: idle and oversized resources rightsized from p95 utilisation, non-production environments off outside working hours, storage moved to cheaper tiers, and data transfer reduced. Commit to the steady baseline for the discount, keep peaks on demand, and put interruptible work on spot. Budgets and anomaly alerts per team keep it from creeping back.
+
+Follow-ups: Showback or chargeback: which would you start with? · How do you stop teams from rightsizing into an outage?
+
+### How would you replace a legacy monolith that the business depends on?
+_Evolution and migration_
+
+Incrementally, with the strangler fig pattern. I'd agree the outcomes first, find the seams, and put a routing layer such as a gateway in front of the monolith. Then I'd rebuild one capability at a time, starting with one that's valuable but small, move its traffic across in slices with a way back, and give the new service its own data through change data capture and then dual writes, verified before switching. The monolith keeps shipping throughout, each step delivers value, and team ownership moves with the boundaries.
+
+Follow-ups: How do you pick the first capability to move? · What do you do about the shared database?
+
+### How do you migrate data to a new store without downtime?
+_Evolution and migration_
+
+In reversible steps. Turn on dual writes so every change reaches both stores, then backfill existing records in throttled, resumable batches, writing conditionally by version so the backfill never overwrites newer data. Verify with counts, checksums by range and sampled comparisons, and repair differences, because dual writes can fail halfway. Then move reads, comparing old and new results in a parallel run, then move writes so the new store is the source of truth, and only after a quiet period remove the old data. Each step is checked before the next.
+
+Follow-ups: What's the failure mode of dual writes, and what are the alternatives? · How would you migrate a table with billions of rows?
+
+### How do you change an API or event schema without breaking clients?
+_Evolution and migration_
+
+Additive changes first: new optional fields, new endpoints or event types. Removing, renaming or changing the type or meaning of a field is breaking, so I'd do it by expand and contract: add the new field, migrate the clients, and remove the old one only when measurements show nobody uses it. For events, a schema registry enforces a compatibility mode, backward or full, so incompatible schemas are rejected at publish time. Breaking changes get a new major version run alongside the old one, with deprecation dates announced and enforced.
+
+Follow-ups: Backward or forward compatibility: which would you choose for events, and why? · How do you find clients who haven't migrated?
+
+### What does Conway's law mean for an architect?
+_Socio-technical design_
+
+That the system will end up mirroring how the teams communicate, whether I plan for it or not. If teams are organised by layer, every feature crosses several teams and the architecture fills with hand-offs. So I design boundaries and teams together: mostly stream-aligned teams that own a business area end to end, a platform team offering self-service, enabling teams for new skills, and specialists only for genuinely hard parts, each team within its cognitive load. Reshaping teams to get the architecture I want is the inverse Conway maneuver, and it only works if the code boundaries move with the teams.
+
+Follow-ups: How would you tell that team and system boundaries have drifted apart? · What's a reasonable size for a team, and why?
+
+### How do you set up a platform team that speeds others up instead of becoming a bottleneck?
+_Socio-technical design_
+
+Run it as a product. The users are the stream-aligned teams, so I'd start by measuring their biggest sources of toil and build the thinnest viable platform that removes the top one, sometimes just documentation and templates. Capabilities are self-service, with golden paths rather than tickets, optional and composable, and secure by default. Early on the platform team collaborates closely with a few adopters, then moves to X-as-a-Service. I'd measure adoption, time for a new service to reach production and developer satisfaction, and treat a growing ticket queue as a product failure.
+
+Follow-ups: Should using the platform be mandatory? · How do you decide what the platform should not do?
+
+### How would you design LLM serving for a feature with tight latency and cost targets?
+_AI systems design_
+
+I'd set targets for time to first token and time per output token, and measure the request mix. On the serving side, continuous batching keeps the accelerators busy, paged KV-cache allocation fits more requests in memory, and prompt caching removes the prefill for shared prefixes. On the request side, I'd route simple requests to a smaller model, escalating when a check fails, keep prompts short with retrieval, cap output lengths, and stream tokens. Then I'd load-test with an open model to find the highest rate that meets both targets, and add capacity, or degrade gracefully, before it.
+
+Follow-ups: What limits concurrency on an LLM server? · How would you choose the threshold for escalating to the large model?
+
+### How would you design retrieval-augmented generation over millions of documents with permissions?
+_AI systems design_
+
+An ingestion pipeline with connectors per source that parses, chunks and embeds documents incrementally, so edits and deletions arrive within an agreed time, with each chunk carrying its document's access list. At query time, hybrid search, keyword plus vectors fused with reciprocal rank fusion, filtered by the user's identity inside the index, then reranking, so restricted text never reaches the model, and answers cite their sources. I'd evaluate retrieval recall and answer groundedness separately on a labelled set, and monitor freshness, cost and latency.
+
+Follow-ups: How do you handle a document whose permissions change? · Why combine keyword and vector search?
+
+### How do you make an agent that takes real actions safe?
+_AI systems design_
+
+By putting the rules outside the model. Tools are allow-listed with narrow scopes and per-user credentials; irreversible or high-value actions need a person's approval; and once the agent has read untrusted content, such as an email or a web page, any action that writes or sends data needs approval too, because injected text could be steering it. Every run has budgets for steps, tokens and money, runs in a sandbox where possible, and leaves a full trace. Before it acts for real, it runs in shadow mode against an evaluation set.
+
+Follow-ups: What is the lethal trifecta? · Why isn't a better system prompt enough?

@@ -238,3 +238,53 @@ Sections are added by each hub level. Newest build replaces its own level's sect
 - **“Lock the document while someone is editing.”** Locks kill collaboration and fail badly when a client disconnects. Apply edits locally and merge concurrent ones with operational transformation or CRDTs.
 - **“Crawl breadth first, as fast as possible.”** That hammers whichever site has the most links, gets the crawler blocked, and can fall into infinite calendar or session-id URL spaces. Use per-host queues and delays, honour robots.txt, normalise URLs and cap depth per site.
 - **“Last-writer-wins is fine for the key-value store; conflicts are rare.”** Concurrent writes do happen, and last-writer-wins silently drops all but one. Keep one writer per key where you can, or detect conflicts with vector clocks and merge them (CRDTs, or the application).
+
+## L4 Expert (2026-10-12)
+
+### Architecture decision-making: ADRs, trade-off analysis and reversibility
+- **“We'll decide once we have all the facts.”** You never will. Decide at the last responsible moment, when waiting starts to cost more than it teaches, and buy cheap information (spikes, prototypes) in the meantime.
+- **“The decision matrix chose it.”** The weights chose it, and weights are opinions. Agree them first, show how sensitive the winner is, and get evidence where it's fragile.
+- **“We'll write the ADR afterwards, for the documentation.”** Written later, it becomes a justification: the options that were rejected, and why, are forgotten. Write it while deciding, and let it shape the discussion.
+- **“Every decision should go through the architecture review board.”** That turns the board into a queue and teams into ticket writers. Let teams make two-way-door decisions themselves; save reviews for one-way doors and cross-team impact.
+- **“Update the old ADR when the decision changes.”** Rewriting history hides why things were done. Write a new ADR that supersedes the old one, and mark the old one superseded.
+- **“A good architecture is one that meets today's requirements.”** Requirements change. Treat modifiability and reversibility as drivers in their own right, and prefer designs that keep options open where it's cheap.
+
+### Well-architected frameworks: the pillars, reviews and trade-offs
+- **“We passed the well-architected review.”** There's nothing to pass. The review's output is a list of risks and a plan to reduce them; a workload with no open risks usually means the questions weren't answered honestly.
+- **“Maximise every pillar.”** The pillars pull against each other: more reliability and performance cost money and energy. Agree targets per workload, such as an availability goal priced from the cost of downtime, and stop there.
+- **“Do the review once, at launch.”** Workloads drift: new features, new dependencies, new traffic. Review at milestones and after major incidents, and automate the checks that must always hold.
+- **“Size servers by their average CPU.”** Averages hide the busy hours. Size from a high percentile, keep headroom for spikes and failover, and right-size in both directions.
+- **“Sustainability is a separate project.”** Most of it is the same work as cost optimisation: higher utilisation, scaling with demand, removing idle resources and efficient hardware. Track it with the same data.
+- **“A permanent exemption is fine for that one database.”** Accepted risks need an owner and an expiry date; otherwise they become invisible. Re-accept them consciously, or fix them.
+
+### Capacity and cost: planning, queueing, load testing and FinOps
+- **“Size for the average load.”** Users arrive in peaks. Plan for the peak hour of the peak day, then add headroom for the latency target and for losing a zone.
+- **“CPU is at 50%, so we can double the traffic.”** Latency rises steeply long before 100%, and something else may run out first: connections, locks, quotas, a partner's rate limit. Only a load test of the whole path tells you.
+- **“The load test passed with 100 virtual users.”** Closed-model users send less when the system slows, so stalls go unmeasured. Specify an arrival rate, use production-like data and request mixes, and measure from the intended send time.
+- **“If we need more throughput, we'll add nodes.”** Contention and coherency make throughput flatten and then fall. Past the peak, more nodes make it slower: share less state, or partition the work instead.
+- **“Commit to everything for the biggest discount.”** Commitments are paid whether used or not. Commit to the capacity that's needed in most hours (more than the price ratio), and rent the peaks.
+- **“FinOps is the finance team's job.”** Engineers make most of the spending decisions. FinOps gives each team timely cost data and ownership of it, with a central team enabling the practice.
+
+### Evolution and migration: the strangler fig, data migrations and backwards compatibility
+- **“We'll rewrite it from scratch; it'll take a year.”** The old system keeps changing, the new one must match years of behaviour, and nothing ships until the end. Strangle it instead: one capability at a time, each delivering value.
+- **“Rename the column in the same release as the code.”** Services deploy at different times and rollbacks bring old code back. Expand, migrate, then contract, so every step works with both versions.
+- **“Dual writes keep the two stores in sync.”** One write can succeed while the other fails, and concurrent writes can arrive in different orders. Verify continuously, repair differences, or write once and propagate with change data capture or an outbox.
+- **“The backfill just copies the rows.”** A live update can land between the backfill's read and its write. Write conditionally by version, and make the backfill idempotent, resumable and throttled.
+- **“Adding a field is always safe.”** Not if it's a required field in a request, if it changes a default, or if clients treat an unknown enum value as an error. Check source, wire and semantic compatibility.
+- **“We announced the deprecation, so we can switch v1 off.”** Announcements don't reach every caller. Measure traffic by client, contact the remaining callers, and switch off only when usage is gone or the agreed date has passed.
+
+### Socio-technical design: Conway's law, Team Topologies and platform teams
+- **“Architecture and organisation design are separate decisions.”** Conway's law says they converge whether you plan it or not. Decide service boundaries and team boundaries together.
+- **“Bigger teams get more done.”** Communication paths grow with the square of team size, and so does the time spent coordinating. Split by stream into small, long-lived teams.
+- **“Component teams are efficient: each is expert in its layer.”** Each feature then queues at every layer's team. Stream-aligned teams own a slice end to end; keep specialists for the genuinely hard parts.
+- **“The platform team is the infrastructure team, renamed.”** A platform is an internal product: research users' needs, self-service APIs and docs, a roadmap, and adoption earned, not mandated.
+- **“Collaboration between teams is always good.”** Collaboration is expensive and meant for discovery, for a limited time. Long-running collaboration usually means a boundary is in the wrong place.
+- **“Microservices will fix our coordination problems.”** Services whose boundaries don't match team ownership create a distributed monolith: the same coordination, now over the network.
+
+### AI systems design: LLM serving, RAG at scale and agent platforms
+- **“Use the biggest model for everything; quality comes first.”** Most requests don't need it. Route by task or difficulty, measure each model's accuracy per task, and pay for the large model only where it changes the answer.
+- **“Batch size one gives the best latency, so serve that way.”** It wastes the accelerator and queues everyone else. Continuous batching gives high throughput with modest per-user cost; tune the batch to your latency targets.
+- **“The context window is our memory: put everything in.”** Every token costs money and time on every call, and memory per request. Retrieve what's needed, summarise history, and cache stable prefixes.
+- **“Vector search is all we need.”** Exact terms such as error codes, names and product numbers are found better by keyword search. Use hybrid retrieval and reranking, and measure recall.
+- **“The system prompt tells the model to ignore injected instructions.”** Models can't reliably separate instructions from data. Enforce permissions, approvals and budgets outside the model.
+- **“The demo works, so ship it.”** Without an evaluation set you can't tell whether the next prompt or model change made things worse. Test every change, then monitor quality, cost and latency in production.
