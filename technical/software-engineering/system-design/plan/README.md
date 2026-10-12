@@ -6,7 +6,7 @@ subject: system-design
 tags: [system-design, plan, levels]
 status: planned
 created: 2026-10-08
-updated: 2026-10-08
+updated: 2026-10-12
 ---
 # System Design: L1–L4 learning plan
 
@@ -18,7 +18,7 @@ updated: 2026-10-08
 
 | Level | You can… | Hours | Certification(s) | Capstone | Hub (build #) |
 |---|---|---|---|---|---|
-| **L1 Foundation** | Explain how a web app works end to end and sketch a simple scalable design with sensible estimates. | 35–45 | No certification; evidence = design docs | Design + build a URL shortener | `hubs/system-design-l1-foundation-hub.html` (#9) |
+| **L1 Foundation** | Explain how a web app works end to end and sketch a simple scalable design with sensible estimates. | 45–55 | No certification; evidence = design docs | Design + build a URL shortener | `hubs/system-design-l1-foundation-hub.html` (#9) |
 | **L2 Proficient** | Design common products (feed, chat, rate limiter) with correct trade-offs, and run a design interview confidently. | 60–80 | None | Distributed rate limiter + notification worker | `hubs/system-design-l2-proficient-hub.html` (#21) |
 | **L3 Specialist** | Design distributed, data-intensive systems (payments, streaming, search, geo) and defend them in review. | 80–100 | Optional: AZ-305 Azure Solutions Architect Expert or AWS Solutions Architect – Associate (verify current versions) | Event-driven order platform | `hubs/system-design-l3-specialist-hub.html` (#34) |
 | **L4 Expert** | Lead architecture: trade-off decisions, reviews, capacity and cost, and organisation-level design. | 50–70 | Optional: AWS Solutions Architect – Professional (SAP-C03 GA 17 Nov 2026) or AZ-305 | Architecture review pack | `hubs/system-design-l4-expert-hub.html` (#47) |
@@ -85,26 +85,25 @@ All 1,433 unique links in the system design and DSA workbooks were opened one by
 
 ## Build checklist (one hub per session)
 
-- [ ] **#9 System Design L1 Foundation hub** → `hubs/system-design-l1-foundation-hub.html`
-  - [ ] re-verify versions, cert facts and links · audit existing material for L1
-  - [ ] concept notes `concepts/l1-NN-*.md` (story + diagram + worked example)
-  - [ ] hub published + saved · independent fact/answer-key check · SRS deck `system-design-l1`
-  - [ ] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
-- [ ] **#21 System Design L2 Proficient hub** → `hubs/system-design-l2-proficient-hub.html`
-  - [ ] re-verify versions, cert facts and links · audit existing material for L2
-  - [ ] concept notes `concepts/l2-NN-*.md` (story + diagram + worked example)
-  - [ ] hub published + saved · independent fact/answer-key check · SRS deck `system-design-l2`
-  - [ ] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
-- [ ] **#34 System Design L3 Specialist hub** → `hubs/system-design-l3-specialist-hub.html`
-  - [ ] re-verify versions, cert facts and links · audit existing material for L3
-  - [ ] concept notes `concepts/l3-NN-*.md` (story + diagram + worked example)
-  - [ ] hub published + saved · independent fact/answer-key check · SRS deck `system-design-l3`
-  - [ ] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
-- [ ] **#47 System Design L4 Expert hub** → `hubs/system-design-l4-expert-hub.html`
-  - [ ] re-verify versions, cert facts and links · audit existing material for L4
-  - [ ] concept notes `concepts/l4-NN-*.md` (story + diagram + worked example)
-  - [ ] hub published + saved · independent fact/answer-key check · SRS deck `system-design-l4`
-  - [ ] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
+- [x] **#9 System Design L1 Foundation hub** → `hubs/system-design-l1-foundation-hub.html` ([open](https://claude.ai/artifact/5FDy46yNwWT8pPPZwQUGP9), built 2026-10-12)
+  - [x] re-verify versions, cert facts and links · audit existing material for L1
+  - [x] concept notes `concepts/l1-NN-*.md` (story + diagram + worked example)
+  - [x] hub published + saved · fact/answer-key self-check (fresh-agent review still to do) · SRS deck `system-design-l1`
+  - [x] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
+- [x] **#21 System Design L2 Proficient hub** → `hubs/system-design-l2-proficient-hub.html` ([open](https://claude.ai/artifact/WYKUGQ93VYjG6xBpea5exS), built 2026-10-12)
+  - [x] re-verify versions, cert facts and links · audit existing material for L2
+  - [x] concept notes `concepts/l2-NN-*.md` (story + diagram + worked example)
+  - [x] hub published + saved · fact/answer-key self-check (fresh-agent review still to do) · SRS deck `system-design-l2`
+  - [x] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
+- [x] **#34 System Design L3 Specialist hub** → `hubs/system-design-l3-specialist-hub.html` ([open](https://claude.ai/artifact/W93mxxEWBqV4MS8kJiz9dU), built 2026-10-12)
+  - [x] re-verify versions, cert facts and links · audit existing material for L3
+  - [x] concept notes `concepts/l3-NN-*.md` (story + diagram + worked example)
+  - [x] hub published + saved · fact/answer-key self-check (fresh-agent review still to do) · SRS deck `system-design-l3`
+  - [x] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
+- [x] **#47 System Design L4 Expert hub** → `hubs/system-design-l4-expert-hub.html` ([open](https://claude.ai/artifact/C3GSn1y8nTQ24VT25d5S3X), built 2026-10-12)
+  - [x] re-verify versions, cert facts and links · audit existing material for L4
+  - [x] concept notes `concepts/l4-NN-*.md` (story + diagram + worked example)
+  - [x] hub published + saved · fact/answer-key self-check (fresh-agent review still to do) · SRS deck `system-design-l4`
+  - [x] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
 
-**Start a build with:**
-> Use pro-instructor. Build hub #9 (System Design L1) from `_meta/hub-program/README.md`, following `hub-spec.md`.
+**All four hubs are built (2026-10-12).** Study them in order, L1 → L4: activate each deck when you start its hub (`python _meta/tools/activate_deck.py system-design-l1`), take the hub's diagnostic, and follow its roadmap.
