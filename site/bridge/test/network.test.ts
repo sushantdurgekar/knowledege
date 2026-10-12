@@ -1,6 +1,7 @@
 /**
- * Contract §6: in anonymous mode the bridge makes ZERO network requests. Every request API a
- * script can reach is replaced by a spy, then a whole hub session is simulated.
+ * Contract §6/§13: in anonymous mode (and on an owner mismatch) the bridge makes ZERO network
+ * requests. Every request API a script can reach is replaced by a spy, then a whole hub session
+ * is simulated.
  */
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import type { AiShim } from "../src/ai";
@@ -94,11 +95,20 @@ describe("anonymous mode makes zero network requests", () => {
     expectNoRequests();
   });
 
-  it("M0 with an sh_hint cookie still makes no requests", async () => {
+  it("owner mismatch (signed in, another account's progress here) makes no requests either", async () => {
     document.cookie = "sh_hint=pub_123; path=/";
+    localStorage.setItem("studyhubs.owner", "pub_other");
     const finishParsing = pretendLoading();
-    boot();
+    const handle = boot();
     finishParsing();
+    await simulateHubSession();
+    expectNoRequests();
+    expect(handle.api.stats().mode).toBe("mismatch");
+  });
+
+  it("a hint on a static hub makes no requests", async () => {
+    document.cookie = "sh_hint=pub_123; path=/";
+    boot({ hubId: "x1", slug: "x-1", engine: "static" });
     await simulateHubSession();
     expectNoRequests();
   });

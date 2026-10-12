@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// Size report and budget check for the built bridge (contract §6: bridge.js ≤ 14 KB gzipped).
+// Size report and budget check for the built bridge. Contract §6 set 14 KB gzipped for M0's
+// anonymous bridge; M1's signed-in sync (outbox, db, auth events, legacy sync, account menu)
+// needs more, so the budget is 16 KB (the ceiling the M1 plan allows).
 // `npm run size` checks the files already in ../server/public/_sh/; build.mjs calls checkSizes() too.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -7,8 +9,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const OUT_DIR = path.resolve(here, "../server/public/_sh");
-/** Gzipped budget for bridge.js, in bytes (14 KiB). */
-export const BRIDGE_GZ_BUDGET = 14 * 1024;
+/** Gzipped budget for bridge.js, in bytes (16 KiB). */
+export const BRIDGE_GZ_BUDGET = 16 * 1024;
 
 async function sizeOf(file) {
   try {
@@ -32,7 +34,7 @@ export async function checkSizes(outDir = OUT_DIR) {
     }
     rows.push(`${name.padEnd(10)} ${String(raw).padStart(7)} B raw  ${String(gz).padStart(6)} B gz  ${String(br).padStart(6)} B br`);
     if (name === "bridge.js" && gz > BRIDGE_GZ_BUDGET) {
-      console.error(`size: bridge.js.gz is ${gz} B, over the ${BRIDGE_GZ_BUDGET} B (14 KB) budget`);
+      console.error(`size: bridge.js.gz is ${gz} B, over the ${BRIDGE_GZ_BUDGET} B (16 KB) budget`);
       ok = false;
     }
   }

@@ -14,7 +14,7 @@
  *  - Assigning `localStorage.setItem = fn` would only create an item called "setItem", hence
  *    Object.defineProperty on the prototype.
  */
-import { isHubKey, legacySidecarKey } from "./local-progress";
+import { isHubKey, legacySidecarKey, type StorageLike } from "./local-progress";
 import { warn } from "./util";
 
 export interface HubWrite {
@@ -41,7 +41,12 @@ export interface StorageHookStats {
   sidecars: number;
 }
 
-export interface StorageHook extends RawStore {
+/**
+ * The hook is also a `StorageLike` view of window.localStorage whose writes bypass the wrapper
+ * (no events, no sidecar, no logout guard) and never throw: the bridge's own key writes and the
+ * shared local-progress helpers (markSynced, wipeKeys, ...) go through it.
+ */
+export interface StorageHook extends RawStore, StorageLike {
   /** False when there is no usable localStorage; the hook is then inert. */
   readonly installed: boolean;
   /** Subscribe to successful hub-key writes (M0: the nudge; M1: the outbox). Returns an unsubscriber. */
@@ -185,6 +190,29 @@ export function installStorageHook(opts: StorageHookOptions): StorageHook {
       } catch {
         return false;
       }
+    },
+    get length() {
+      try {
+        return storage ? storage.length : 0;
+      } catch {
+        return 0;
+      }
+    },
+    key(index) {
+      try {
+        return storage ? storage.key(index) : null;
+      } catch {
+        return null;
+      }
+    },
+    getItem(key) {
+      return this.get(key);
+    },
+    setItem(key, value) {
+      this.set(key, value);
+    },
+    removeItem(key) {
+      this.remove(key);
     },
     onHubWrite(listener) {
       listeners.push(listener);

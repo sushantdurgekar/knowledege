@@ -3,7 +3,7 @@
 //   bridge.js (+ .br, .gz)  src/index.ts → one classic IIFE, ES2019, minified
 //   fflate.js (+ .br, .gz)  fflate's gzipSync as window.__shFflate = {gzipSync}, with its MIT notice
 // Only these six files are written; nothing else in public/ is touched. Fails (exit 1) on a
-// build error or when bridge.js.gz is over the 14 KB budget.
+// build error or when bridge.js.gz is over the 16 KB budget (size.mjs).
 import { build } from "esbuild";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";

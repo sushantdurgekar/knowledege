@@ -277,6 +277,16 @@ export function writeOwner(storage: StorageLike, publicId: string): void {
 }
 
 /**
+ * The legacy part as stored right now: `{hub, upd: sidecar, key, raw}`, or null when the key is
+ * empty, has no sidecar stamp, or does not hold a JSON object (the server would refuse it).
+ */
+export function legacyPart(storage: StorageLike, hubId: string, key: string): LegacyPayload | null {
+  const raw = safeGet(storage, key);
+  const upd = stamp(Number(safeGet(storage, legacySidecarKey(key))));
+  return raw && upd && isObject(parseJson(raw)) ? { hub: hubId, upd, key, raw } : null;
+}
+
+/**
  * Payloads for the parts of one hub that are newer locally than the last acknowledged stamp,
  * exactly as the hub (or, for legacy hubs, the bridge) would send them. Static hubs have none.
  */
@@ -292,10 +302,8 @@ export function localHubParts(storage: StorageLike, hub: HubRef): Partial<Record
     }
   } else if (hub.engine === "legacy") {
     const key = (hub.legacyKeys || [])[0];
-    if (!key) return out;
-    const raw = safeGet(storage, key);
-    const upd = stamp(Number(safeGet(storage, legacySidecarKey(key))));
-    if (raw && upd > synced.legacy && isObject(parseJson(raw))) out.legacy = { hub: hub.id, upd, key, raw };
+    const part = key ? legacyPart(storage, hub.id, key) : null;
+    if (part && part.upd > synced.legacy) out.legacy = part;
   }
   return out;
 }

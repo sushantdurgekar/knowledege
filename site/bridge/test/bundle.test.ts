@@ -79,6 +79,31 @@ describe.skipIf(!built)("built bridge.js", () => {
     dom.window.close();
   });
 
+  it("signed in: the built bridge starts the progress prefetch at boot, with the protocol header", async () => {
+    const bridge = readFileSync(bridgeFile, "utf8");
+    const dom = new JSDOM(hubPage(bridge, 'data-hub-id="ai103" data-slug="ai-103" data-engine="v2"'), {
+      url: "https://study-hubs.test/h/ai-103",
+      runScripts: "dangerously",
+      beforeParse(window: Window) {
+        const w = window as ProbeWindow;
+        w.__requests = [];
+        w.document.cookie = "sh_hint=pub_A; path=/";
+        Object.assign(w, {
+          fetch: (url: string, init: RequestInit) => {
+            w.__requests.push(`${init.method} ${url} ${(init.headers as Record<string, string>)["X-StudyHubs"]}`);
+            return new Promise(() => undefined); // never answers: use("db") gives up after 5 s
+          },
+        });
+      },
+    });
+    const w = dom.window as unknown as ProbeWindow;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(w.__requests).toEqual(["GET /api/progress/ai103?known=main:0,mocks:0,cards:0 1"]);
+    const stats = (w as unknown as { __studyhubsBridge: { stats(): Record<string, unknown> } }).__studyhubsBridge.stats();
+    expect(stats).toMatchObject({ mode: "signed-in", hint: true, network: 1 });
+    dom.window.close();
+  });
+
   it("ships precompressed copies that match the source", () => {
     const raw = readFileSync(bridgeFile);
     expect(gunzipSync(readFileSync(out("bridge.js.gz"))).equals(raw)).toBe(true);

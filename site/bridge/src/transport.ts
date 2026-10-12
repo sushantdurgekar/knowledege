@@ -1,6 +1,6 @@
 /**
  * Transport: the bridge's only door to the network (signed-in mode only; anonymous mode never
- * calls it). Every request carries `X-StudyHubs: 1` and `credentials: "same-origin"`
+ * creates one). Every request carries `X-StudyHubs: 1` and `credentials: "same-origin"`
  * (build-contracts §13). request() never rejects: a network failure or a timeout comes back as
  * status 0, so callers map every outcome through codeForResponse().
  */
@@ -43,6 +43,8 @@ export interface Reply {
   body: Record<string, any> | null;
   /** When the server asked us to come back (ms since epoch), from retryAt / retryAfter / Retry-After; 0 if not given. */
   retryAt: number;
+  /** True when the request was aborted by its own timeout (status is then 0). */
+  timedOut?: boolean;
 }
 
 export interface RequestOptions {
@@ -58,9 +60,9 @@ export interface Transport {
   count(): number;
 }
 
-/** `known=main:<u>,mocks:<u>,cards:<u>` (the stamps this tab already holds). */
-export function knownParam(stamps: Readonly<Record<string, number>>, parts: readonly string[]): string {
-  return parts.map((p) => `${p}:${stamps[p] || 0}`).join(",");
+/** `main:<u>,mocks:<u>,cards:<u>` (the stamps this tab already holds). */
+export function knownParam(stamps: object, parts: readonly string[]): string {
+  return parts.map((p) => `${p}:${(stamps as Record<string, number | undefined>)[p] || 0}`).join(",");
 }
 
 /** The server's "come back at" hint as epoch ms, or 0: body `retryAt` (ISO), body `retryAfter` (s), header `Retry-After` (s or HTTP date). */
@@ -93,7 +95,11 @@ export function createTransport(now: () => number = Date.now): Transport {
       if (opts.keepalive) init.keepalive = true;
       const ctl = typeof AbortController === "function" ? new AbortController() : null;
       if (ctl) init.signal = ctl.signal;
-      const timer = setTimeout(() => ctl && ctl.abort(), opts.timeoutMs || REQUEST_TIMEOUT_MS);
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        if (ctl) ctl.abort();
+      }, opts.timeoutMs || REQUEST_TIMEOUT_MS);
       try {
         const res = await fetch(API_BASE + path, init);
         let body: Reply["body"] = null;
@@ -105,7 +111,7 @@ export function createTransport(now: () => number = Date.now): Transport {
         }
         return { status: res.status, body, retryAt: retryAtOf(body, res.headers.get("Retry-After"), now()) };
       } catch {
-        return { status: 0, body: null, retryAt: 0 };
+        return { status: 0, body: null, retryAt: 0, timedOut };
       } finally {
         clearTimeout(timer);
       }

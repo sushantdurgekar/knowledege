@@ -2,19 +2,23 @@
  * Outbox: batches the hub's part writes into one `POST /api/sync` per flush (build-contracts §13,
  * spec §4.5 "Flush policy" and "Acknowledgement").
  *
- *  - pending: the newest unsent payload per part. freshen() rebuilds payloads from this tab's
- *    localStorage record at flush time (and on every own LKEY write), so a change made inside
- *    the hub's 1.2 s debounce still goes out.
+ *  - pending: the newest unsent payload per part. freshen() rebuilds payloads from this browser's
+ *    localStorage record (on every own LKEY write and at flush time), so a change made inside the
+ *    hub's 1.2 s debounce still goes out.
  *  - waiters: a hub set() resolves only when the server acknowledges a flush carrying
- *    upd ≥ its upd (accepted / duplicate / stale), and rejects with the mapped code on failure.
+ *    upd ≥ its upd (accepted / duplicate / stale). While the outbox is failing (backing off,
+ *    paused, clock skew) set() queues the payload and rejects "unavailable" at once, so the hub's
+ *    pill honestly says "Sync paused"; a later background success rewrites the pill.
  *  - timers: flushMs anchored at the first unsent change; hidden flush per hiddenMinMs;
  *    pagehide/freeze always flush; failures back off 15 s → 10 min, honouring Retry-After /
  *    retryAt (sync_paused adds 0–10 min of jitter; clock_skew retries every 10 min).
- *  - at most one request in flight. The single exception is an unload flush whose body differs
- *    from the one in flight: a page that is going away cannot wait (the in-flight fetch may be
- *    cancelled with it), and the server's newest-wins transaction makes the overlap harmless.
- *  - unload: keepalive when the body is ≤ 60,000 B; larger bodies are gzipped with
- *    window.__shFflate (lazy-loaded once the pending body passes 48 KB), else sent normally.
+ *  - at most one request in flight. The one exception is an unload flush (hidden, pagehide,
+ *    freeze) while a normal flush is in flight: a page that is going away cannot wait, and the
+ *    browser may cancel the normal fetch with it. The server's newest-wins transaction makes the
+ *    overlap harmless. Unload flushes are deduplicated by body (pagehide + hidden fire together).
+ *  - unload: keepalive when the body is ≤ 60,000 B. Larger bodies are gzipped with
+ *    window.__shFflate (lazy-loaded once the pending body passes 48 KB) and sent with keepalive
+ *    if that fits, else as a normal fetch.
  */
 import { markSynced, type AnyPart, type LegacyPayload, type PartPayload, type StorageLike } from "./local-progress";
 import {
@@ -26,7 +30,7 @@ import {
   type Reply,
   type Transport,
 } from "./transport";
-import { codedError } from "./util";
+import { codedError, warn } from "./util";
 
 export type Payload = PartPayload | LegacyPayload;
 
@@ -75,9 +79,12 @@ export function parsePolicy(input: unknown, prev: SyncPolicy): SyncPolicy {
 export type OutboxEvent =
   /** A flush succeeded; `clean` when every part in it was settled without a rejection. */
   | { type: "ok"; clean: boolean }
+  /** Sync is held until `until` (the server's reset time; the retry adds jitter). */
   | { type: "paused"; until: number }
+  /** A newer policy lifted the pause. */
+  | { type: "resumed" }
   | { type: "skew" }
-  | { type: "maintenance"; until: number }
+  | { type: "maintenance"; message: string }
   | { type: "too_large" }
   /** 401/403/invalid: sync is off for this page. */
   | { type: "stopped"; code: HubErrorCode };
@@ -86,10 +93,10 @@ export interface OutboxDeps {
   hubId: string;
   /** main/mocks/cards for v2 hubs, legacy for AI-901. */
   parts: readonly AnyPart[];
-  /** The part as this browser stores it right now (rebuilt like the hub's payload()), or null. */
-  local(part: AnyPart): Payload | null;
+  /** The parts as this browser stores them right now (rebuilt like the hub's payload()). */
+  localParts(): Partial<Record<AnyPart, Payload>>;
   transport: Transport;
-  /** Where `studyhubs.synced.<hubId>` is kept. */
+  /** Where `studyhubs.synced.<hubId>` is kept (writes must bypass the storage hook). */
   storage: StorageLike;
   /** window.__shFflate.gzipSync once /_sh/fflate.js has loaded, else null. */
   gzip(): ((data: Uint8Array) => Uint8Array) | null;
@@ -100,7 +107,7 @@ export interface OutboxDeps {
   /** A part the server acknowledged (accepted/duplicate): the db cache adopts `sent`. */
   onAck?(part: AnyPart, sent: Payload): void;
   /** The server holds something newer: the next get() should refetch. */
-  onStale?(): void;
+  onStale?(part: AnyPart): void;
   onEvent?(event: OutboxEvent): void;
 }
 
@@ -115,6 +122,8 @@ export interface OutboxStats {
   inflight: boolean;
   /** No timer flush before this time (ms since epoch); 0 when not backing off. */
   retryAt: number;
+  /** Why flushes are held until retryAt even on unload: "paused" (sync_paused), "skew", or "". */
+  hold: string;
   tier: SyncPolicy["tier"];
   acked: Record<string, number>;
   known: Record<string, number>;
@@ -126,10 +135,6 @@ export interface OutboxStats {
 export type FlushKind = "timer" | "force" | "unload";
 
 export interface Outbox {
-  /** Newest server stamp seen per part (progress replies and acknowledgements). */
-  readonly known: Record<string, number>;
-  /** Newest stamp the server acknowledged for this tab's sends. */
-  readonly acked: Record<string, number>;
   policy(): SyncPolicy;
   setPolicy(input: unknown): void;
   /** Sync is live (the hub holds the db, or a legacy seed arrived): freshen and arm. */
@@ -137,15 +142,15 @@ export interface Outbox {
   /** The hub's set(): resolves once a flush carrying upd ≥ payload.upd is acknowledged. */
   set(part: AnyPart, payload: Payload): Promise<void>;
   pendingPart(part: AnyPart): Payload | undefined;
-  /** The server already holds `part` at `upd` or newer: drop an older pending payload, resolve its waiters. */
-  dropStale(part: AnyPart, upd: number): void;
+  /** The server holds `part` at `upd`: remember it, drop an older pending payload, resolve its waiters. */
+  noteKnown(part: AnyPart, upd: number): void;
   /** Rebuild pending payloads from local storage (own LKEY write, flush time). */
   freshen(): void;
   arm(): void;
   flush(kind: FlushKind): Promise<void>;
-  /** visibilitychange → hidden. */
+  /** visibilitychange → hidden: flush per policy.hiddenMinMs. */
   onHidden(): void;
-  /** online, or visible again: retry once the backoff has passed. */
+  /** online, or visible again: retry once a failure's retryAt has passed. */
   retry(): void;
   /** Turn sync off for this page and reject every waiter with `code`. */
   stop(code: HubErrorCode): void;
@@ -169,7 +174,7 @@ export function createOutbox(d: OutboxDeps): Outbox {
   const known: Record<string, number> = {};
   const acked: Record<string, number> = {};
   const pending: Partial<Record<AnyPart, Payload>> = {};
-  /** Parts the server rejected (too large / invalid): only the hub's own next set() re-queues them. */
+  /** Parts the server refused for good (too large / invalid): only the hub's own next set() re-queues them. */
   const blocked: Partial<Record<AnyPart, boolean>> = {};
   let waiters: Waiter[] = [];
   let policy: SyncPolicy = { ...DEFAULT_POLICY };
@@ -178,20 +183,24 @@ export function createOutbox(d: OutboxDeps): Outbox {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let firstDirtyAt = 0;
   let retryAt = 0;
-  /** The server told us when to come back (sync_paused, clock_skew): unload flushes wait too. */
-  let hold = false;
+  let hold: "" | "paused" | "skew" = "";
   let failing = false;
   let backoff = 0;
   let lastSuccessAt = 0;
   let inflight: Promise<void> | null = null;
-  let inflightBody = "";
+  /** Body of the last unload send, for deduplication (cleared when that send fails). */
+  let unloadBody = "";
   let gzipAsked = false;
   let flushes = 0;
   let errors = 0;
   let lastError: string | null = null;
 
   const emit = (e: OutboxEvent): void => {
-    if (d.onEvent) d.onEvent(e);
+    try {
+      if (d.onEvent) d.onEvent(e);
+    } catch (x) {
+      warn("sync event handler failed", x);
+    }
   };
   const have = (p: AnyPart): number => Math.max(known[p] || 0, acked[p] || 0, pending[p] ? pending[p]!.upd : 0);
   const dirty = (): AnyPart[] => Object.keys(pending) as AnyPart[];
@@ -212,8 +221,10 @@ export function createOutbox(d: OutboxDeps): Outbox {
     });
   }
 
-  function dropIfOlder(p: AnyPart, upd: number): void {
+  /** The server holds `p` at `upd` or newer: an older pending payload is moot, its waiters are done. */
+  function drop(p: AnyPart, upd: number): void {
     if (pending[p] && pending[p]!.upd <= upd) delete pending[p];
+    settle(p, upd);
   }
 
   function clearTimer(): void {
@@ -229,12 +240,19 @@ export function createOutbox(d: OutboxDeps): Outbox {
 
   function freshen(): void {
     if (!started || dead) return;
+    const local = d.localParts();
+    let added = false;
     for (const p of d.parts) {
-      if (blocked[p]) continue;
-      const loc = d.local(p);
-      if (loc && loc.upd > have(p)) put(p, loc);
+      const loc = local[p];
+      if (!loc || blocked[p]) continue;
+      if (loc.upd > have(p)) {
+        put(p, loc);
+        added = true;
+      } else if (loc.upd <= Math.max(known[p] || 0, acked[p] || 0)) {
+        markSynced(d.storage, d.hubId, p, loc.upd); // e.g. the hub just adopted the server's copy
+      }
     }
-    if (!gzipAsked && dirty().length && JSON.stringify(pending).length > GZIP_PRELOAD_BYTES) preloadGzip();
+    if (added && !gzipAsked && JSON.stringify(pending).length > GZIP_PRELOAD_BYTES) preloadGzip();
   }
 
   function arm(): void {
@@ -250,40 +268,70 @@ export function createOutbox(d: OutboxDeps): Outbox {
     );
   }
 
-  /** Hold every flush until `until` (+ jitter); waiters learn "unavailable" now. */
-  function pause(until: number): void {
-    failing = hold = true;
-    retryAt = until + Math.floor(random() * PAUSE_JITTER_MS);
-    settle(null, 0, "unavailable");
-    emit({ type: "paused", until: retryAt });
+  function rearm(): void {
+    clearTimer();
+    arm();
   }
 
-  function onReply(r: Reply, sent: Partial<Record<AnyPart, Payload>>): void {
+  /** Hold every flush until `until` (+ 0–10 min jitter); waiters learn "unavailable" now. */
+  function pause(until: number): void {
+    failing = true;
+    hold = "paused";
+    retryAt = until + Math.floor(random() * PAUSE_JITTER_MS);
+    settle(null, 0, "unavailable");
+    emit({ type: "paused", until });
+    rearm();
+  }
+
+  function recover(): void {
+    failing = false;
+    hold = "";
+    retryAt = backoff = 0;
+  }
+
+  function setPolicy(input: unknown): void {
+    const prev = policy.flushMs;
+    policy = parsePolicy(input, policy);
+    const until = policy.tier === "paused" ? policy.pausedUntil || 0 : 0;
+    if (until > now()) {
+      if (hold !== "paused" || retryAt < until) pause(until);
+    } else if (hold === "paused") {
+      recover();
+      emit({ type: "resumed" });
+      rearm();
+    } else if (policy.flushMs !== prev && timer !== undefined && !failing) {
+      rearm();
+    }
+  }
+
+  /** The server refused this part for good (too large / invalid): drop it until the hub sets it again. */
+  function reject(p: AnyPart, s: Payload, code: HubErrorCode): void {
+    if (pending[p] && pending[p]!.upd <= s.upd) delete pending[p];
+    blocked[p] = true;
+    settle(p, 0, code);
+    if (code === "quota_exceeded") emit({ type: "too_large" });
+  }
+
+  function onReply(r: Reply, sent: Partial<Record<AnyPart, Payload>>, body: string): void {
     const t = now();
-    const body = r.body;
-    if (body && body.policy) policy = parsePolicy(body.policy, policy);
-    const results = r.status === 200 && body && body.results && body.results[d.hubId];
-    if (!results || typeof results !== "object") return fail(r, sent, t);
+    const res = r.status === 200 && r.body && r.body.results && r.body.results[d.hubId];
+    if (!res || typeof res !== "object") return fail(r, sent, body, t);
     let clean = true;
     for (const p of Object.keys(sent) as AnyPart[]) {
       const s = sent[p]!;
-      const x = results[p] || {};
-      const upd = typeof x.upd === "number" ? x.upd : 0;
-      if (x.status === "accepted" || x.status === "duplicate") {
-        const u = Math.max(upd, s.upd);
-        acked[p] = Math.max(acked[p] || 0, u);
+      const x = res[p] || {};
+      const u = Math.max(typeof x.upd === "number" ? x.upd : 0, s.upd);
+      if (x.status === "accepted" || x.status === "duplicate" || x.status === "stale") {
+        // stale: the server keeps a newer copy (u); the next get() refetches and the hub adopts it.
         known[p] = Math.max(known[p] || 0, u);
         markSynced(d.storage, d.hubId, p, s.upd);
-        if (d.onAck) d.onAck(p, s);
-        dropIfOlder(p, u);
-        settle(p, u);
-      } else if (x.status === "stale") {
-        const u = Math.max(upd, s.upd);
-        known[p] = Math.max(known[p] || 0, upd);
-        markSynced(d.storage, d.hubId, p, s.upd);
-        dropIfOlder(p, u);
-        if (d.onStale) d.onStale();
-        settle(p, u);
+        if (x.status === "stale") {
+          if (d.onStale) d.onStale(p);
+        } else {
+          acked[p] = Math.max(acked[p] || 0, u);
+          if (d.onAck) d.onAck(p, s);
+        }
+        drop(p, u);
       } else if (x.status === "rejected") {
         clean = false;
         reject(p, s, x.code === "too_large" ? "quota_exceeded" : "invalid_argument");
@@ -291,26 +339,19 @@ export function createOutbox(d: OutboxDeps): Outbox {
         clean = false; // no verdict for this part: it stays pending for the next flush
       }
     }
-    failing = hold = false;
-    retryAt = backoff = 0;
+    recover();
     lastSuccessAt = t;
     lastError = null;
     emit({ type: "ok", clean });
+    if (r.body!.policy) setPolicy(r.body!.policy);
   }
 
-  /** The server refused this part for good (too large / invalid): drop it until the hub retries. */
-  function reject(p: AnyPart, s: Payload, code: HubErrorCode): void {
-    dropIfOlder(p, s.upd);
-    blocked[p] = true;
-    settle(p, 0, code);
-    if (code === "quota_exceeded") emit({ type: "too_large" });
-  }
-
-  function fail(r: Reply, sent: Partial<Record<AnyPart, Payload>>, t: number): void {
+  function fail(r: Reply, sent: Partial<Record<AnyPart, Payload>>, body: string, t: number): void {
     const code = r.body && typeof r.body.code === "string" ? r.body.code : "";
     const hubCode = codeForResponse(r.status, code);
     errors++;
     lastError = code || (r.status ? String(r.status) : "network");
+    if (body === unloadBody) unloadBody = "";
     if (hubCode === "quota_exceeded") {
       for (const p of Object.keys(sent) as AnyPart[]) reject(p, sent[p]!, hubCode);
       return;
@@ -323,13 +364,15 @@ export function createOutbox(d: OutboxDeps): Outbox {
     backoff = backoff ? Math.min(backoff * 2, MAX_BACKOFF_MS) : MIN_BACKOFF_MS;
     if (r.status === 429 && code === "sync_paused") return pause(r.retryAt || t + backoff);
     failing = true;
-    if (r.status === 422) {
-      hold = true;
+    if (code === "clock_skew") {
+      hold = "skew";
       retryAt = t + SKEW_RETRY_MS;
       emit({ type: "skew" });
     } else {
       retryAt = r.retryAt > t ? r.retryAt : t + backoff;
-      if (r.status === 503 && code === "maintenance") emit({ type: "maintenance", until: r.retryAt });
+      if (code === "maintenance") {
+        emit({ type: "maintenance", message: typeof r.body!.message === "string" ? r.body!.message : "" });
+      }
     }
     settle(null, 0, "unavailable");
   }
@@ -338,20 +381,16 @@ export function createOutbox(d: OutboxDeps): Outbox {
     if (!started || dead) return DONE;
     freshen();
     if (!dirty().length) return DONE;
-    const t = now();
-    const unloading = kind === "unload";
-    if (kind !== "force") {
-      if (policy.tier === "paused" && policy.pausedUntil && policy.pausedUntil > t && !hold) pause(policy.pausedUntil);
-      if (t < retryAt && (hold || !unloading)) {
-        if (!unloading) arm();
-        return DONE;
-      }
+    if (kind !== "force" && now() < retryAt && (hold || kind !== "unload")) {
+      arm();
+      return DONE;
     }
+    if (inflight && kind !== "unload") return kind === "force" ? inflight.then(() => flush("force")) : inflight;
     const sent: Partial<Record<AnyPart, Payload>> = { ...pending };
     const body = JSON.stringify({ hubs: { [d.hubId]: sent } });
-    if (inflight) {
-      if (kind === "force") return inflight.then(() => flush("force"));
-      if (!unloading || body === inflightBody) return inflight;
+    if (kind === "unload") {
+      if (body === unloadBody) return inflight || DONE;
+      unloadBody = body;
     }
     clearTimer();
     const size = utf8Length(body);
@@ -369,17 +408,13 @@ export function createOutbox(d: OutboxDeps): Outbox {
     firstDirtyAt = 0;
     flushes++;
     const req: Promise<void> = d.transport
-      .request("POST", "/sync", { body: wire, keepalive: unloading && wireSize <= KEEPALIVE_MAX_BYTES })
-      .then((r) => onReply(r, sent))
+      .request("POST", "/sync", { body: wire, keepalive: kind === "unload" && wireSize <= KEEPALIVE_MAX_BYTES })
+      .then((r) => onReply(r, sent, body))
       .then(() => {
-        if (inflight === req) {
-          inflight = null;
-          inflightBody = "";
-        }
+        if (inflight === req) inflight = null;
         arm();
       });
     inflight = req;
-    inflightBody = body;
     return req;
   }
 
@@ -390,17 +425,8 @@ export function createOutbox(d: OutboxDeps): Outbox {
   }
 
   return {
-    known,
-    acked,
     policy: () => policy,
-    setPolicy(input) {
-      const prev = policy.flushMs;
-      policy = parsePolicy(input, policy);
-      if (policy.flushMs !== prev && timer !== undefined) {
-        clearTimer();
-        arm();
-      }
-    },
+    setPolicy,
     start() {
       started = true;
       freshen();
@@ -413,27 +439,24 @@ export function createOutbox(d: OutboxDeps): Outbox {
       freshen();
       if (!pending[part] || pending[part]!.upd < payload.upd) put(part, payload);
       arm();
+      if (failing) return Promise.reject(codedError("unavailable", "sync: unavailable"));
       return new Promise<void>((resolve, rejectFn) => {
         waiters.push({ part, upd: payload.upd, resolve, reject: rejectFn });
       });
     },
     pendingPart: (part) => pending[part],
-    dropStale(part, upd) {
-      dropIfOlder(part, upd);
-      settle(part, upd);
+    noteKnown(part, upd) {
+      if (upd > (known[part] || 0)) known[part] = upd;
+      drop(part, upd);
     },
     freshen,
     arm,
     flush,
     onHidden() {
-      if (!started || dead) return;
-      freshen();
-      if (dirty().length && (policy.hiddenMinMs <= 0 || now() - lastSuccessAt >= policy.hiddenMinMs)) {
-        void flush("unload");
-      }
+      if (now() - lastSuccessAt >= policy.hiddenMinMs) void flush("unload");
     },
     retry() {
-      if (failing) void flush("timer");
+      if (failing && now() >= retryAt) void flush("timer");
     },
     stop,
     dead: () => dead,
@@ -445,6 +468,7 @@ export function createOutbox(d: OutboxDeps): Outbox {
       lastError,
       inflight: !!inflight,
       retryAt,
+      hold,
       tier: policy.tier,
       acked: { ...acked },
       known: { ...known },

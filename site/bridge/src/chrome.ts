@@ -14,12 +14,17 @@
  * the hub theme (see theme.ts), is padded for safe areas and hidden in print. It sits above the
  * hub's sticky header (z-index 30) and below the hub's toast (z-index 50).
  *
- * Notices in M0:
+ * Signed in (M1), "Sign in" becomes the user's initial: a button opening a small menu with
+ * Account (/account) and Sign out (/signout). setAccount() switches between the two.
+ *
+ * Notices:
  *  - "Progress is saved only in this browser — sign in to keep it": anonymous visitors, once
  *    the hub's progress record first has `U.main > 0` (legacy hubs: once their record holds
  *    anything). Dismissal is remembered in `studyhubs.ui.nudge.<hubId>`.
  *  - "Browser storage is full": shown when a hub write hits QuotaExceededError.
- * M1 adds sync paused / session ended / maintenance notices through the same showNotice API.
+ *  - M1 (sync.ts, auth-events.ts, index.ts): sync paused, session ended, clock ahead, account
+ *    mismatch, maintenance, "reload to sync", newer progress from another device. A notice may
+ *    carry a link or an action button (e.g. "Reload").
  */
 import type { BridgeConfig } from "./config";
 import { hasMainProgress, legacyHasProgress, nudgeKey } from "./local-progress";
@@ -39,6 +44,8 @@ export interface Notice {
   text: string;
   detail?: string;
   link?: { href: string; label: string };
+  /** A button under the text (e.g. "Reload"); shown instead of `link` when both are set. */
+  action?: { label: string; run: () => void };
   tone?: "info" | "warn";
   /** Defaults to true. */
   dismissible?: boolean;
@@ -50,7 +57,7 @@ export interface ChromeOptions {
   cfg: BridgeConfig;
   doc: Document;
   store: RawStore;
-  /** M0 always answers false. */
+  /** Whether the visitor is (or may be) signed in: no anonymous nudge then. */
   signedIn: () => boolean;
 }
 
@@ -66,6 +73,11 @@ export interface Chrome {
   showStorageFull(): void;
   /** Feed from the storage hook: shows the nudge on the first progress write. */
   handleHubWrite(write: HubWrite): void;
+  /**
+   * null: anonymous ("Sign in"). A string: signed in, shown as that initial ("" while unknown,
+   * shown as "Account") with the Account / Sign out menu.
+   */
+  setAccount(initial: string | null): void;
   dispose(): void;
 }
 
@@ -116,6 +128,16 @@ const CHROME_CSS =
   ".x{box-sizing:border-box;flex:none;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;" +
   "padding:0;margin:-3px 0;border:0;border-radius:6px;background:transparent;color:var(--sh-muted);font:400 18px/1 var(--sh-font);cursor:pointer}" +
   ".x:hover{background:var(--sh-soft);color:var(--sh-fg)}" +
+  "button.it,.ab{border:0;background:none;font:inherit;cursor:pointer}" +
+  ".ab{padding:0;text-decoration:underline}" +
+  ".ac{position:relative;display:inline-flex}" +
+  ".in{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;" +
+  "background:var(--sh-accent);color:var(--sh-accent-ink);font-size:12px}" +
+  ".menu{position:absolute;bottom:calc(100% + 10px);left:0;display:flex;flex-direction:column;min-width:120px;padding:4px;" +
+  "border-radius:10px;border:1px solid var(--sh-line);background:var(--sh-bg);box-shadow:var(--sh-shadow)}" +
+  ".menu[hidden]{display:none}" +
+  ".mi{padding:8px 10px;border-radius:6px;color:var(--sh-fg);font-weight:700;text-decoration:none}" +
+  ".mi:hover,.mi:focus-visible{background:var(--sh-soft);outline:none}" +
   "@media (max-width:420px){.it{padding:0 8px}.stack{font-size:12px}}";
 
 export function createChrome(opts: ChromeOptions): Chrome {
@@ -124,6 +146,8 @@ export function createChrome(opts: ChromeOptions): Chrome {
   const dismissedThisPage: Record<string, true> = {};
   let host: HTMLElement | null = null;
   let notesEl: HTMLElement | null = null;
+  let navEl: HTMLElement | null = null;
+  let account: string | null = null;
   let stopTheme: () => void = noop;
   let stopAway: () => void = noop;
   // Last measured size of the visible notice stack (it measures 0 while stepped aside).
@@ -138,9 +162,11 @@ export function createChrome(opts: ChromeOptions): Chrome {
     notesEl.innerHTML = notices
       .map((n) => {
         const detail = n.detail ? `<span class="dt">${escapeHtml(n.detail)}</span>` : "";
-        const link = n.link
-          ? `<br><a class="lk" href="${escapeHtml(n.link.href)}">${escapeHtml(n.link.label)}</a>`
-          : "";
+        const link = n.action
+          ? `<br><button class="lk ab" type="button" data-act="${escapeHtml(n.id)}">${escapeHtml(n.action.label)}</button>`
+          : n.link
+            ? `<br><a class="lk" href="${escapeHtml(n.link.href)}">${escapeHtml(n.link.label)}</a>`
+            : "";
         const close =
           n.dismissible === false
             ? ""
@@ -215,6 +241,63 @@ export function createChrome(opts: ChromeOptions): Chrome {
     if (notice.onDismiss) notice.onDismiss();
   }
 
+  const link = (href: string, label: string, extra = ""): string =>
+    `<a class="it" href="${escapeHtml(href)}"${extra}>${label}</a>`;
+
+  function navHtml(): string {
+    const me =
+      account === null
+        ? link(cfg.signInPath, "Sign in")
+        : '<span class="ac"><button class="it av" type="button" aria-haspopup="menu" aria-expanded="false"' +
+          ` aria-label="Account menu">${account ? `<b class="in">${escapeHtml(account)}</b>` : "Account"}</button>` +
+          '<span class="menu" role="menu" hidden><a class="mi" role="menuitem" href="/account">Account</a>' +
+          '<a class="mi" role="menuitem" href="/signout">Sign out</a></span></span>';
+    return link(cfg.catalogPath, '<span aria-hidden="true">←</span> All hubs') + me + link(cfg.downloadPath, "Download", " download");
+  }
+
+  /** Open, close (false) or toggle (undefined) the account menu. */
+  function menu(open?: boolean): void {
+    const btn = navEl && navEl.querySelector<HTMLElement>(".av");
+    const list = navEl && navEl.querySelector<HTMLElement>(".menu");
+    if (!btn || !list) return;
+    const show = open === undefined ? list.hidden : open;
+    list.hidden = !show;
+    btn.setAttribute("aria-expanded", String(show));
+    if (show) {
+      const first = list.querySelector<HTMLElement>("a");
+      if (first) first.focus();
+    }
+  }
+
+  function onRootClick(e: Event): void {
+    const t = e.target as Element | null;
+    const el = (sel: string): Element | null => (t && t.closest ? t.closest(sel) : null);
+    const dismissBtn = el("[data-dismiss]");
+    if (dismissBtn) return dismiss(dismissBtn.getAttribute("data-dismiss") || "");
+    const act = el("[data-act]");
+    if (act) {
+      const n = notices.find((x) => x.id === act.getAttribute("data-act"));
+      if (n && n.action) n.action.run();
+      return;
+    }
+    if (el(".av")) menu();
+  }
+
+  function onRootKey(e: Event): void {
+    if ((e as KeyboardEvent).key !== "Escape" || !navEl) return;
+    const list = navEl.querySelector<HTMLElement>(".menu");
+    if (list && !list.hidden) {
+      menu(false);
+      const btn = navEl.querySelector<HTMLElement>(".av");
+      if (btn) btn.focus();
+    }
+  }
+
+  /** A click anywhere outside the chrome closes the menu. */
+  function onDocClick(e: Event): void {
+    if (host && e.composedPath && e.composedPath().indexOf(host) < 0) menu(false);
+  }
+
   function isNudgeDismissed(): boolean {
     return store.get(nudgeKey(cfg.hubId)) != null;
   }
@@ -259,22 +342,16 @@ export function createChrome(opts: ChromeOptions): Chrome {
       if (host) return;
       host = doc.createElement("studyhubs-chrome");
       const root = host.attachShadow({ mode: "closed" });
-      const link = (href: string, label: string, extra = ""): string =>
-        `<a class="it" href="${escapeHtml(href)}"${extra}>${label}</a>`;
       root.innerHTML =
         `<style>${THEME_CSS}${CHROME_CSS}</style>` +
         '<div class="stack">' +
         '<div class="notes" role="status" aria-live="polite"></div>' +
-        '<nav class="pill" aria-label="Study Hubs">' +
-        link(cfg.catalogPath, '<span aria-hidden="true">←</span> All hubs') +
-        link(cfg.signInPath, "Sign in") +
-        link(cfg.downloadPath, "Download", " download") +
-        "</nav></div>";
+        `<nav class="pill" aria-label="Study Hubs">${navHtml()}</nav></div>`;
       notesEl = root.querySelector<HTMLElement>(".notes");
-      notesEl!.addEventListener("click", (e) => {
-        const btn = (e.target as Element | null)?.closest?.("[data-dismiss]");
-        if (btn) dismiss(btn.getAttribute("data-dismiss") || "");
-      });
+      navEl = root.querySelector<HTMLElement>("nav");
+      root.addEventListener("click", onRootClick);
+      root.addEventListener("keydown", onRootKey);
+      doc.addEventListener("click", onDocClick);
       stopTheme = followTheme(host, doc);
       mountPoint(doc).appendChild(host);
       stopAway = watchScroll();
@@ -287,7 +364,22 @@ export function createChrome(opts: ChromeOptions): Chrome {
     notices: () => notices.map((n) => n.id),
     showStorageFull() {
       if (dismissedThisPage[STORAGE_FULL_ID]) return;
-      showNotice({ id: STORAGE_FULL_ID, text: STORAGE_FULL_TEXT, detail: STORAGE_FULL_DETAIL, tone: "warn" });
+      showNotice({
+        id: STORAGE_FULL_ID,
+        text: STORAGE_FULL_TEXT,
+        detail: STORAGE_FULL_DETAIL,
+        tone: "warn",
+        link: account !== null ? { href: "/account#storage", label: "Manage storage" } : undefined,
+      });
+    },
+    setAccount(initial) {
+      if (initial === account) return;
+      account = initial;
+      if (navEl) navEl.innerHTML = navHtml();
+      if (initial === null && host) {
+        nudgeSettled = false; // signed out after all: the anonymous nudge applies again
+        evaluateNudge();
+      }
     },
     handleHubWrite(write) {
       if (nudgeSettled || write.op !== "set") return;
@@ -304,9 +396,10 @@ export function createChrome(opts: ChromeOptions): Chrome {
       stopTheme = noop;
       stopAway();
       stopAway = noop;
+      doc.removeEventListener("click", onDocClick);
       if (host) host.remove();
       host = null;
-      notesEl = null;
+      notesEl = navEl = null;
       notices.length = 0;
     },
   };

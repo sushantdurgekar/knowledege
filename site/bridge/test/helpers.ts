@@ -1,15 +1,24 @@
 /** Shared test helpers: boot/dispose, closed-shadow-root capture, DOM ready-state control. */
 import { afterEach, vi } from "vitest";
 import { startBridge, type BridgeHandle } from "../src/index";
+import { disposeHubs } from "./fake-hub";
 
 export const HUB_DATA = { hubId: "ai103", slug: "ai-103", engine: "v2" } as const;
 export const LEGACY_DATA = { hubId: "ai901", slug: "ai-901", engine: "legacy", legacyKeys: "ai901hub.v1" } as const;
 
 const handles: BridgeHandle[] = [];
+/** Page reloads the bridge asked for (location.reload is replaced in tests). */
+export const reloads = { count: 0 };
+
+/** The native Storage setItem, captured before any bridge wraps it: writes "from another tab". */
+export const nativeSetItem = Storage.prototype.setItem;
+export function otherTabWrite(key: string, value: string): void {
+  nativeSetItem.call(localStorage, key, value);
+}
 
 /** Start a bridge as if injected with the given data-* attributes; disposed after each test. */
 export function boot(data: Record<string, string> = { ...HUB_DATA }): BridgeHandle {
-  const handle = startBridge({ script: { dataset: data as DOMStringMap } });
+  const handle = startBridge({ script: { dataset: data as DOMStringMap }, reload: () => void reloads.count++ });
   if (!handle) throw new Error("bridge already running");
   handles.push(handle);
   return handle;
@@ -67,10 +76,24 @@ export function clearCookies(): void {
   }
 }
 
+/** Signed-in visitor: the readable hint cookie the server sets with the session. */
+export function signIn(publicId = "pub_A"): void {
+  document.cookie = `sh_hint=${publicId}; path=/`;
+}
+
+/** Make document.visibilityState report `state` and fire visibilitychange. */
+export function setVisibility(state: DocumentVisibilityState): void {
+  vi.spyOn(document, "visibilityState", "get").mockReturnValue(state);
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
 /** Common per-test cleanup for files that boot the bridge. */
 export function useCleanBridge(): void {
   afterEach(() => {
+    disposeHubs();
     disposeAll();
+    vi.useRealTimers();
+    reloads.count = 0;
     localStorage.clear();
     sessionStorage.clear();
     clearCookies();

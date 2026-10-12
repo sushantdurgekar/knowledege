@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { startBridge } from "../src/index";
+import { fakeServer } from "./fake-server";
 import { boot, useCleanBridge } from "./helpers";
 
 useCleanBridge();
@@ -43,14 +44,17 @@ describe("window.claude", () => {
     expect(handle.api.stats().mode).toBe("anonymous");
   });
 
-  it("M0 with an sh_hint cookie: db and user still resolve null", async () => {
+  it("an sh_hint the server does not honour: db and user resolve null, the page turns anonymous", async () => {
+    const server = fakeServer({ signedIn: false });
     document.cookie = "sh_hint=pub_abc; path=/";
     const handle = boot();
     expect(handle.cfg.hint).toBe("pub_abc");
+    expect(handle.api.stats()).toMatchObject({ mode: "signed-in", hint: true });
     const { db, user } = await hubBoot();
     expect(db).toBeNull();
     expect(user).toBeNull();
-    expect(handle.api.stats().hint).toBe(true);
+    expect(server.calls.map((c) => c.path)).toEqual(["/api/progress/ai103"]);
+    expect(handle.api.stats()).toMatchObject({ mode: "anonymous", hint: true, network: 1 });
   });
 
   it("use('sample') settles in the first microtask (no 'hidden AI buttons' paint)", async () => {
@@ -104,6 +108,7 @@ describe("window.__studyhubsBridge", () => {
       network: 0,
       legacy: { seedCalls: 1, signedIn: false },
       outbox: { pending: 0, flushes: 0 },
+      sync: null,
     });
   });
 
