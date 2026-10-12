@@ -6,7 +6,7 @@ subject: system-design
 tags: [system-design, plan, levels]
 status: planned
 created: 2026-10-08
-updated: 2026-10-08
+updated: 2026-10-12
 ---
 # System Design: L1–L4 learning plan
 
@@ -90,11 +90,11 @@ All 1,433 unique links in the system design and DSA workbooks were opened one by
   - [x] concept notes `concepts/l1-NN-*.md` (story + diagram + worked example)
   - [x] hub published + saved · fact/answer-key self-check (fresh-agent review still to do) · SRS deck `system-design-l1`
   - [x] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
-- [ ] **#21 System Design L2 Proficient hub** → `hubs/system-design-l2-proficient-hub.html`
-  - [ ] re-verify versions, cert facts and links · audit existing material for L2
-  - [ ] concept notes `concepts/l2-NN-*.md` (story + diagram + worked example)
-  - [ ] hub published + saved · independent fact/answer-key check · SRS deck `system-design-l2`
-  - [ ] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
+- [x] **#21 System Design L2 Proficient hub** → `hubs/system-design-l2-proficient-hub.html` ([open](https://claude.ai/artifact/WYKUGQ93VYjG6xBpea5exS), built 2026-10-12)
+  - [x] re-verify versions, cert facts and links · audit existing material for L2
+  - [x] concept notes `concepts/l2-NN-*.md` (story + diagram + worked example)
+  - [x] hub published + saved · fact/answer-key self-check (fresh-agent review still to do) · SRS deck `system-design-l2`
+  - [x] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
 - [ ] **#34 System Design L3 Specialist hub** → `hubs/system-design-l3-specialist-hub.html`
   - [ ] re-verify versions, cert facts and links · audit existing material for L3
   - [ ] concept notes `concepts/l3-NN-*.md` (story + diagram + worked example)

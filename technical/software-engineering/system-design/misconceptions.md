@@ -82,3 +82,85 @@ Sections are added by each hub level. Newest build replaces its own level's sect
 - **“Bandwidth is the same thing as requests per second.”** Bandwidth is requests × bytes. A modest 1,000 requests a second of 1 MB images is 8 Gbit/s, more than many servers' network links: that's what CDNs are for.
 - **“MB/s and Mbit/s are the same.”** File sizes are counted in bytes and network speeds in bits, with 8 bits to a byte. 100 MB/s of data needs about 800 Mbit/s of network.
 - **“Every registered user is active every day.”** Daily active users are usually a fraction of everyone who has signed up, and each does only a few things a day. Start from daily active users and actions per user, and say where those numbers came from.
+
+## L2 Proficient (2026-10-09)
+
+### Consistency models: what a reader is promised
+- **“Eventual consistency means the data might never agree.”** It promises convergence once writes stop; what it doesn't promise is when, or what you see in the meantime. In a healthy system the lag is usually milliseconds to seconds.
+- **“CAP means you pick two of consistency, availability and partition tolerance.”** Partitions happen whether you like it or not, so the real choice is what to do during one: refuse some requests or answer with possibly stale data. Outside partitions, PACELC's latency-or-consistency trade-off applies.
+- **“Strong consistency is always the safe choice.”** It costs latency on every operation and availability during partitions. Use it where stale data causes real harm (money, stock, locks) and weaker promises elsewhere.
+- **“Read-your-writes needs strong consistency everywhere.”** It's a promise to each client: send a user's reads to the leader for a while after they write, or only accept replicas that have their version. Everyone else keeps reading nearby copies.
+- **“A replica that answers quickly is up to date.”** Replicas rarely know they're stale, and speed says nothing about freshness. Only versions or timestamps compared with what the client has seen can tell you.
+- **“Last-writer-wins resolves conflicts safely.”** It keeps one write and silently discards the others, and it trusts clocks that can disagree. Fine for a profile picture, dangerous for a basket or a balance; module 2 covers better merges.
+
+### Replication: leaders, followers and quorums
+- **“A replica is a backup.”** A replica copies every change, mistakes included: a bad DELETE reaches every replica within milliseconds. You still need backups and point-in-time recovery to undo errors.
+- **“Asynchronous replication never loses a confirmed write.”** If the leader dies before the followers receive a write it has already confirmed, the promoted follower doesn't have it. Use semi-synchronous replication or quorum writes where losing a confirmed write is unacceptable.
+- **“W + R > N makes a leaderless store strongly consistent.”** It guarantees overlap with the latest successful write, but concurrent writes, writes that fail halfway and sloppy quorums can still give stale or conflicting reads. Quorums alone aren't linearizable.
+- **“Multi-leader is just a faster leader-follower.”** Every leader accepts writes, so the same item can change in two places at once. Without a conflict strategy (a merge, last-writer-wins, or asking the user), data is silently lost.
+- **“Last-writer-wins uses real time.”** It uses timestamps from clocks that drift and jump, so a server whose clock runs a few seconds slow can lose every conflict, even for later writes. Prefer version vectors or merges for data that matters.
+- **“Automatic failover is always safer than manual.”** An over-eager failover on a slow network can promote a follower while the old leader is still alive (split brain), or drop recent writes. Use timeouts that fit your network, fencing, and leader election by consensus (L3).
+
+### Partitioning: splitting data across machines
+- **“hash(key) mod N is fine for sharding.”** Changing N moves almost every key: about 80% going from 4 nodes to 5, and 90% from 10 to 11. Use consistent hashing or many fixed partitions so that growth moves only a small share.
+- **“Range partitioning by timestamp spreads the writes.”** All of today's writes land in the newest range, so one partition takes everything. Put a well-spread value (a bucket of the user or device id) before the timestamp, or hash.
+- **“A good hash removes hot spots.”** A hash spreads different keys, but one key with enormous traffic still lands on one partition. Cache it, salt it into sub-keys, or give it its own capacity.
+- **“Cross-partition queries are just a bit slower.”** They ask every partition and wait for the slowest, so tail latency grows with the number of partitions, and joins or transactions across partitions need extra machinery. Pick the partition key so that the common queries stay on one partition.
+- **“Consistent hashing balances the load on its own.”** With one point per node, shares can differ several-fold. Virtual nodes, dozens to hundreds of points per node, bring every node close to its fair share.
+- **“Rebalance automatically as soon as the load is uneven.”** Moving data costs bandwidth and disk on nodes that are already busy, and an automatic rebalance during an overload or a brief failure can make things worse. Rebalance deliberately, a few partitions at a time, with throttling.
+
+### Caching strategies: writes, invalidation and stampedes
+- **“Write-back is just a faster write-through.”** Writes that haven't been flushed exist only in the cache; if that node dies, they're gone. Use it where losing the last few seconds is acceptable (counters, metrics), or make the cache durable.
+- **“Update the cached value on every write instead of deleting it.”** Two concurrent writers can update the database in one order and the cache in the other, leaving the cache wrong until its TTL ends. Deleting is safer: the next read reloads whatever the database holds.
+- **“Deleting the key after a write keeps the cache consistent.”** A slow reader that read the old row before the write can store it after the delete (the stale-set race). Keep TTLs short, delete again a moment later, or use versions or leases that reject older values.
+- **“A lock around recomputation solves stampedes.”** It stops the duplicate work but makes every waiting request slow, and a crashed lock holder stalls them all unless the lock expires. Serving stale data while one refresh runs, or refreshing early, keeps latency flat.
+- **“Redis is a database, so it won't lose data.”** Its persistence is configurable and often asynchronous, and with eviction enabled it deletes keys under memory pressure by design. Keep the source of truth in a real database unless you've configured and tested Redis for durability.
+- **“Put everything in one Redis.”** One instance is a single point of failure and executes commands one at a time. Separate the cache from rate limiters and locks, plan memory and eviction for each use, and use replicas or a cluster for anything critical.
+
+### Messaging: queues, pub/sub and delivery guarantees
+- **“Our broker guarantees exactly-once, so consumers don't need to deduplicate.”** Exactly-once features cover a narrow path, such as Kafka transactions from topic to topic, or SQS FIFO deduplication within a five-minute window. Effects outside the broker, like charging a card or sending an email, still need idempotency keys.
+- **“Acknowledge first, so the message isn't redelivered.”** That's at-most-once: a crash after the ack loses the message. Process first, then acknowledge, and make the processing idempotent.
+- **“A FIFO queue keeps things in order, however many consumers it has.”** The queue hands messages out in order, but parallel consumers finish them in any order. Order holds per partition or message group, with one consumer at a time.
+- **“Retry failed messages until they succeed.”** A poison message never succeeds: it burns consumers and, in an ordered partition, blocks everything behind it. Cap the attempts, back off between them, and dead-letter the rest.
+- **“Save to the database, then publish the event: what could go wrong?”** A crash between the two loses the event, and publishing first can announce an order that never commits. Use a transactional outbox or change-data-capture.
+- **“A queue fixes overload.”** It turns a spike into a backlog. If consumers are slower than producers on average, the backlog grows until messages expire or the disk fills. Watch depth and consumer lag, scale consumers, and push back on producers.
+
+### Rate limiting and resilience: limits, timeouts, retries and breakers
+- **“Rate limit by IP address.”** Many users can share one IP (offices, mobile carriers), and one attacker can use thousands. Limit by API key or user where you can, and keep IP limits as a coarse outer layer.
+- **“Just retry on errors.”** Retrying a non-idempotent call can double a payment, a 400 will never succeed, and retries at every layer multiply the load on a struggling service. Retry transient errors only, with backoff, jitter and a budget, at one layer.
+- **“Exponential backoff is enough.”** Clients that failed together back off by the same amounts and come back together, in synchronized waves. Jitter, a random part in each wait, spreads them out.
+- **“Long timeouts are safer: the call will succeed eventually.”** While it waits, the caller holds a thread, a connection and memory; enough slow calls exhaust them and the caller fails too. Set timeouts from the dependency's real latency, and pass deadlines down the call chain.
+- **“A circuit breaker fixes the failing service.”** It protects the caller and gives the dependency room to recover, but users still see errors unless there's a fallback: a cached result, a default, or a feature that degrades gracefully.
+- **“Each server can keep its own counter.”** With N servers behind a load balancer, a client gets up to N times the limit. Share the counters (Redis, updated atomically), give each server limit/N as an approximation, or route each client to one server.
+
+### Service architecture: monoliths, microservices, gateways and discovery
+- **“Microservices will make us faster.”** Only when separate teams are blocking each other. For a small team they add network calls, distributed data and operational work, and slow everything down. Start with a modular monolith and split where a boundary has earned it.
+- **“Split by layer: a UI service, a logic service, a data service.”** Then every feature touches every service. Split by business capability (orders, payments, catalogue), so most changes stay inside one service.
+- **“The services can share one database; it's simpler.”** Shared tables couple the services: a schema change needs every team, and one service's heavy query slows the others. Each service owns its data and shares it through its API or events.
+- **“Put business logic in the gateway, since every request passes through it.”** The gateway becomes a bottleneck every team must change, and a single point of failure for that logic. Keep it to cross-cutting concerns: routing, authentication, limits, TLS.
+- **“A long chain of synchronous calls is fine; each service is 99.9% available.”** Availabilities multiply and latencies add: ten services in a chain at 99.9% each give about 99.0%, and the chain is as slow as all of them together. Prefer events for workflows, and keep chains short.
+- **“Service discovery means hard-coding the load balancer's address.”** Instances change constantly with autoscaling and deploys. Callers need a registry kept current by health checks (or a platform such as Kubernetes that provides one), and should retry on another instance when one fails.
+
+### Real-time communication: polling, long polling, SSE and WebSockets
+- **“WebSockets are always the best choice for real time.”** If only the server sends, SSE is simpler: plain HTTP, with reconnection and resuming built in. If updates are rare, polling may be cheaper than holding a connection per user.
+- **“Once a message is pushed, it has been delivered.”** Pushes are lost when phones switch networks or apps go to sleep. Store first, number messages per conversation, and let clients fetch gaps and catch up on reconnect.
+- **“Polling every second gives real time cheaply.”** The load is clients × frequency whether or not anything changed: a million clients polling every second is a million requests a second, nearly all of them empty.
+- **“The load balancer will spread WebSocket load evenly.”** Connections live for hours, so a server that restarts or joins late stays unbalanced. Balance by connection count, drain gently on deploys, and add jitter to reconnects so a restart doesn't cause a stampede.
+- **“Every server can broadcast every message to every other server.”** That works for a handful of servers; then the traffic between servers dominates. Route through a registry of which server holds which user, or subscribe each server only to the channels its users need.
+- **“Presence (who's online) can be exact.”** Connections die silently, so presence is a heartbeat with a TTL and is always a few seconds stale. Design the interface to tolerate that.
+
+### Observability: logs, metrics, traces and SLOs
+- **“Alert on high CPU.”** Users don't feel CPU; they feel errors and slowness. Page on symptoms (the SLO burning), and keep cause signals like CPU for dashboards and capacity planning.
+- **“Track the average latency.”** Averages hide the slow requests users remember. Record histograms and watch p95 and p99, and remember that a page making ten calls meets each call's p99 far more often than 1% of the time.
+- **“Aim for 100% availability.”** It's impossible, enormously expensive to approach, and users can't tell 99.99% from 100% through their own networks and devices. Pick the target users need, and spend the rest of the budget on shipping.
+- **“Add the user id as a metric label so we can break it down by user.”** Every distinct label value creates another time series; a million users means a million series per metric. Keep high-cardinality fields in logs and traces.
+- **“Log everything at debug level, just in case.”** Volume drives cost and buries the signal, and logs can leak secrets and personal data. Log structured events with ids, sample the noisy ones, and use traces for request flows.
+- **“Tracing means instrumenting every service by hand.”** OpenTelemetry's libraries and auto-instrumentation cover common frameworks, HTTP clients and databases; you add spans by hand only for your own important steps. What must never be skipped is passing the trace header on.
+
+### The interview framework and classic designs
+- **“Start drawing boxes straight away.”** Without requirements and numbers the design has nothing to be right about. Spend the first minutes on scope, non-functional needs and estimates; they decide whether you need a cache, partitioning or a queue.
+- **“Non-functional requirements are optional extras.”** Latency, availability, consistency and durability targets shape a design more than its features do: “messages are never lost” and “a feed may be a minute stale” lead to very different systems.
+- **“Design for a billion users from day one.”** Design for the stated scale with room to grow, and say what you'd change at 10× and 100×. Complexity that the numbers don't justify costs money and time, and interviewers notice.
+- **“A single cache node is a single point of failure.”** Only if requests fail without it. With cache-aside, a cache outage makes reads slower, not impossible, provided the database can take the extra load for a while.
+- **“There's one right answer.”** There are several defensible designs. What's judged is whether each choice follows from the requirements and whether you can say what it costs.
+- **“Deep dives should cover everything.”** Time is short: pick the one or two parts that are hardest or riskiest for this product, such as fan-out for a feed or ordering for chat, and go deep there.

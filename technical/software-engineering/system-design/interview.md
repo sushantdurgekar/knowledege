@@ -112,3 +112,104 @@ _Estimation_
 Assume 100 million new links a month and 100 redirects per link. That's about 40 writes a second and 4,000 redirects a second on average, about 12,000 at a 3× peak. Over five years that's 6 billion links, so base-62 codes need 6 characters (62⁶ ≈ 57 billion). At 500 bytes a record, that's 3 TB, or 9 TB with three copies, and caching 20% of a day's reads needs about 33 GB of memory. Nothing there needs a huge fleet, so the design effort goes into fast redirects and availability.
 
 Follow-ups: What would change at 100 times the traffic?
+
+## L2 Proficient (2026-10-09)
+
+### Explain CAP and PACELC, and how you'd use them in a design discussion.
+_Consistency_
+
+CAP says that when a network partition separates replicas, a system must either refuse some requests to stay consistent or keep answering on both sides and accept that they diverge. PACELC adds the everyday case: even without a partition, you trade latency against consistency, because waiting for other replicas takes time. In a design I use them per feature, not per system: payments and inventory counts choose consistency and accept errors or delays during a partition; likes, feeds and view counts choose availability and low latency, and converge later.
+
+Follow-ups: Where does a single-leader database with async replicas sit? · What does the user see when a CP system is partitioned?
+
+### What's the difference between linearizability and eventual consistency, and when do you need each?
+_Consistency_
+
+Linearizability makes the system behave like a single copy: once a write completes, every later read, from any client, sees it. Eventual consistency only promises that replicas converge if writes stop, so reads can be stale for a while. I need linearizability for things like a unique username, a lock or an account balance that must not go negative; elsewhere eventual consistency, often with session guarantees such as read-your-writes, is cheaper and faster.
+
+### How can leader failover go wrong, and how do you guard against it?
+_Replication_
+
+With asynchronous replication the new leader may be missing the old leader's last writes, so they're lost or conflict when the old leader comes back. If the old leader isn't really dead, just slow or cut off, two leaders can accept writes at once: split brain. Guards: semi-synchronous replication so at least one follower has every write, a consensus-based election, fencing tokens so storage rejects the old leader's writes, and timeouts that aren't so short that a pause triggers failover.
+
+Follow-ups: What's a fencing token?
+
+### How do quorums work in a leaderless store?
+_Replication_
+
+Each key lives on N replicas. A write is sent to all of them and succeeds after W acknowledge; a read asks R and takes the newest version. If W + R > N, every read set overlaps the last write's set, so the read sees it; N = 3 with W = R = 2 is common. Replicas that missed writes catch up through read repair and background anti-entropy. The overlap guarantee weakens with sloppy quorums, concurrent writes and failures mid-write, so it's not full linearizability.
+
+### How would you partition a large table, and what do you do about hot keys?
+_Partitioning_
+
+I pick a partition key from the main access pattern: hash it for an even spread, or use ranges when range scans matter, accepting hot ranges. Routing goes through a lookup service or the client library, and secondary indexes are either local to each partition (queries fan out) or global (writes update another partition). For a hot key, I cache it, split it into sub-keys such as key#0 to key#9 and combine on read, or give it a partition of its own.
+
+Follow-ups: Why fixed partitions rather than one per node?
+
+### What is consistent hashing, and why use virtual nodes?
+_Partitioning_
+
+Nodes and keys are hashed onto a ring, and each key belongs to the next node clockwise. Adding or removing a node moves only the keys on its arc, about 1/N of them, instead of almost all keys as with hash mod N. With few nodes the arcs are uneven, so each node takes many points on the ring (virtual nodes): that evens out the load, and a leaving node's keys spread over many others instead of one neighbour.
+
+### Write-through, write-back or write-around: how do you choose?
+_Caching_
+
+Write-through updates the cache and the database together, so reads right after a write are fresh, at the cost of slower writes; it suits data read soon after it's written. Write-back writes the cache and flushes later, which is fast and batches well but loses unflushed writes if the cache dies, so I keep it for counters and metrics. Write-around writes only the database and drops the cached copy, which suits data rarely re-read soon. In every case I delete rather than update cached values, and guard against the stale-set race.
+
+### Can a message queue give you exactly-once processing?
+_Messaging_
+
+Not by itself across an unreliable network: an acknowledgement can be lost, so the broker redelivers, which is at-least-once. What you can build is an exactly-once effect: the consumer records each message id in the same transaction as its effect and skips ids it has seen, or makes the effect idempotent by nature. Kafka's transactions give exactly-once from topic to topic, but side effects outside Kafka, such as charging a card, still need idempotency.
+
+Follow-ups: What's the difference between at-most-once and at-least-once?
+
+### How do you keep events in order, and what breaks ordering?
+_Messaging_
+
+Order holds within a partition, so I key events by the entity whose order matters, such as the order id, and let one consumer read each partition at a time. Parallel consumers on one queue, retries that requeue at the back, dead-letter queues and producers retrying out of order all break it. Where order matters a lot, consumers should also check version numbers or sequence numbers, so a late event can't overwrite a newer state.
+
+### What is the transactional outbox, and why is it needed?
+_Messaging_
+
+Writing to the database and publishing to a broker are two writes that can't be made atomic: crash between them and the event is lost, or announced for a change that never committed. With an outbox, the service writes the event into an outbox table in the same transaction as the change; a relay, or change-data-capture on the database log, publishes it afterwards. Delivery is at-least-once, so events carry ids and consumers deduplicate.
+
+### Design a rate limiter for an API that runs on many servers.
+_Resilience_
+
+Requirements first: limits per API key, say 100 requests a minute with short bursts, checked in about a millisecond, with 429 and Retry-After when exceeded. I'd use a token bucket per client in Redis, as a hash of tokens and the last refill time, updated by a Lua script so the refill, check and spend are atomic across all API servers; keys get a TTL so idle clients disappear. The limiter sits in the gateway, before any work is done. If Redis is unreachable, ordinary APIs fail open and sensitive ones such as logins fail closed. At very high volume, servers can hold a small local allowance and sync in batches.
+
+Follow-ups: Token bucket or sliding window? · How do you avoid Redis becoming a single point of failure?
+
+### What is a circuit breaker, and how does it differ from a retry?
+_Resilience_
+
+A retry repeats a failed call in the hope that the failure was brief. A circuit breaker does the opposite when failures persist: after a threshold of failures it opens and fails calls at once, without calling the dependency, for a cool-down; then it lets a trial call through and closes if it succeeds. Retries handle blips; breakers stop a caller from wasting threads and hammering a dependency that's down. They work together, with timeouts on every call and a fallback for when the breaker is open.
+
+### Would you start a new product with microservices or a monolith?
+_Architecture_
+
+Usually a modular monolith: one deployable with enforced module boundaries, which is simple to build, test and change while the domain is still being discovered. I'd split off services when separate teams start blocking each other's releases, or when a part needs its own scaling or failure isolation, cutting along business capabilities with each service owning its data. Splitting early turns every change into a distributed one: network calls, versioned APIs and no transactions across services.
+
+### How would you build the real-time part of a chat app?
+_Real time_
+
+Clients hold a WebSocket to a fleet of gateway servers. When a message arrives, the chat service stores it first, with the next sequence number for its conversation, then routes it to the gateways holding the recipients' connections, using a registry or pub/sub, with push notifications for offline devices. Pushes can be lost, so clients fill gaps by sequence number, ignore duplicates, and on reconnect ask for everything after the last number they saw. Presence is a heartbeat with a TTL, so it's always slightly stale.
+
+Follow-ups: How do you handle a group with 100,000 members?
+
+### How do you define SLOs, and what do you do with the error budget?
+_Observability_
+
+I pick SLIs that users would notice, as ratios of good events to all events, such as checkout requests that succeed within 500 ms, measured close to the user. The SLO is a target over a window, say 99.9% over 30 days, and the 0.1% left over is the error budget. Alerts page on the budget's burn rate (fast and slow windows), not on CPU. While budget remains we ship; when it's being spent too fast, the agreed policy slows risky releases and moves effort to reliability.
+
+### Design a news feed.
+_Classic designs_
+
+After agreeing scope and scale, the crux is fan-out. Pushing each post into every follower's precomputed feed (fan-out on write) makes reading a feed one lookup, which suits the usual pattern of far more reads than posts, but one celebrity post would mean millions of writes. So I'd push for ordinary accounts, using queue workers, and merge celebrities' recent posts in at read time from a cache. Feeds keep only a few hundred ids in memory, posts live in a partitioned store, and inactive users' feeds are rebuilt on demand rather than kept up to date.
+
+Follow-ups: How would you rank the feed instead of sorting by time?
+
+### Design a notification service.
+_Classic designs_
+
+Callers send a request with the user, a template, data and an idempotency key. The API checks the user's preferences and per-user limits, puts the message on a queue per channel (email, SMS, push) and replies straight away. Workers render the template and call the providers, with timeouts, retries with backoff and jitter, circuit breakers per provider, and a dead-letter queue after a few attempts. The idempotency key, recorded with each send, stops retries from sending twice. I'd monitor queue depth, delivery latency, provider error rates and the dead-letter queue.

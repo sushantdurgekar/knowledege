@@ -40,3 +40,31 @@ All links below were opened during the build; *Checked* gives the result.
 | [IETF draft: Idempotency-Key header](https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/) | draft | 4 | 4 | 4 | free | draft-07, expired | OK (expired) |
 | [Stripe API: idempotent requests](https://docs.stripe.com/api/idempotent_requests) | docs | 4 | 5 | 4 | free | keys pruned after ≥ 24 h | OK |
 | [Colin Scott: latency numbers by year](https://colin-scott.github.io/personal_website/research/interactive_latency.html) | interactive | 4 | 3 | 3 | free | orders of magnitude | OK |
+
+## Used by the L2 hub (opened 2026-10-12)
+
+All 61 links in the L2 hub were opened during the build; the key ones are below. *Checked* gives the result.
+
+| Resource | Kind | A | R | D | Cost | Note | Checked |
+|---|---|---|---|---|---|---|---|
+| [Designing Data-Intensive Applications, 2nd edition](https://martin.kleppmann.com/2026/03/24/designing-data-intensive-applications-2e.html) | book | 5 | 5 | 5 | paid | the core book for L2–L4 | OK |
+| [Dynamo: Amazon's highly available key-value store (SOSP 2007)](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf) | paper | 5 | 2 | 5 | free | quorums, sloppy quorums, hinted handoff | OK |
+| [Jepsen: consistency models](https://jepsen.io/consistency) | reference | 5 | 4 | 5 | free | a map of consistency guarantees | OK |
+| [CAP twelve years later (Brewer, InfoQ)](https://www.infoq.com/articles/cap-twelve-years-later-how-the-rules-have-changed/) | article | 5 | 2 | 4 | free | CAP in practice | OK |
+| [PostgreSQL docs: high availability and replication](https://www.postgresql.org/docs/current/high-availability.html) | docs | 5 | 5 | 4 | free | streaming replication, standbys | OK |
+| [DynamoDB: write sharding](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-sharding.html) | docs | 5 | 5 | 4 | free | hot partition keys | OK |
+| [Optimal probabilistic cache stampede prevention (VLDB 2015)](https://cseweb.ucsd.edu/~avattani/papers/cache_stampede.pdf) | paper | 5 | 3 | 4 | free | XFetch early refresh | OK |
+| [Redis docs: data types](https://redis.io/docs/latest/develop/data-types/) | docs | 5 | 5 | 4 | free | sorted sets, counters | OK |
+| [Apache Kafka 4.3 docs: Design](https://kafka.apache.org/43/design/design/) | docs | 5 | 5 | 5 | free | consumer position, delivery semantics (the unversioned /documentation page now redirects) | OK |
+| [Amazon SQS: visibility timeout and dead-letter queues](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html) | docs | 5 | 5 | 4 | free | redelivery mechanics | OK |
+| [microservices.io: Transactional outbox](https://microservices.io/patterns/data/transactional-outbox.html) | pattern | 4 | 4 | 4 | free | outbox + relay | OK |
+| [AWS Architecture Blog: Exponential backoff and jitter](https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/) | article | 5 | 3 | 4 | free | full jitter | OK |
+| [Stripe: Scaling your API with rate limiters](https://stripe.com/blog/rate-limiters) | article | 4 | 3 | 4 | free | four kinds of limiter | OK |
+| [Cloudflare: rate limiting at scale (sliding window counter)](https://blog.cloudflare.com/counting-things-a-lot-of-different-things/) | article | 4 | 3 | 4 | free | two-counter approximation | OK |
+| [Martin Fowler: Microservices, MonolithFirst, CircuitBreaker](https://martinfowler.com/microservices/) | articles | 4 | 3 | 4 | free | service architecture basics | OK |
+| [Sam Newman: Backends for frontends](https://samnewman.io/patterns/architectural/bff/) | pattern | 4 | 3 | 4 | free | BFF | OK |
+| [MDN: Server-sent events; RFC 6455 (WebSocket)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) | docs | 5 | 5 | 4 | free | real-time transports | OK |
+| [Google SRE workbook: Alerting on SLOs](https://sre.google/workbook/alerting-on-slos/) | book | 5 | 3 | 5 | free | burn rates 14.4 (1 h) and 6 (6 h) | OK |
+| [OpenTelemetry docs and W3C Trace Context](https://opentelemetry.io/docs/concepts/) | docs | 5 | 5 | 4 | free | traces, metrics, logs; traceparent | OK |
+| [Prometheus: histograms and summaries](https://prometheus.io/docs/practices/histograms/) | docs | 5 | 5 | 4 | free | histogram_quantile | OK |
+| [System Design Primer: Twitter timeline, pastebin](https://github.com/donnemartin/system-design-primer) | community | 4 | 3 | 4 | free | classic design write-ups | OK |

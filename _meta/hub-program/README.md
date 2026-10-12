@@ -75,7 +75,7 @@ Hub tooling: bundles are applied with `python _meta/tools/apply_hub_bundle.py <b
 | 18 | [ ] | **AI Engineering L2 Proficient** | `technical/data-ai/ai-engineering/hubs/ai-engineering-l2-proficient-hub.html` | AI-103 Azure AI Apps and Agents Developer (hub ready); Optional: AWS MLA-C02 (GA 14 Jan 2027) | 80–100 h |
 | 19 | [ ] | **JavaScript (browser) L2 Proficient** | `technical/web-dev/javascript/hubs/javascript-l2-proficient-hub.html` | JSA-41-01 (JS Institute, associate); certificates.dev Mid-Level JavaScript (optional) | 60–80 h |
 | 20 | [x] | **Data Structures & Algorithms L2 Proficient** | `technical/software-engineering/dsa/hubs/dsa-l2-proficient-hub.html` | None; milestone = 150 curated problems + mock interviews | 120–150 h |
-| 21 | [ ] | **System Design L2 Proficient** | `technical/software-engineering/system-design/hubs/system-design-l2-proficient-hub.html` | None | 60–80 h |
+| 21 | [x] | **System Design L2 Proficient** | `technical/software-engineering/system-design/hubs/system-design-l2-proficient-hub.html` | None | 60–80 h |
 | 22 | [ ] | **Node.js (server) L2 Proficient** | `technical/web-dev/nodejs/hubs/nodejs-l2-proficient-hub.html` | None current (see L1 note) | 60–80 h |
 | 23 | [ ] | **React L2 Proficient** | `technical/web-dev/react/hubs/react-l2-proficient-hub.html` | certificates.dev Mid-Level React (optional); Meta Front-End Developer Professional Certificate (Coursera, optional; check currency) | 60–80 h |
 | 24 | [ ] | **Docker & Containers L2 Proficient** | `technical/devops/docker/hubs/docker-l2-proficient-hub.html` | Docker Certified Associate (DCA), now run by Mirantis (verify current availability and price) | 35–50 h |
