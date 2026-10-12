@@ -7,6 +7,7 @@ updated: 2026-10-11
 - **Active track:** AI-103 (technical/certifications/ai-103) · hub https://claude.ai/artifact/TdpMZLFYA9knTdjNyCms9F
 - **Hub program:** 52-build queue in `_meta/hub-program/README.md`. **Current run order:** DSA L1–L4 → System Design L1–L4 (both with every example in Python + JavaScript) → L1 hubs: Python, SQL, Qlik, Power BI, AI Engineering, JavaScript, Node.js, React, Docker, Next.js.
 - **Hubs built:** DSA L1 https://claude.ai/artifact/SWv6N1Uh2oiFNH1mxefcNr · DSA L2 https://claude.ai/artifact/DQhszKFoe8qbiNbSpWkqM5 · DSA L3 https://claude.ai/artifact/JfuakQWBwAvSgLi1rcuJUk (`technical/software-engineering/dsa/hubs/`).
+- **In progress:** #9 System Design L1 Foundation: modules 1–4 of 9 written and tested (networking, scaling, availability, load balancing); next module 5, caching.
 - **Next build:** #9 System Design L1 Foundation, then #21, #34, #47 (Python + JavaScript examples throughout), then the L1 hubs. DSA L1–L4 are all done (L4 on 2026-10-12). Hub sources are backed up in `.inbox/hubwork-backup/hubwork-src.tgz`.
 - **Tools:** `_meta/tools/apply_hub_bundle.py <bundle.tgz>` (files + merged notes + parked cards); `_meta/tools/activate_deck.py <deck>` (start a deck, 8 cards a day).
 - **Audits done:** SD + DSA sheet links (cleaned `-verified.xlsx`); Qlik framework (8 issues).
