@@ -95,11 +95,11 @@ All 1,433 unique links in the system design and DSA workbooks were opened one by
   - [x] concept notes `concepts/l2-NN-*.md` (story + diagram + worked example)
   - [x] hub published + saved · fact/answer-key self-check (fresh-agent review still to do) · SRS deck `system-design-l2`
   - [x] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
-- [ ] **#34 System Design L3 Specialist hub** → `hubs/system-design-l3-specialist-hub.html`
-  - [ ] re-verify versions, cert facts and links · audit existing material for L3
-  - [ ] concept notes `concepts/l3-NN-*.md` (story + diagram + worked example)
-  - [ ] hub published + saved · independent fact/answer-key check · SRS deck `system-design-l3`
-  - [ ] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
+- [x] **#34 System Design L3 Specialist hub** → `hubs/system-design-l3-specialist-hub.html` ([open](https://claude.ai/artifact/W93mxxEWBqV4MS8kJiz9dU), built 2026-10-12)
+  - [x] re-verify versions, cert facts and links · audit existing material for L3
+  - [x] concept notes `concepts/l3-NN-*.md` (story + diagram + worked example)
+  - [x] hub published + saved · fact/answer-key self-check (fresh-agent review still to do) · SRS deck `system-design-l3`
+  - [x] capstone brief in `labs/` · interview Q&A · README/INDEX updated · commit
 - [ ] **#47 System Design L4 Expert hub** → `hubs/system-design-l4-expert-hub.html`
   - [ ] re-verify versions, cert facts and links · audit existing material for L4
   - [ ] concept notes `concepts/l4-NN-*.md` (story + diagram + worked example)

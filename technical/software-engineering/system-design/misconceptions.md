@@ -164,3 +164,77 @@ Sections are added by each hub level. Newest build replaces its own level's sect
 - **“A single cache node is a single point of failure.”** Only if requests fail without it. With cache-aside, a cache outage makes reads slower, not impossible, provided the database can take the extra load for a while.
 - **“There's one right answer.”** There are several defensible designs. What's judged is whether each choice follows from the requirements and whether you can say what it costs.
 - **“Deep dives should cover everything.”** Time is short: pick the one or two parts that are hardest or riskiest for this product, such as fan-out for a feed or ordering for chat, and go deep there.
+
+## L3 Specialist (2026-10-09)
+
+### Distributed transactions: two-phase commit, sagas, outbox and inbox
+- **“Use two-phase commit across our microservices.”** Every service must support prepare, all of them must be up for any order to commit, and a coordinator failure leaves them holding locks. Across services, sagas with idempotent steps are the usual answer; keep 2PC inside database systems that make the coordinator highly available.
+- **“A compensation is a rollback.”** The original step committed and others may have seen it. A compensation is a new business action (a refund, a release, a cancellation) that must be idempotent and retried until it succeeds, and it may leave traces, such as a refund line on a statement.
+- **“A saga is isolated like a transaction.”** Each step commits at once, so other transactions see intermediate states: stock reserved for an order that will be cancelled. Use pending states, commutative updates and re-reads, and show users the pending status.
+- **“Put the irreversible step first, to get it over with.”** Then a later failure leaves nothing you can undo. Put compensatable steps first, then the pivot, then steps that can only be retried.
+- **“Choreography is always more decoupled, so always use it.”** For long flows the logic hides in a web of subscriptions, cycles creep in, and nobody can say where an order is. An orchestrator keeps the flow visible and resumable; choreography suits two or three steps.
+- **“The broker deduplicates, so consumers don't need an inbox.”** Broker deduplication covers narrow cases and windows. A consumer that records processed ids in the same transaction as its effect is safe against every kind of repeat, including relay replays from the outbox.
+
+### Event-driven architecture: event sourcing, CQRS and evolving schemas
+- **“With event sourcing we can delete the database and just keep events.”** Replaying everything on every read is too slow. Keep snapshots and projections for reading; the log is the source of truth, not the only store.
+- **“Events are just our database rows, sent out.”** Rows describe current state and change shape with every refactor. Events are business facts, in the past tense, designed as a stable contract that other teams build on.
+- **“CQRS means the read side is always up to date.”** Projections lag behind the log, by milliseconds or minutes. Design screens for it: show what was just submitted from the command's result, or wait for the projection's offset to pass the write.
+- **“We can rename a field in the new version; consumers will update.”** Old events in the log keep the old name forever, and consumers update at different times. Add a new field with a default, keep reading the old one, and upcast.
+- **“Start with a few partitions; we can add more later.”** Adding partitions remaps most keys, so a key's new events land in a different partition from its old ones and per-key order breaks. Size for growth from the start, or plan a migration to a new topic.
+- **“Immutable logs and the right to be forgotten don't mix, so ignore it.”** Regulations still apply. Keep personal data out of events where you can, reference it by id, or encrypt it per person and delete that person's key (crypto-shredding).
+
+### Stream and batch processing: windows, watermarks and exactly-once
+- **“Window by processing time; it's simpler.”** Results then depend on network delays and outages: a backlog after an outage piles into the minute it's processed. Window by event time, and use processing time only where arrival time really is the question.
+- **“A watermark guarantees no older events will come.”** It's an estimate. Decide what happens to events behind it: drop them and count them, send them to a side output, or update results already emitted, and make downstream consumers handle updates.
+- **“Exactly-once processing means my emails are sent exactly once.”** Checkpoints make state and transactional or idempotent sinks exact. A side effect outside them, such as an email or an API call, can still repeat after a replay unless it carries an idempotency key.
+- **“Lambda is the safe choice because the batch layer fixes everything.”** It doubles the logic and the bugs: two codebases computing the same metric drift, and their results disagree. With a replayable log, one streaming job that can reprocess (Kappa) is usually simpler.
+- **“Checkpoint as rarely as possible to save overhead.”** Rarely checkpointed jobs replay a lot after every failure, and transactional sinks hold their output longer. Choose the interval from the recovery time you can accept.
+- **“State grows; we'll just add memory.”** Windows and sessions keep state per key until the watermark passes them; unbounded keys or no allowed-lateness limit means unbounded state. Bound lateness, expire state with TTLs, and keep large state in RocksDB with incremental checkpoints.
+
+### Consensus and coordination: Raft, fencing tokens and logical clocks
+- **“Two nodes are enough for a highly available consensus cluster.”** A majority of two is two, so losing either one stops all progress. Use three servers to survive one failure, or five to survive two; an even number adds cost without adding tolerance.
+- **“A lock with a lease is safe: the lease expires before anyone else can get it.”** The holder can pause past its lease (garbage collection, a VM migration, a slow disk) and then act as if it still holds it. Locks that protect correctness need fencing tokens checked by the resource.
+- **“Check that we still hold the lock just before writing.”** The pause can come between the check and the write. Only the resource receiving the write can reliably reject a stale holder, by comparing tokens.
+- **“Order writes from different machines by their timestamps.”** Clock skew and NTP steps make cross-machine timestamps unreliable, and last-write-wins with skewed clocks silently drops writes. Order through a consensus log, or use logical or hybrid clocks.
+- **“Lamport timestamps tell me which events were concurrent.”** They give an order consistent with causality, but L(a) < L(b) doesn't mean a caused b. Use vector clocks to detect concurrent updates.
+- **“Five members across two data centres, three in one and two in the other, survive a data-centre outage.”** Losing the three-member site leaves two of five: no majority, so the cluster stops. Spread members over three failure domains, such as 2 + 2 + 1, so any one can fail.
+
+### Storage engines: B-trees, LSM trees and the write-ahead log
+- **“LSM trees are faster than B-trees.”** Faster at ingesting writes; often slower for point reads and range scans, and compaction adds background I/O and latency spikes. The right engine depends on the read and write mix, so benchmark your own workload.
+- **“Random UUIDs are fine as primary keys.”** In a B-tree index each random key lands on a different page, rewriting a whole page per row and, once the index outgrows memory, adding a random read per insert. Time-ordered keys (UUIDv7, ULIDs) keep inserts on the newest pages.
+- **“Deletes free space in an LSM tree right away.”** A delete writes a tombstone, which costs space and slows reads until compaction removes it; mass deletes can pile up tombstones and time out queries. Prefer TTLs and time-window compaction, or drop whole partitions or tables.
+- **“Purge tombstones as soon as possible.”** A replica that missed the delete still holds the old value; if tombstones vanish before repair reaches it, the value comes back as zombie data. Cassandra keeps them for gc_grace_seconds (ten days by default), and repairs must run within that window.
+- **“Acknowledging writes before the fsync is safe; the OS will write them soon.”** Until the fsync, the data is only in memory: a power cut loses writes the clients were told were saved. Use group commit to stay durable and fast, and relax durability only where losing the last moments of writes is acceptable.
+- **“Compaction is background work; it won't affect users.”** It competes for disk bandwidth, and when it falls behind, files pile up, reads slow down and disk use grows. Rate-limit it, leave headroom, and alert on pending compaction bytes.
+
+### Search and geo: inverted indexes, ranking, geohashes and quadtrees
+- **“LIKE '%term%' is good enough for search.”** It scans every row, can't rank, and misses plurals and typos. Use full-text search: PostgreSQL's GIN-indexed tsvector for modest needs, a search engine when you need relevance tuning, facets and scale.
+- **“The search engine can be the source of truth.”** A search index is a derived, eventually consistent copy without transactions. Keep the truth in the database, feed the index through change data capture, and make sure it can be rebuilt from scratch.
+- **“Index with one analyzer, query with another.”** If 'Running' is indexed as 'run' but the query keeps 'running', nothing matches. Analyze both sides the same way, and reindex whenever the analyzer changes.
+- **“Deep pagination is free: page 500 costs the same as page 1.”** To serve results 10,000 to 10,020, every shard must find its top 10,020 and the coordinator must merge them all. Cap the page depth, and use search-after cursors for deep scrolling.
+- **“A shared prefix means close, so close means a shared prefix.”** The first holds; the second doesn't. Two points either side of a cell edge can share almost no prefix, so always search the neighbouring cells too.
+- **“A geohash cell is a square of fixed size.”** Cells are fixed in degrees, not metres. A 5-character cell is about 4.9 km square at the equator, but only about 3.2 km wide in Paris, and narrower still towards the poles.
+
+### Multi-region and disaster recovery: RPO, RTO, failover and residency
+- **“We replicate to another region, so we have disaster recovery.”** Replication copies mistakes too: a bad migration or a mass delete reaches the replica within seconds. Keep point-in-time backups, ideally immutable and in a separate account, and test restoring them.
+- **“Fail over automatically as soon as heartbeats stop.”** From one region, a dead peer and a broken link look the same. Confirm from a third location, fence the old primary, and wait long enough to ride out short network blips.
+- **“The standby region will scale up when we need it.”** In a regional outage everyone fails over at once, and capacity or quotas can run out. Keep enough capacity running or reserved, and count scaling time in the RTO.
+- **“Active-active just means running the same stack twice.”** Concurrent writes to the same data in two regions conflict. Give each record a home region, use CRDTs where data can merge, or pay for a globally consistent database.
+- **“Our DR plan is written down, so it works.”** Untested plans fail on hidden dependencies such as DNS, identity providers, secrets and deployment pipelines. Rehearse with game days and real region evacuations.
+- **“Data residency is solved by putting the main database in the right region.”** Backups, logs, analytics copies, caches and support tools hold personal data too. Map every copy, keep each within the allowed regions, and fail over only within them.
+
+### Security architecture: identity, authorization, zero trust, secrets and encryption
+- **“The gateway checked the token, so the services behind it can trust every request.”** Anything inside the network can call them directly: a compromised service, a misrouted request, a server-side request forgery bug. Authenticate callers with mTLS and authorize every request in the service that owns the data.
+- **“Put the user's roles and details in the JWT; it's signed.”** Signed isn't encrypted: whoever holds the token can read it, and claims go stale until it expires. Keep claims minimal, and look up anything sensitive or fast-changing.
+- **“Long-lived tokens are fine; we can revoke them.”** A self-contained token can't be revoked without a deny list. Keep access tokens to minutes, and make refresh tokens rotate on each use and be revocable.
+- **“Secrets in environment files are fine; the repository is private.”** Private repositories leak through forks, laptops, CI logs and former staff. Use a secrets manager, scan for leaks, and rotate anything that was ever committed.
+- **“The database is encrypted at rest, so the data is safe.”** At-rest encryption protects stolen disks and backups, not a compromised application holding valid credentials. Authorization, least privilege and audit logs still matter, and the keys must live apart from the data.
+- **“The UI hides the button, so users can't do it.”** UI checks are a convenience; attackers call the API directly. Enforce every permission on the server, for the specific object.
+
+### Classic large designs: video, ride-hailing, collaborative docs, payments, crawlers and key-value stores
+- **“Stream video straight from our own servers.”** Video is mostly bytes: a single popular title can need terabits a second. Serve segments from CDNs, push popular titles to the edge ahead of demand, and keep the origin for the long tail.
+- **“If a payment call times out, just retry it.”** Without an idempotency key the retry can charge the card twice. Retry with the same key, and if the outcome is still unknown, check the payment's status before deciding.
+- **“Store each account's balance and update it.”** In-place updates lose the history and make errors untraceable. Record every movement as balanced double-entry ledger lines, append-only, and derive balances from them.
+- **“Lock the document while someone is editing.”** Locks kill collaboration and fail badly when a client disconnects. Apply edits locally and merge concurrent ones with operational transformation or CRDTs.
+- **“Crawl breadth first, as fast as possible.”** That hammers whichever site has the most links, gets the crawler blocked, and can fall into infinite calendar or session-id URL spaces. Use per-host queues and delays, honour robots.txt, normalise URLs and cap depth per site.
+- **“Last-writer-wins is fine for the key-value store; conflicts are rare.”** Concurrent writes do happen, and last-writer-wins silently drops all but one. Keep one writer per key where you can, or detect conflicts with vector clocks and merge them (CRDTs, or the application).

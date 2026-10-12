@@ -213,3 +213,124 @@ Follow-ups: How would you rank the feed instead of sorting by time?
 _Classic designs_
 
 Callers send a request with the user, a template, data and an idempotency key. The API checks the user's preferences and per-user limits, puts the message on a queue per channel (email, SMS, push) and replies straight away. Workers render the template and call the providers, with timeouts, retries with backoff and jitter, circuit breakers per provider, and a dead-letter queue after a few attempts. The idempotency key, recorded with each send, stops retries from sending twice. I'd monitor queue depth, delivery latency, provider error rates and the dead-letter queue.
+
+## L3 Specialist (2026-10-09)
+
+### How do you keep data consistent across microservices without distributed transactions?
+_Transactions and events_
+
+With sagas: the business transaction becomes a sequence of local transactions, each with a compensating action, coordinated by an orchestrator or by services reacting to each other's events. Each step commits its state change and the event it causes together through an outbox, and consumers are idempotent because delivery is at least once. Two-phase commit works inside one database cluster, but across services it blocks when the coordinator fails and couples their availability, so I keep it for cases where atomicity is non-negotiable and the participants are few and reliable.
+
+Follow-ups: What does the saga do if a compensation fails? · Orchestration or choreography: which would you pick for orders, and why?
+
+### What is the outbox pattern, and why not just publish to Kafka after committing?
+_Transactions and events_
+
+Publishing after the commit is a dual write: if the process dies between the two, the database has the change and the event is lost, or the reverse if you publish first. The outbox writes the event into a table in the same local transaction as the change; a relay, or change data capture reading the database's log, publishes the rows and marks them sent. Publishing can repeat after a crash, so consumers dedupe by event id, typically with an inbox table written in the same transaction as their own change.
+
+Follow-ups: How would you keep the outbox table from growing forever? · What ordering guarantees does the relay give?
+
+### When is event sourcing a good idea, and what does it cost?
+_Transactions and events_
+
+It fits domains where history matters: ledgers, orders, anything with audits or 'what did we know when'. Storing the events gives a full audit trail, lets you rebuild state, and lets new read models be built by replaying. The costs are real: reads need projections (CQRS), which are eventually consistent; events are a permanent API, so schema evolution needs upcasting or versioning; deleting personal data needs crypto-shredding or careful redaction; and long streams need snapshots.
+
+Follow-ups: How do you handle a bug that wrote wrong events? · How do you rebuild a projection without downtime?
+
+### Explain watermarks and exactly-once processing in a stream processor.
+_Streams_
+
+Events carry event time but arrive late and out of order, so the processor tracks a watermark, an estimate that no older events are still coming, usually the newest event time minus an allowed lateness. A window's result is emitted when the watermark passes its end; later events are dropped, sent aside or used to update results. Exactly-once comes from checkpointing every operator's state together with the input offsets, restoring them after a crash and replaying, with sinks that are idempotent upserts or transactions committed with each checkpoint.
+
+Follow-ups: What happens to watermarks when one partition goes idle? · Why can't a stream processor make an email exactly-once?
+
+### Walk me through how Raft elects a leader and commits an entry.
+_Consensus_
+
+Followers expect heartbeats; one whose randomized timeout runs out becomes a candidate for a new term, votes for itself and asks the others. Each server votes once per term, only for candidates whose log is at least as up to date as its own, so the winner holds every committed entry. The leader appends client commands to its log and replicates them with AppendEntries, which carry the previous entry's index and term so followers can detect gaps. Once an entry from the current term is on a majority, it's committed and applied everywhere in order.
+
+Follow-ups: Why must a leader not commit an earlier term's entry by counting replicas? · What does PreVote fix?
+
+### How would you implement a distributed lock safely?
+_Consensus_
+
+First I ask what the lock protects. If it only avoids duplicate work, a lease in Redis is fine, because an occasional double run is harmless. If correctness depends on it, I use a consensus-backed service such as etcd or ZooKeeper and fencing tokens: every grant comes with an increasing number, every write carries it, and the protected resource rejects tokens lower than the highest it has seen. That handles a holder that pauses past its lease, which no lease length or pre-write check can prevent.
+
+Follow-ups: What if the protected resource can't check tokens? · How does etcd provide the token?
+
+### Why can't we order events across machines by their timestamps, and what do we use instead?
+_Consensus_
+
+Clocks drift and NTP can step them backwards, so two machines' timestamps don't reliably say which event came first, and last-write-wins on them silently drops writes. For a total order we use a consensus log; for causality, Lamport clocks give an order consistent with cause and effect, and vector clocks also detect concurrent updates. Hybrid logical clocks combine a physical timestamp with a counter, so they stay close to wall time but respect causality; Spanner instead bounds clock uncertainty with TrueTime and waits it out.
+
+Follow-ups: When would you choose vector clocks over hybrid clocks? · How does commit-wait work in Spanner?
+
+### B-tree or LSM tree: how do you choose a storage engine for a workload?
+_Storage_
+
+I look at the read and write mix and the access patterns. B-trees update sorted pages in place, giving predictable point reads and excellent range scans, at the cost of random writes and page splits, so they suit read-heavy, update-heavy OLTP. LSM trees append to a log, flush sorted SSTables and compact them in the background, so writes are sequential and cheap; reads may check several files, helped by Bloom filters, and compaction costs I/O and causes latency spikes. Heavy ingestion of events, metrics or messages favours LSM. Then I benchmark with the real workload.
+
+Follow-ups: What's write amplification, and how does compaction strategy change it? · Why do random UUID keys hurt B-tree inserts?
+
+### How does a search engine answer a query quickly, and how does it rank results?
+_Search and geo_
+
+At indexing time each document is analyzed into terms and the engine keeps an inverted index: for each term, the sorted list of documents containing it. A query is analyzed the same way; the engine intersects or unions the posting lists, rarest term first and skipping through long lists, and scores only the matches, typically with BM25, which rewards rare terms, saturates repeated mentions and normalises by length. The index is sharded, each shard returns its top results to a coordinator, and production systems blend in other signals or rerank with a model.
+
+Follow-ups: Why is a search index only near real time? · How would you add typo tolerance?
+
+### Design 'restaurants near me' for 10 million restaurants.
+_Search and geo_
+
+Restaurants rarely move, so I index them by geohash, S2 or H3 cells and store cell to restaurant ids in a search engine or key-value store, sharded by region. A query picks a cell size at least as big as the radius, reads the cell and its neighbours, filters by exact distance and the must-match criteria, and ranks by text relevance, distance decay, rating and opening hours. Busy cells are cached, and where restaurants crowd together a quadtree, or a finer resolution, keeps cells small.
+
+Follow-ups: What changes for moving objects such as drivers? · How do you handle the antimeridian and poles?
+
+### Active-passive or active-active: how do you choose for a multi-region service?
+_Multi-region_
+
+I start from each system's RPO and RTO. Active-passive is simpler: one region writes, another holds replicas and standby capacity; failover means confirming the failure from a third location, fencing the old primary, promoting and moving traffic, which takes minutes, and asynchronous replication loses the lag. Active-active serves writes everywhere, with low latency and no promotion, but concurrent writes conflict, so I give each user or tenant a home region, use CRDTs where data can merge, or pay for a globally consistent database. Either way the survivors need headroom for a failed region's load.
+
+Follow-ups: How much headroom do four regions need? · How do you test that failover works?
+
+### How do you handle authentication and authorization across many services?
+_Security_
+
+Users sign in with an OpenID Connect provider and get short-lived access tokens; each service verifies the token's algorithm, signature, expiry, audience and issuer itself. Authorization happens in the service that owns the data, on every request, for the specific object, with roles, attributes or relationships, and denial by default. Service-to-service calls use mTLS with workload identities and least privilege, so nothing is trusted for being inside the network. Secrets come from a manager at run time, and decisions are logged.
+
+Follow-ups: How do you revoke a JWT before it expires? · Where would you use relationship-based access control?
+
+### How should data be encrypted at rest, and how do you rotate keys?
+_Security_
+
+With envelope encryption: data is encrypted with data keys, often one per tenant or object, and the data keys are encrypted by a master key that never leaves a KMS or HSM, which checks and logs every unwrap. Rotating the master key means re-wrapping the small data keys rather than re-encrypting the data, and rotating a data key re-encrypts only what it covers. Per-tenant keys also allow crypto-shredding: destroying the key makes every copy of that tenant's data unreadable, backups included.
+
+Follow-ups: What does at-rest encryption not protect against? · How do you limit KMS calls on a hot path?
+
+### Design a payment system. What matters most?
+_Designs_
+
+Correctness. Every request carries an idempotency key, so a retry after a timeout replays the first result instead of charging again; a payment is a state machine (created, authorized, captured, refunded) with sagas for refunds; money moves through an append-only double-entry ledger, so balances are derived and auditable; and daily reconciliation against the provider's and bank's records settles anything left unknown. Card data stays with a PCI-compliant provider behind tokens, the ledger replicates with zero RPO, and every external call has a timeout.
+
+Follow-ups: What do you do with a payment whose outcome is unknown? · How do you make the idempotency check safe under concurrency?
+
+### Design a video streaming platform.
+_Designs_
+
+Bandwidth dominates. Uploads go to object storage; a transcoding pipeline encodes a ladder of resolutions and bitrates, cut into segments of a few seconds with HLS or DASH manifests; CDNs serve the segments, with popular titles pushed to the edge ahead of demand; and the player's adaptive bitrate logic picks each segment's quality from throughput and buffer level. Metadata, search, recommendations and DRM are separate services, and playback telemetry feeds quality monitoring and encoding decisions.
+
+Follow-ups: How would you handle a live event with millions of viewers? · How do you choose the encoding ladder?
+
+### Design a collaborative document editor.
+_Designs_
+
+Every keystroke applies locally at once and goes to the server over a WebSocket. Concurrent edits are merged with operational transformation, where the server orders operations and each client transforms incoming ones against its own pending edits, or with a CRDT, where every character has a unique ordered id so edits merge in any order, even offline. Documents are stored as snapshots plus an operation log; presence and cursors are separate, lightweight streams; and permissions are checked per document on every operation.
+
+Follow-ups: OT or CRDT for an offline-first app? · How do you keep the operation log from growing forever?
+
+### Design a distributed key-value store like Dynamo.
+_Designs_
+
+Consistent hashing with virtual nodes places each key on N replicas and moves few keys when nodes join or leave. Writes and reads use tunable quorums, W + R > N for reading your own writes; sloppy quorums and hinted handoff keep writes available while a replica is down; vector clocks or last-writer-wins resolve conflicting versions; Merkle trees let replicas find and repair differences cheaply; and gossip spreads membership and failure suspicion. Each node stores data in an LSM engine.
+
+Follow-ups: What does a sloppy quorum give up? · How would you add strongly consistent operations?

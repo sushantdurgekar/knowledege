@@ -68,3 +68,32 @@ All 61 links in the L2 hub were opened during the build; the key ones are below.
 | [OpenTelemetry docs and W3C Trace Context](https://opentelemetry.io/docs/concepts/) | docs | 5 | 5 | 4 | free | traces, metrics, logs; traceparent | OK |
 | [Prometheus: histograms and summaries](https://prometheus.io/docs/practices/histograms/) | docs | 5 | 5 | 4 | free | histogram_quantile | OK |
 | [System Design Primer: Twitter timeline, pastebin](https://github.com/donnemartin/system-design-primer) | community | 4 | 3 | 4 | free | classic design write-ups | OK |
+
+## Used by the L3 hub (opened 2026-10-12)
+
+All 51 links in the L3 hub were opened or confirmed while building each module; the key ones are below. *Checked* gives the result.
+
+| Resource | Kind | A | R | D | Cost | Note | Checked |
+|---|---|---|---|---|---|---|---|
+| [Raft paper (extended version)](https://raft.github.io/raft.pdf) | paper | 5 | 4 | 5 | free | elections, log replication, safety | OK |
+| [The Raft site and RaftScope](https://raft.github.io/) | visualization | 5 | 4 | 4 | free | an interactive five-server cluster | OK |
+| [Kleppmann: How to do distributed locking](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html) | article | 5 | 3 | 5 | free | fencing tokens | OK |
+| [Lamport: Time, Clocks, and the Ordering of Events](https://lamport.azurewebsites.net/pubs/time-clocks.pdf) | paper | 5 | 2 | 5 | free | happened-before, logical clocks | OK |
+| [Kulkarni et al.: Logical Physical Clocks (HLC)](https://cse.buffalo.edu/tech-reports/2014-04.pdf) | paper | 5 | 3 | 4 | free | hybrid logical clocks | OK |
+| [microservices.io: Saga](https://microservices.io/patterns/data/saga.html) | pattern | 4 | 4 | 4 | free | orchestration and choreography | OK |
+| [Akidau et al.: The Dataflow Model (VLDB 2015)](https://www.vldb.org/pvldb/vol8/p1792-Akidau.pdf) | paper | 5 | 3 | 5 | free | windows, triggers, watermarks | OK |
+| [Kreps: Questioning the Lambda Architecture](https://www.oreilly.com/radar/questioning-the-lambda-architecture/) | article | 5 | 3 | 4 | free | the Kappa argument | OK |
+| [Apache Flink: Stateful stream processing](https://nightlies.apache.org/flink/flink-docs-stable/docs/concepts/stateful-stream-processing/) | docs | 5 | 5 | 5 | free | checkpoint barriers (the site blocks automated fetching; confirmed through search) | OK |
+| [O'Neil et al.: The Log-Structured Merge-Tree (1996)](https://www.cs.umb.edu/~poneil/lsmtree.pdf) | paper | 5 | 2 | 5 | free | the original LSM design | OK |
+| [RocksDB wiki: Leveled compaction](https://github.com/facebook/rocksdb/wiki/Leveled-Compaction) | docs | 5 | 5 | 5 | free | levels and write amplification | OK |
+| [Cassandra docs: Tombstones](https://cassandra.apache.org/doc/latest/cassandra/managing/operating/compaction/tombstones.html) | docs | 5 | 5 | 4 | free | gc_grace_seconds and zombie data | OK |
+| [Robertson and Zaragoza: BM25 and Beyond](https://www.staff.city.ac.uk/~sbrp622/papers/foundations_bm25_review.pdf) | paper | 5 | 3 | 5 | free | where BM25 comes from | OK |
+| [Introduction to Information Retrieval: Boolean retrieval](https://nlp.stanford.edu/IR-book/html/htmledition/boolean-retrieval-1.html) | book | 5 | 3 | 5 | free | inverted indexes | OK |
+| [AWS: Disaster recovery options in the cloud](https://docs.aws.amazon.com/whitepapers/latest/disaster-recovery-workloads-on-aws/disaster-recovery-options-in-the-cloud.html) | whitepaper | 5 | 5 | 4 | free | four DR strategies | OK |
+| [Google SRE book: Managing critical state](https://sre.google/sre-book/managing-critical-state/) | book | 5 | 3 | 5 | free | the split-brain case study | OK |
+| [OWASP API Security Top 10 (2023)](https://api-security.owasp.org/editions/2023/en/0x11-t10/) | reference | 5 | 4 | 4 | free | BOLA is API1 (the owasp.org address redirects here) | OK |
+| [RFC 8725: JWT Best Current Practices](https://www.rfc-editor.org/rfc/rfc8725) | RFC | 5 | 4 | 4 | free | what a verifier must check | OK |
+| [NIST SP 800-207: Zero Trust Architecture](https://csrc.nist.gov/pubs/sp/800/207/final) | standard | 5 | 4 | 4 | free | the zero-trust model | OK |
+| [Zanzibar (USENIX ATC 2019)](https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/) | paper | 5 | 4 | 5 | free | relationship-based authorization | OK |
+| [Stripe API reference: Idempotent requests](https://docs.stripe.com/api/idempotent_requests) | docs | 5 | 5 | 4 | free | key reuse rules, keys pruned after 24 h | OK |
+| [Apple: HTTP Live Streaming](https://developer.apple.com/streaming/) | docs | 5 | 5 | 4 | free | HLS playlists and segments | OK |
