@@ -75,6 +75,8 @@ export interface AuthEventsOptions {
   flush(): void;
   /** Sync must stop for this page (logout, or the browser now belongs to another account). */
   stop(): void;
+  /** True when this page no longer syncs as it booted (session ended, turned anonymous): a sign-in, even to the same account, needs a reload. */
+  stale?: () => boolean;
   reload?: () => void;
 }
 
@@ -101,7 +103,7 @@ export function listenAuthEvents(o: AuthEventsOptions): () => void {
 
   function authChanged(): void {
     const s = now();
-    if (same(s)) return; // e.g. a fresh session for the same account
+    if (same(s) && !(o.stale && o.stale())) return; // e.g. a fresh session for the same account
     const other = switched(s);
     if (other) guard();
     if (doc.visibilityState === "hidden") return reload();

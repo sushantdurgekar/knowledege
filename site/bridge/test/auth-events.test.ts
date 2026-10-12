@@ -174,6 +174,21 @@ describe("auth-changed", () => {
   });
 });
 
+describe("auth-changed after the session ended", () => {
+  it("the same account signing in again reloads a page whose sync had stopped", async () => {
+    const hub = await openSignedIn();
+    server.fail("sync", { status: 401, body: { code: "unauthenticated" } });
+    hub.touch("main");
+    FakeChannel.post({ type: "flush" });
+    await tick();
+    expect(window.__studyhubsBridge!.stats().outbox.dead).toBe("revoked");
+    FakeChannel.post({ type: "auth-changed" }); // same hint and owner as at boot
+    expect(window.__studyhubsBridge!.stats().chrome.notices).toContain("auth");
+    setVisibility("hidden");
+    expect(reloads.count).toBe(1);
+  });
+});
+
 describe("back/forward cache", () => {
   it("a restored page reloads when the account changed meanwhile", () => {
     boot();

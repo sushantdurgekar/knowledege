@@ -80,7 +80,8 @@ export function startBridge(opts: StartOptions = {}): BridgeHandle | null {
 
   // 3. Who is this? sh_hint + studyhubs.owner (build-contracts §13).
   const boot = readAuthState(cfg.hint, hook);
-  let mode: Mode = modeOf(boot);
+  const bootMode: Mode = modeOf(boot);
+  let mode: Mode = bootMode;
   const ui = (chrome = createChrome({ cfg, doc: document, store: hook, signedIn: () => mode !== "anonymous" }));
   const showMismatch = (): void =>
     ui.showNotice({
@@ -173,6 +174,7 @@ export function startBridge(opts: StartOptions = {}): BridgeHandle | null {
     stop: () => {
       if (sync) sync.stop();
     },
+    stale: () => mode !== bootMode || (!!sync && !!sync.stats().outbox.dead),
   });
   const cancelMount = onDomReady(document, () => {
     try {
