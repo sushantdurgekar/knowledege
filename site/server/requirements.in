@@ -1,4 +1,4 @@
-# Runtime dependencies for the Study Hubs server (M0 + M1).
+# Runtime dependencies for the Study Hubs server (M0, M1, M2).
 # Direct dependencies are pinned exactly; requirements.txt is compiled from this
 # file with hashes (see pyproject.toml / README.md for the command).
 # M3 adds psycopg.
@@ -14,3 +14,6 @@ tzdata==2026.4
 # so it is pinned here as well instead of only arriving through firebase-admin.
 firebase-admin==7.7.0
 google-cloud-firestore==2.32.0
+# M2: .backup encryption (AES-256-GCM frames, scrypt). Already locked through
+# firebase-admin (PyJWT[crypto]); pinned here because the backup code imports it.
+cryptography==50.0.1
