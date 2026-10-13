@@ -372,6 +372,7 @@ Then deploy (Manual Deploy, or push to `main` and let CI do it).
    - Keep **Leave maintenance when the restore succeeds** ticked to get the previous mode back afterwards.
 5. **Confirm.** Type the phrase the page shows: `RESTORE` for a merge, `REPLACE <n> USERS` for a replace (n = the users on the site now). Press **Start restore**.
 6. **Watch the job.** The page shows the state, the records applied out of the total and, at the end, the report. **Cancel restore** (type `CANCEL`) works only while it is still `scheduled`, and deletes the staged upload too (upload it again to restore later).
+   - It first spends about a minute in **Full** maintenance without writing (`drainUntil` on the job): every instance re-reads the mode within 60 s and requests already under way finish, so a sync or an account deletion that slipped in just before is never overwritten or brought back.
    - Firestore: writes start at 50/s and speed up every 5 minutes. When the day's write budget runs out the job pauses (`paused_quota`) and resumes after the reset, so a large restore can take several days (the plan said how many).
    - A job left `running` by an instance that died is picked up again 2 minutes after its last heartbeat and continues from its checkpoint; no batch is applied twice.
    - A **Full** maintenance window that ends while a restore that started inside it is still running, paused or failed does not lift the maintenance: the restore takes over the window's previous mode and puts it back when it succeeds.

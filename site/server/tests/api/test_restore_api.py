@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import os
 import struct
+import time
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ from tests.restore_support import (
     API,
     AT,
     PASS,
+    TERMINAL,
     T,
     part,
     put_chunk,
@@ -776,3 +778,80 @@ def test_every_restore_route_is_admin_only_csrf_checked_and_destructive_where_du
             assert (response.status_code, response.json()["code"]) == (403, "reauth_required"), url
     assert sorted(p.name for p in staging.rglob("*")) == listing  # nothing staged or removed
     assert client.get(f"/api/admin/jobs/{job['id']}").json()["job"]["state"] == "scheduled"
+
+
+def test_a_deletion_in_flight_when_the_restore_starts_is_not_resurrected(
+    make_client: Any, tmp_path: Path, source: MemoryStore
+) -> None:
+    """An account deletion that passed the maintenance check just before the restore set
+    `full` (or ran on an instance whose settings cache is up to 60 s old) completes a moment
+    later. The restore waits for that drain after entering `full` before it reads the
+    target's tombstones, so the deleted user's backed-up user row and parts are skipped
+    instead of being written back."""
+    import threading
+
+    from app.account.routes import delete_account
+    from app.restore import runner as runner_module
+
+    victim = "u0000"  # its user row is in the first batch, its parts a few batches later
+    path = write_backup(source, tmp_path / "s.backup")
+    target = MemoryStore()
+    target.upsert_user(UserRecord(victim, "victim@example.com", last_login_at=AT), touch_login=True)
+    client = admin_client(make_client, tmp_path, store=target)
+    rt = runtime(client)
+    rt.restore.batch_delay_s = 0.01
+    rt.restore.drain_s = 0.01  # the test's stand-in for the settings cache refresh (60 s)
+    go, finished = threading.Event(), threading.Event()
+
+    def sleep(seconds: float) -> None:
+        # The in-flight deletion completes during the runner's first wait: the drain, or
+        # without one the pause after the first batch (its tombstone lookup already done).
+        go.set()
+        finished.wait(10)
+        time.sleep(seconds)
+
+    rt.restore._sleep = sleep
+    upload_id = upload(client, path)
+    validate(client, upload_id)
+    deleted = threading.Event()
+    original_update = rt.site.update
+
+    def update(change: Any, *args: Any, **kwargs: Any) -> Any:
+        result = original_update(change, *args, **kwargs)
+        if result.maintenance.mode == "full" and not deleted.is_set():
+            deleted.set()  # the request already in flight finishes just after the switch
+
+            def finish() -> None:
+                go.wait(10)
+                delete_account(rt, victim)
+                finished.set()
+
+            threading.Thread(target=finish, daemon=True).start()
+        return result
+
+    rt.site.update = update  # type: ignore[method-assign]
+    old_records = runner_module.BATCH_RECORDS
+    runner_module.BATCH_RECORDS = 5
+    try:
+        job = start_job(client, upload_id).json()["job"]
+        deadline = time.monotonic() + 60  # poll the store: seconds of API polling hit the admin rate limit
+        while (target.get_job(job["id"]) or {}).get("state") not in TERMINAL:
+            assert time.monotonic() < deadline
+            time.sleep(0.05)
+        done = wait_job(client, job["id"])
+    finally:
+        runner_module.BATCH_RECORDS = old_records
+    assert deleted.is_set()
+    assert done["state"] == "succeeded", done
+    assert target.get_user(victim) is None
+    assert target.list_hubs(victim) == []
+    assert done["report"]["skipped"]["user"] == 1
+    assert done["report"]["countsOk"]
+
+
+def test_the_drain_lasts_a_settings_refresh_outside_tests(make_client: Any, tmp_path: Path) -> None:
+    from app.admin.site import REFRESH_S
+
+    assert runtime(make_client(data_dir=tmp_path / "t")).restore.drain_s == 0.0  # APP_ENV=test
+    dev = make_client(app_env="development", data_dir=tmp_path / "d")
+    assert runtime(dev).restore.drain_s == REFRESH_S + 5

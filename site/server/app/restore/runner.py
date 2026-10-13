@@ -8,7 +8,11 @@ The job (the scheduler calls `step` on every tick for `kind: "restore"` jobs):
 
 1. `scheduled` at `runAt` -> claimed atomically (`claim_job`) -> a runner thread.
 2. Full maintenance: the job first records the mode it replaces (`prev`), then sets
-   `full`; a resumed job only re-asserts `full`.
+   `full`; a resumed job only re-asserts `full`. A fresh start then waits `drain_s`
+   (the 60 s settings cache + 5 s; 0 under APP_ENV=test) before its first read of the
+   target, so a sync or an account deletion that passed the maintenance check just
+   before (here, or on an instance with an older cache) has finished: a uid deleted
+   then is seen as tombstoned and skipped, never written back.
 3. Records stream from `checkpoint.line + 1` in batches (<= 500 records or 4 MiB;
    Firestore <= 399 records so the WriteBatch with its checkpoint stays <= 400 docs).
    `store.restore_batch` applies each batch and its checkpoint atomically and exactly
@@ -46,6 +50,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.admin.site import MAX_NOTICE, Maintenance, SiteSettings, SiteSettingsCache
+from app.admin.site import REFRESH_S as SETTINGS_REFRESH_S
 from app.backup import reader
 from app.clock import Clock
 from app.config import Settings
@@ -83,6 +88,7 @@ SAMPLE_SHARE = 100  # 1%
 SAMPLE_MAX = 200
 RETRIES = 5
 RECORD_OVERHEAD = 200
+DRAIN_S = SETTINGS_REFRESH_S + 5.0  # every instance sees `full`, in-flight requests end
 MESSAGE = "Study Hubs is being restored from a backup. Your progress is saved in this browser."
 
 
@@ -128,6 +134,7 @@ class RestoreService:
         monotonic: Callable[[], float] = time.monotonic,
         batch_delay_s: float = 0.0,
         fs_rate: float = FS_RATE_START,
+        drain_s: float = DRAIN_S,
     ) -> None:
         self.store = store
         self.site = site
@@ -140,6 +147,7 @@ class RestoreService:
         self._sleep = sleep
         self._mono = monotonic
         self.batch_delay_s = batch_delay_s
+        self.drain_s = drain_s
         self.fs_rate = fs_rate
         self._lock = threading.Lock()
         self.on_change: Callable[[], None] = lambda: None  # the scheduler's cache invalidation
@@ -425,7 +433,8 @@ class RestoreService:
 
     def _enter_full(self, job: dict[str, Any]) -> None:
         job_id = str(job["id"])
-        if "prev" not in job:
+        fresh = "prev" not in job
+        if fresh:
             # Record the mode being replaced before changing it: a crash in between then
             # re-enters `full` on resume and still knows what to go back to.
             prev = self._retry(self.site.refresh).maintenance
@@ -438,6 +447,20 @@ class RestoreService:
             return replace(current, maintenance=Maintenance("full", MESSAGE, None))
 
         self._retry(self.site.update, change)
+        if fresh and self.drain_s > 0:
+            self._drain(job_id)
+
+    def _drain(self, job_id: str) -> None:
+        """Wait (heartbeating) until every instance serves `full` and requests that began
+        before it have ended; only then are the target's tombstones and stamps read."""
+        until = self.clock.now() + timedelta(seconds=self.drain_s)
+        self._set(job_id, {"drainUntil": iso_utc(until)})
+        left = self.drain_s
+        while left > 0:
+            step = min(left, 5.0)
+            self._sleep(step)
+            left -= step
+            self.heartbeat(job_id)
 
     def _leave_full(self, job: dict[str, Any]) -> None:
         # Re-read: a full window that ended meanwhile handed its previous mode to this job.

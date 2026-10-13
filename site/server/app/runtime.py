@@ -26,7 +26,7 @@ from app.jobs.scheduler import Scheduler
 from app.progress.service import ProgressService
 from app.quota.guard import Guard
 from app.quota.meter import Meter
-from app.restore.runner import RestoreService
+from app.restore.runner import DRAIN_S, RestoreService
 from app.restore.uploads import Uploads
 from app.store.base import Store
 from app.store.factory import make_store
@@ -147,6 +147,7 @@ def build_runtime(
         writes_today=lambda: meter.today()["writes"],
         reads_today=lambda: meter.today()["reads"],
         batch_delay_s=settings.restore_batch_delay_ms / 1000,
+        drain_s=0.0 if settings.is_test else DRAIN_S,
     )
     runtime.scheduler.restores = runtime.restore
     runtime.restore.on_change = runtime.scheduler.invalidate
