@@ -93,6 +93,11 @@ function Wizard({ context, onRestart }: { context: Context; onRestart: () => voi
   const abort = useRef<AbortController | null>(null);
 
   useEffect(() => () => abort.current?.abort(), []);
+  // A reload ("Start a new restore") brings the server's view: the upload and job it has now.
+  useEffect(() => {
+    setUpload(context.upload);
+    setJob(context.job);
+  }, [context]);
 
   const remember = (next: Saved) => {
     setSaved(next);

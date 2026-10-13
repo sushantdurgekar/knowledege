@@ -113,6 +113,21 @@ jobs:
     needs: test
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # For m3-restore.spec.ts on a Postgres-backed server (build-contracts.md section 26).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: studyhubs_e2e
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d studyhubs_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -146,12 +161,22 @@ jobs:
           npx playwright install --with-deps chromium
 
       # dev-e2e.sh starts uvicorn (APP_ENV=test AUTH_MODE=fake STORE=memory), waits for
-      # /healthz, runs the whole suite (M0 in parallel, the M1 sync project one test at a
+      # /healthz, runs the whole suite (M0 in parallel, the M1-M3 sync project one test at a
       # time) and stops the server.
-      - name: Playwright against uvicorn (M0 + M1)
+      - name: Playwright against uvicorn (M0 + M1 + M2 + M3)
         run: sh site/scripts/dev-e2e.sh
         env:
           CI: 'true'
+
+      # The M3 restore wizard end to end on a Postgres-backed uvicorn (the service above; what
+      # `make -C site e2e-pg` does locally with scripts/dev_pg.sh).
+      - name: Playwright m3-restore against uvicorn on Postgres
+        run: sh site/scripts/dev-e2e.sh tests/m3-restore.spec.ts
+        env:
+          CI: 'true'
+          E2E_STORE: postgres
+          DATABASE_URL: postgresql://postgres@127.0.0.1:5432/studyhubs_e2e
+          PORT: '10010'
 
       - name: Build the Docker image
         run: docker build -f site/Dockerfile --build-arg GIT_COMMIT=${{ github.sha }} -t study-hubs:ci .
@@ -215,10 +240,26 @@ jobs:
           if-no-files-found: ignore
 
   contract:
-    name: Store contract on the Firestore emulator
+    name: Store contract on the Firestore emulator and Postgres
     needs: test
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
+    # The Postgres store's contract suite, S17 and S18 (build-contracts.md sections 23 and 26).
+    # A throwaway database: trust auth on the runner's loopback only.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: studyhubs_test
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d studyhubs_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -264,11 +305,14 @@ jobs:
           tail -n 50 "$RUNNER_TEMP/emulator.log"
           exit 1
 
-      # `make -C site test-contract`: one suite on the memory store and on the emulator.
+      # `make -C site test-contract`: one suite on the memory store, the emulator and Postgres
+      # (REQUIRE_PG=1: a missing database fails the job instead of skipping those tests).
       - name: Contract tests
         working-directory: site/server
         env:
           FIRESTORE_EMULATOR_HOST: 127.0.0.1:8080
+          DATABASE_URL_TEST: postgresql://postgres@127.0.0.1:5432/studyhubs_test
+          REQUIRE_PG: '1'
         run: .venv/bin/pytest tests/contract
 
       - name: Emulator log

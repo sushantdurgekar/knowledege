@@ -315,7 +315,10 @@ describe('Restore wizard', () => {
     expect(screen.getByLabelText('Job report')).toHaveTextContent('counts match; 6 sampled parts, 0 mismatched');
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toMatchObject({ jobId: 'job-r1' });
     expect(screen.queryByRole('button', { name: 'Cancel restore' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Start a new restore' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Start a new restore' }));
+    expect(await screen.findByLabelText('Backup file (.backup)')).toBeInTheDocument();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    await waitFor(() => expect(server.to('GET /api/admin/restore/uploads')).toHaveLength(2));
   });
 
   it('asks for the passphrase of an encrypted backup, shows an invalid result, and forgets the passphrase', async () => {
