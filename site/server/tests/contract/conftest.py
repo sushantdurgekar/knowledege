@@ -56,6 +56,37 @@ class CountingApi:
             self.writes += len(self._field(request, "writes"))
         return self._inner.commit(request=request, **kwargs)
 
+    def run_query(self, request: Any = None, **kwargs: Any) -> Any:
+        """A query bills 1 read per document returned, and 1 when it returns none."""
+        responses = self._inner.run_query(request=request, **kwargs)
+        api = self
+
+        class Counted:
+            def __init__(self) -> None:
+                self.docs = 0
+                self.done = False
+
+            def __iter__(self) -> Counted:
+                return self
+
+            def __next__(self) -> Any:
+                try:
+                    response = next(responses)
+                except StopIteration:
+                    if not self.done:
+                        self.done = True
+                        with api._lock:
+                            api.reads += max(1, self.docs)
+                    raise
+                if response._pb.HasField("document"):
+                    self.docs += 1
+                return response
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(responses, name)
+
+        return Counted()
+
     def run_aggregation_query(self, request: Any = None, **kwargs: Any) -> Any:
         with self._lock:
             self.reads += 1  # count(): 1 read per 1,000 index entries, at least 1
@@ -85,8 +116,8 @@ class Adapter:
         return self.api.snapshot() if self.api is not None else self.counts()
 
 
-def _wipe_emulator() -> None:
-    url = f"http://{EMULATOR}/emulator/v1/projects/{PROJECT}/databases/(default)/documents"
+def _wipe_emulator(project: str = PROJECT) -> None:
+    url = f"http://{EMULATOR}/emulator/v1/projects/{project}/databases/(default)/documents"
     request = urllib.request.Request(url, method="DELETE")
     with urllib.request.urlopen(request, timeout=10):  # noqa: S310
         pass
@@ -100,11 +131,11 @@ def emulator_ready() -> bool:
     return True
 
 
-def make_firestore() -> Adapter:
+def make_firestore(project: str = PROJECT) -> Adapter:
     from app.store.firestore import FirestoreStore
 
     store = FirestoreStore(
-        project_id=PROJECT,
+        project_id=project,
         reset_at=lambda: RESET_AT,
         emulator_host=EMULATOR,
     )
@@ -127,6 +158,27 @@ def adapter(request: pytest.FixtureRequest, emulator_ready: bool) -> Iterator[Ad
         yield made
     finally:
         made.store.close()
+
+
+@pytest.fixture(params=["memory", "firestore"])
+def fresh(request: pytest.FixtureRequest, emulator_ready: bool) -> Iterator[Adapter]:
+    """An adapter on an empty database of its own (scans see only this test's documents).
+
+    On the emulator every project id is a separate database, so a new demo- project
+    isolates the test from the rest of the run; it is wiped afterwards.
+    """
+    if request.param == "memory":
+        yield Adapter("memory", MemoryStore())
+        return
+    if not emulator_ready:
+        pytest.skip("FIRESTORE_EMULATOR_HOST is not set")
+    project = "demo-m2-" + uuid.uuid4().hex[:12]
+    made = make_firestore(project)
+    try:
+        yield made
+    finally:
+        made.store.close()
+        _wipe_emulator(project)
 
 
 @pytest.fixture

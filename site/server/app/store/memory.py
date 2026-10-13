@@ -6,16 +6,19 @@
   most 1 write.
 - Fault hooks: `fail_next(op, exc, count=1)` raises `exc` from the next `count` calls of
   `op` ("any" matches every operation) and `latency_ms` sleeps before each call.
+- M2 scans (`iter_*`, `storage_scan`) page by document id like the Firestore cursors
+  and bill 1 read per document returned (at least 1 per page query).
 - Refuses to exist when APP_ENV=production.
 """
 
 from __future__ import annotations
 
 import gzip
+import heapq
 import json
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
@@ -23,16 +26,21 @@ from typing import Any
 
 from app.progress.decide import decide
 from app.store.base import (
+    COUNT_KINDS,
     PARTS,
+    HubSummary,
     LaterMethods,
     OpCounter,
     PartIn,
+    PartInfo,
     PartOut,
     PartResult,
+    Tombstone,
     UserRecord,
     check_setting_version,
     merged_done,
     progress_doc_id,
+    progress_range,
 )
 
 LOGIN_TOUCH_INTERVAL = timedelta(hours=24)
@@ -69,6 +77,8 @@ class MemoryStore(LaterMethods):
         self._progress: dict[str, _ProgressDoc] = {}
         self._usage: dict[str, dict[str, int]] = {}
         self._settings: dict[str, tuple[dict[str, Any], int]] = {}
+        self._tombstones: dict[str, datetime] = {}
+        self._jobs: dict[str, dict[str, Any]] = {}
         self._faults: list[list[Any]] = []  # [op, exc, remaining]
 
     # -- fault hooks ---------------------------------------------------------------
@@ -95,6 +105,8 @@ class MemoryStore(LaterMethods):
             self._progress.clear()
             self._usage.clear()
             self._settings.clear()
+            self._tombstones.clear()
+            self._jobs.clear()
             self._faults.clear()
             self.latency_ms = 0
         self.ops.reset()
@@ -235,6 +247,160 @@ class MemoryStore(LaterMethods):
             self.ops.add(writes=1)
             return version
 
+    # -- M2: account ----------------------------------------------------------------------
+
+    def _user_doc_ids(self, uid: str) -> list[str]:
+        start, end = progress_range(uid)
+        return sorted(k for k in self._progress if start <= k < end)
+
+    def list_hubs(self, uid: str, *, payloads: bool = False) -> list[HubSummary]:
+        """Every hub doc of `uid` (an id-range query: 1 read per doc, at least 1)."""
+        self._enter("list_hubs")
+        out: list[HubSummary] = []
+        egress = 0
+        with self._lock:
+            for key in self._user_doc_ids(uid):
+                doc = self._progress[key]
+                parts: dict[str, PartInfo] = {}
+                for part in PARTS:
+                    stored = doc.parts.get(part)
+                    if stored is not None:
+                        parts[part] = PartInfo(stored.upd, stored.raw_len, stored.gz if payloads else None)
+                        egress += 24 + (len(stored.gz) if payloads else 0)
+                out.append(HubSummary(doc.hub, parts, doc.done))
+        self.ops.add(reads=max(1, len(out)), fs_egress=egress)
+        return out
+
+    def delete_user(self, uid: str) -> int:
+        """Delete every progress doc of `uid`, then the user doc. Safe to repeat."""
+        self._enter("delete_user")
+        with self._lock:
+            keys = self._user_doc_ids(uid)
+            self.ops.add(reads=max(1, len(keys)))
+            for key in keys:
+                del self._progress[key]
+            self._users.pop(uid, None)
+        self.ops.add(deletes=len(keys) + 1)
+        return len(keys)
+
+    def put_tombstone(self, h: str, at: datetime) -> None:
+        self._enter("put_tombstone")
+        with self._lock:
+            self._tombstones.setdefault(h, at)
+        self.ops.add(writes=1)
+
+    def is_tombstoned(self, uid_hashes: list[str]) -> set[str]:
+        self._enter("is_tombstoned")
+        with self._lock:
+            found = {h for h in uid_hashes if h in self._tombstones}
+        self.ops.add(reads=len(uid_hashes))
+        return found
+
+    def count_docs(self, kind: str) -> int:
+        """`count()` aggregation of users, progress or tombstones (1 read per 1,000)."""
+        if kind not in COUNT_KINDS:
+            raise ValueError(f"unknown collection {kind!r}")
+        if kind == "users":
+            return self.count_users()
+        self._enter("count_docs")
+        with self._lock:
+            n = len(self._progress if kind == "progress" else self._tombstones)
+        self.ops.add(reads=max(1, -(-n // 1000)))
+        return n
+
+    # -- M2: scans by document id (backups, storage estimate) --------------------------
+
+    def _pages(self, op: str, table: dict[str, Any], page: int) -> Iterator[list[str]]:
+        """Pages of keys after a document-id cursor, as Firestore's start_after + limit."""
+        if page < 1:
+            raise ValueError("page must be positive")
+        cursor: str | None = None
+        while True:
+            self._enter(op)
+            with self._lock:
+                keys = heapq.nsmallest(page, _after(table, cursor))
+            self.ops.add(reads=max(1, len(keys)))
+            if keys:
+                yield keys
+            if len(keys) < page:
+                return
+            cursor = keys[-1]
+
+    def iter_users(self, page: int = 300) -> Iterator[UserRecord]:
+        for keys in self._pages("iter_users", self._users, page):
+            with self._lock:
+                batch = [self._users[k] for k in keys if k in self._users]
+            yield from batch
+
+    def iter_progress(self, page: int = 300) -> Iterator[tuple[str, str, dict[str, PartOut]]]:
+        for keys in self._pages("iter_progress", self._progress, page):
+            with self._lock:
+                docs = [self._progress[k] for k in keys if k in self._progress]
+                batch = [
+                    (d.uid, d.hub, {p: PartOut(d.parts[p].upd, d.parts[p].gz) for p in PARTS if p in d.parts})
+                    for d in docs
+                ]
+            yield from batch
+
+    def iter_tombstones(self, page: int = 300) -> Iterator[Tombstone]:
+        for keys in self._pages("iter_tombstones", self._tombstones, page):
+            with self._lock:
+                batch = [Tombstone(k, self._tombstones[k]) for k in keys if k in self._tombstones]
+            yield from batch
+
+    def storage_scan(self, page: int = 300) -> tuple[int, int]:
+        """(docs, sum of every n_<part>): the storage estimate (1 read per doc)."""
+        docs = total = 0
+        for keys in self._pages("storage_scan", self._progress, page):
+            with self._lock:
+                for key in keys:
+                    doc = self._progress.get(key)
+                    if doc is not None:
+                        docs += 1
+                        total += sum(p.raw_len for p in doc.parts.values())
+        return docs, total
+
+    # -- M2: jobs -------------------------------------------------------------------------
+
+    def get_job(self, id: str) -> dict[str, Any] | None:
+        self._enter("get_job")
+        with self._lock:
+            self.ops.add(reads=1)
+            job = self._jobs.get(id)
+            return deepcopy(job) if job is not None else None
+
+    def put_job(self, job: dict[str, Any]) -> None:
+        self._enter("put_job")
+        with self._lock:
+            self._jobs[str(job["id"])] = deepcopy(job)
+        self.ops.add(writes=1)
+
+    def claim_job(self, id: str, holder: str, from_states: set[str]) -> bool:
+        """Atomically move a job from one of `from_states` to running, held by `holder`."""
+        self._enter("claim_job")
+        with self._lock:
+            self.ops.add(reads=1)
+            job = self._jobs.get(id)
+            if job is None or job.get("state") not in from_states:
+                return False
+            job.update(state="running", holder=holder, claimedAt=_iso(datetime.now(UTC)))
+            self.ops.add(writes=1)
+            return True
+
+    def list_jobs(self, states: set[str] | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        """Jobs in `states` (oldest first), or the newest `limit` jobs when no states."""
+        self._enter("list_jobs")
+        with self._lock:
+            if states:
+                ids = sorted(k for k, j in self._jobs.items() if j.get("state") in states)[:limit]
+            else:  # newest first by createdAt, like the Firestore query (jobs without it are skipped)
+                dated = [j for j in self._jobs.values() if isinstance(j.get("createdAt"), str)]
+                dated.sort(key=lambda j: (j["createdAt"], j["id"]), reverse=True)
+                ids = [j["id"] for j in dated[:limit]]
+            jobs = [deepcopy(self._jobs[k]) for k in ids]
+        self.ops.add(reads=max(1, len(jobs)))
+        return jobs
+
     # -- test support --------------------------------------------------------------------
 
     def dump(self, decode: Callable[[bytes], Any] | None = None) -> dict[str, Any]:
@@ -271,7 +437,12 @@ class MemoryStore(LaterMethods):
                             }
                         )
             usage = {key: dict(value) for key, value in sorted(self._usage.items())}
-        return {"users": users, "progress": progress, "usage": usage}
+            tombstones = [{"h": h, "at": _iso(at)} for h, at in sorted(self._tombstones.items())]
+        return {"users": users, "progress": progress, "usage": usage, "tombstones": tombstones}
+
+
+def _after(table: dict[str, Any], cursor: str | None) -> Iterable[str]:
+    return table.keys() if cursor is None else (k for k in table if k > cursor)
 
 
 def _decode_gz(blob: bytes) -> Any:

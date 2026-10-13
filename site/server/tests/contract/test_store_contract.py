@@ -380,17 +380,8 @@ def test_ping_and_later_methods(adapter: Adapter, uid: str) -> None:
     store.ping()
     assert store.kind == adapter.kind
     for call in (
-        lambda: store.list_hubs(uid),
-        lambda: store.delete_user(uid),
-        lambda: store.is_tombstoned([]),
-        lambda: store.iter_users(),
-        lambda: store.iter_progress(),
-        lambda: store.iter_tombstones(),
         lambda: store.restore_batch([], mode="merge", job_id="j", checkpoint={}),
         lambda: store.wipe_for_replace("j"),
-        lambda: store.get_job("j"),
-        lambda: store.put_job(None),
-        lambda: store.claim_job("j", "h", set()),
     ):
-        with pytest.raises(NotImplementedError, match="M2/M3"):
+        with pytest.raises(NotImplementedError, match="M3"):
             call()

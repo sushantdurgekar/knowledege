@@ -8,6 +8,8 @@ a missing document, a commit is 1 write per document) and reports them through
 
 from __future__ import annotations
 
+import hashlib
+import secrets
 import threading
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
@@ -83,6 +85,28 @@ class PartResult:
 
 
 @dataclass(frozen=True, slots=True)
+class PartInfo:
+    """One stored part as the account page and the export see it."""
+
+    upd: int
+    bytes: int  # length of the compact JSON (`n_<part>`)
+    gz: bytes | None = None  # only when asked for payloads
+
+
+@dataclass(frozen=True, slots=True)
+class HubSummary:
+    hub: str
+    parts: dict[str, PartInfo]
+    done: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class Tombstone:
+    h: str  # sha256("studyhubs-tombstone-v1:" + uid), hex
+    at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class OpCounts:
     reads: int = 0
     writes: int = 0
@@ -152,46 +176,34 @@ class Store(Protocol):
     def get_usage(self, keys: list[str]) -> dict[str, dict[str, int]]: ...
     def get_setting(self, key: str) -> tuple[dict[str, Any], int] | None: ...
     def put_setting(self, key: str, value: dict[str, Any], *, expect_version: int | None) -> int: ...
-    # Declared for M2/M3; adapters raise NotImplementedError until then.
-    def list_hubs(self, uid: str) -> list[Any]: ...
-    def delete_user(self, uid: str) -> None: ...
+    # M2: account, admin, jobs and backups.
+    def list_hubs(self, uid: str, *, payloads: bool = False) -> list[HubSummary]: ...
+    def delete_user(self, uid: str) -> int: ...
+    def put_tombstone(self, h: str, at: datetime) -> None: ...
     def is_tombstoned(self, uid_hashes: list[str]) -> set[str]: ...
+    def count_docs(self, kind: str) -> int: ...
     def iter_users(self, page: int = 300) -> Iterator[UserRecord]: ...
     def iter_progress(self, page: int = 300) -> Iterator[tuple[str, str, dict[str, PartOut]]]: ...
-    def iter_tombstones(self) -> Iterator[Any]: ...
+    def iter_tombstones(self, page: int = 300) -> Iterator[Tombstone]: ...
+    def storage_scan(self, page: int = 300) -> tuple[int, int]: ...
+    def get_job(self, id: str) -> dict[str, Any] | None: ...
+    def put_job(self, job: dict[str, Any]) -> None: ...
+    def claim_job(self, id: str, holder: str, from_states: set[str]) -> bool: ...
+    # Jobs in `states` oldest first by id, or (no states) the newest `limit` by `createdAt`.
+    def list_jobs(self, states: set[str] | None = None, limit: int = 50) -> list[dict[str, Any]]: ...
+    # Declared for M3 (restore); adapters raise NotImplementedError until then.
     def restore_batch(
         self, recs: list[Any], *, mode: str, job_id: str, checkpoint: dict[str, Any]
     ) -> Any: ...
     def wipe_for_replace(self, job_id: str) -> None: ...
-    def get_job(self, id: str) -> Any: ...
-    def put_job(self, job: Any) -> None: ...
-    def claim_job(self, id: str, holder: str, from_states: set[str]) -> bool: ...
     def close(self) -> None: ...
 
 
-LATER = "M2/M3"
+LATER = "M3"
 
 
 class LaterMethods:
-    """The methods M1 declares but does not implement (shared by every adapter)."""
-
-    def list_hubs(self, uid: str) -> list[Any]:
-        raise NotImplementedError(LATER)
-
-    def delete_user(self, uid: str) -> None:
-        raise NotImplementedError(LATER)
-
-    def is_tombstoned(self, uid_hashes: list[str]) -> set[str]:
-        raise NotImplementedError(LATER)
-
-    def iter_users(self, page: int = 300) -> Iterator[UserRecord]:
-        raise NotImplementedError(LATER)
-
-    def iter_progress(self, page: int = 300) -> Iterator[tuple[str, str, dict[str, PartOut]]]:
-        raise NotImplementedError(LATER)
-
-    def iter_tombstones(self) -> Iterator[Any]:
-        raise NotImplementedError(LATER)
+    """The methods M2 declares but does not implement (restore arrives in M3)."""
 
     def restore_batch(self, recs: list[Any], *, mode: str, job_id: str, checkpoint: dict[str, Any]) -> Any:
         raise NotImplementedError(LATER)
@@ -199,22 +211,34 @@ class LaterMethods:
     def wipe_for_replace(self, job_id: str) -> None:
         raise NotImplementedError(LATER)
 
-    def get_job(self, id: str) -> Any:
-        raise NotImplementedError(LATER)
-
-    def put_job(self, job: Any) -> None:
-        raise NotImplementedError(LATER)
-
-    def claim_job(self, id: str, holder: str, from_states: set[str]) -> bool:
-        raise NotImplementedError(LATER)
-
-    def tombstones(self) -> Any:
-        raise NotImplementedError(LATER)
-
 
 def progress_doc_id(uid: str, hub: str) -> str:
     """`{uid}~{hubId}`: one document per (user, hub)."""
     return f"{uid}~{hub}"
+
+
+COUNT_KINDS = ("users", "progress", "tombstones")
+JOB_STATES = ("scheduled", "running", "succeeded", "failed", "cancelled", "missed")
+ACTIVE_JOB_STATES = frozenset({"scheduled", "running"})
+TOMBSTONE_CONTEXT = "studyhubs-tombstone-v1:"
+
+
+def tombstone_hash(uid: str) -> str:
+    """The tombstone id of a deleted account: no uid is kept, only this hash."""
+    return hashlib.sha256((TOMBSTONE_CONTEXT + uid).encode("utf-8")).hexdigest()
+
+
+def progress_range(uid: str) -> tuple[str, str]:
+    """[start, end) of the document ids `{uid}~...`: "~" is 0x7E, so the end is uid + 0x7F.
+
+    uids never contain "~" (identity.UID_RE), so no other user's ids fall inside.
+    """
+    return uid + "~", uid + "\x7f"
+
+
+def new_job_id(now_ms: int) -> str:
+    """Time-ordered job ids (`j<ms>-<hex>`): the newest jobs sort last by document id."""
+    return f"j{now_ms:013d}-{secrets.token_hex(4)}"
 
 
 def merged_done(parts: dict[str, PartIn], accepted: set[str]) -> int | None:
