@@ -16,6 +16,7 @@ any bytes after it.
 from __future__ import annotations
 
 import base64
+import binascii
 import os
 import struct
 import unicodedata
@@ -64,7 +65,42 @@ def new_params() -> dict[str, Any]:
     }
 
 
+def check_params(params: Any) -> None:
+    """Refuse anything but the v1 `encryption` object before the KDF runs.
+
+    The header is only authenticated once a frame opens, so its values are untrusted until
+    then: a tampered `n`, `r` or `p` could crash scrypt or ask it for gigabytes of memory.
+    v1 fixes them (n=2**15, r=8, p=1, 1 MiB segments, 16-byte salt, 7-byte nonce prefix).
+    """
+
+    def exact(name: str, value: object) -> bool:
+        found = params.get(name)
+        return type(found) is type(value) and found == value
+
+    def b64_len(name: str) -> int:
+        return len(base64.b64decode(params.get(name), validate=True))
+
+    try:
+        ok = (
+            isinstance(params, dict)
+            and exact("alg", ALG)
+            and exact("kdf", "scrypt")
+            and exact("n", SCRYPT_N)
+            and exact("r", SCRYPT_R)
+            and exact("p", SCRYPT_P)
+            and exact("segment", SEGMENT)
+            and b64_len("salt") == SALT_BYTES
+            and b64_len("noncePrefix") == PREFIX_BYTES
+        )
+    except (TypeError, ValueError, binascii.Error):
+        ok = False
+    if not ok:
+        raise DecryptError("unsupported or damaged encryption parameters")
+
+
 def key_for(params: dict[str, Any], passphrase: str) -> bytes:
+    """The file key (the parameters are checked first: see `check_params`)."""
+    check_params(params)
     return derive_key(
         passphrase,
         base64.b64decode(params["salt"]),

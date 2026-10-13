@@ -44,6 +44,7 @@ VERSION = 1
 FLAG_ENCRYPTED = 0x01
 MAX_HEADER = 1 << 20
 TAG = 16
+KDF_V1 = (2**15, 8, 1, 1 << 20)  # scrypt n, r, p and the segment size of AES-256-GCM-STREAM-1
 READ = 1 << 16
 ORDER = ("settings", "tombstone", "user", "progress", "end")
 REQUIRED = {
@@ -126,10 +127,16 @@ def encrypted_body(f: BinaryIO, header: dict[str, Any], aad: bytes, passphrase: 
         n, r, p, segment = int(enc["n"]), int(enc["r"]), int(enc["p"]), int(enc["segment"])
     except (KeyError, TypeError, ValueError):
         raise Invalid("bad encryption parameters") from None
-    if len(salt) != 16 or len(prefix) != 7 or not 1 <= segment <= 1 << 26:
+    # v1 fixes the KDF and the segment size. The header is only authenticated once a frame
+    # opens, so a tampered n/r/p must be refused here: scrypt would crash or want gigabytes.
+    exact = all(type(enc.get(k)) is int for k in ("n", "r", "p", "segment"))
+    if not exact or (n, r, p, segment) != KDF_V1 or len(salt) != 16 or len(prefix) != 7:
         raise Invalid("bad encryption parameters")
     secret = unicodedata.normalize("NFKC", passphrase).encode("utf-8")
-    key = Scrypt(salt=salt, length=32, n=n, r=r, p=p).derive(secret)
+    try:
+        key = Scrypt(salt=salt, length=32, n=n, r=r, p=p).derive(secret)
+    except (ValueError, MemoryError, OverflowError) as exc:
+        raise Invalid(f"key derivation failed: {exc}") from None
     aead = AESGCM(key)
 
     def nonce(counter: int, last: bool) -> bytes:

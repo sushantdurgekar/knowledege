@@ -256,6 +256,47 @@ def test_encrypted_frame_defects(big_files: dict[str, bytes], tmp_path: Path) ->
     assert result.returncode == 1
 
 
+def with_encryption(data: bytes, **changes: Any) -> bytes:
+    """The file with its header's `encryption` object changed (and the header length fixed)."""
+    pre, frames = split_frames(data)
+    header = json.loads(pre[10:])
+    header["encryption"].update(changes)
+    raw = json.dumps(header, separators=(",", ":")).encode()
+    return pre[:6] + struct.pack(">I", len(raw)) + raw + b"".join(frames)
+
+
+ENCRYPTION_TAMPERS: dict[str, dict[str, Any]] = {
+    "n-not-a-power-of-two": {"n": 32769},  # one flipped bit of "32768"
+    "n-huge": {"n": 2**30},  # scrypt would want 128 GiB
+    "n-string": {"n": "32768"},
+    "r-zero": {"r": 0},
+    "r-other": {"r": 9},
+    "p-zero": {"p": 0},  # one flipped bit of "1"
+    "p-bool": {"p": True},
+    "segment-huge": {"segment": 2**31},
+    "segment-other": {"segment": 1048577},
+    "salt-short": {"salt": base64.b64encode(b"s" * 15).decode()},
+    "salt-not-base64": {"salt": "not base64!"},
+    "prefix-long": {"noncePrefix": base64.b64encode(b"p" * 8).decode()},
+    "prefix-missing": {"noncePrefix": None},
+    "kdf-other": {"kdf": "pbkdf2"},
+}
+
+
+@pytest.mark.parametrize("case", sorted(ENCRYPTION_TAMPERS))
+def test_tampered_encryption_parameters_fail_closed(case: str, tmp_path: Path) -> None:
+    """The header is authenticated only once a frame opens: bad KDF values are refused first,
+    with a clean INVALID (no crash in scrypt, no huge allocation)."""
+    path = tmp_path / "e.backup"
+    write(sample_store(), path, PASS)
+    tampered = with_encryption(path.read_bytes(), **ENCRYPTION_TAMPERS[case])
+    path.write_bytes(tampered)
+    assert rejected(path, PASS)
+    header = json.loads(split_frames(tampered)[0][10:])
+    with pytest.raises(crypto.DecryptError, match="encryption parameters"):
+        crypto.key_for(header["encryption"], PASS)
+
+
 def test_app_decryptor_matches(big_files: dict[str, bytes]) -> None:
     pre, frames = split_frames(big_files["enc"])
     header = json.loads(pre[10:])
