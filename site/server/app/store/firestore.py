@@ -18,7 +18,8 @@ query over `{uid}~` .. `{uid}\x7f`.
 Cost per operation: `get_hub` 1 read (+1 only when some part is newer than a
 non-empty `known`; with nothing known it is one read with the full field mask);
 `put_parts` 1 read + at most 1 write, in one transaction that reads only the `u_*`
-stamps through a field mask.
+stamps through a field mask; a hub's first write (no document yet) also reads the
+uid's tombstone in that transaction (+1 read) and raises `AccountDeleted` if it exists.
 
 Every RPC carries `timeout=10` and a short `Retry` that never retries
 `ResourceExhausted`; the transaction's own begin/commit/rollback RPCs are bounded the
@@ -56,6 +57,7 @@ from app.progress.decide import decide
 from app.store.base import (
     COUNT_KINDS,
     PARTS,
+    AccountDeleted,
     HubSummary,
     LaterMethods,
     OpCounter,
@@ -73,6 +75,7 @@ from app.store.base import (
     merged_done,
     progress_doc_id,
     progress_range,
+    tombstone_hash,
 )
 
 logger = logging.getLogger(__name__)
@@ -361,12 +364,18 @@ class FirestoreStore(LaterMethods):
 
     def put_parts(self, uid: str, hub: str, parts: dict[str, PartIn], now_ms: int) -> dict[str, PartResult]:
         ref = self._progress_ref(uid, hub)
+        tomb_ref = self.db.collection("tombstones").document(tombstone_hash(uid))
         outcome: dict[str, Any] = {}
 
         def run(tx: Transaction) -> dict[str, PartResult]:
             outcome["phase"] = "reads"
             snap = ref.get(field_paths=STAMP_FIELDS, transaction=tx, retry=RETRY, timeout=TIMEOUT)
             self.ops.add(reads=1, fs_egress=STAMPS_BYTES if snap.exists else 0)
+            if not snap.exists:  # a hub's first write: refuse a deleted account (+1 read)
+                tomb = tomb_ref.get(field_paths=["at"], transaction=tx, retry=RETRY, timeout=TIMEOUT)
+                self.ops.add(reads=1)
+                if tomb.exists:
+                    raise AccountDeleted("the account was deleted")
             stored = _stamps(snap.to_dict()) if snap.exists else {}
             results: dict[str, PartResult] = {}
             accepted: set[str] = set()

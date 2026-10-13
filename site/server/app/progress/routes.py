@@ -11,7 +11,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.auth import ratelimit
 from app.auth.csrf import csrf_protect
-from app.auth.deps import get_viewer, require_user
+from app.auth.deps import flag_clear_cookies, get_viewer, require_user
 from app.errors import ApiError
 from app.progress.validate import (
     HubBatch,
@@ -26,6 +26,7 @@ from app.progress.validate import (
 )
 from app.runtime import Runtime, get_runtime
 from app.state import get_state
+from app.store.base import AccountDeleted
 
 NO_STORE = {"Cache-Control": "no-store"}
 # The publicId of the account a hub page belongs to (the bridge sends it with every request).
@@ -162,7 +163,14 @@ async def sync(request: Request) -> JSONResponse:
         return parse_sync(data, catalog, limits)
 
     batches = await run_in_threadpool(prepare)
-    results = await run_in_threadpool(runtime.progress.sync, uid, batches, now_ms)
+    try:
+        results = await run_in_threadpool(runtime.progress.sync, uid, batches, now_ms)
+    except AccountDeleted:
+        # The account was deleted from another device (its cookie here is still valid): sign
+        # this session out, so the bridge goes browser-only instead of recreating its data.
+        runtime.deleted_uids.add(uid)  # this instance now refuses the cookie without a read
+        flag_clear_cookies(request)
+        raise ApiError(401, "unauthenticated", "This account was deleted") from None
     body: dict[str, Any] = {"results": results, "policy": runtime.guard.policy(uid).to_json()}
     upcoming = runtime.upcoming()
     if upcoming is not None:

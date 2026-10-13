@@ -48,6 +48,14 @@ class Conflict(StoreError):  # noqa: N818 - name fixed by the contract
     """An optimistic-version check failed."""
 
 
+class AccountDeleted(StoreError):  # noqa: N818 - named like the contract's other errors
+    """`put_parts` found the uid's tombstone on a hub's first write: the account was deleted.
+
+    Another device of a deleted account keeps a valid session cookie (normal requests do
+    not check revocation), so the store refuses to recreate documents under that uid.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class UserRecord:
     uid: str

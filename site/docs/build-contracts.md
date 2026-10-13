@@ -433,14 +433,15 @@ Restore (upload, validate, apply) is **M3**; M2 only writes backups.
   - Hubs missing from the catalog are still listed, with `slug: null`.
 - **`GET /api/me/export`** → a JSON attachment `studyhubs-export-<YYYYMMDD>.json`: `{"exportedAt","user":{…no uid…},"progress":[{"hub","part","upd","data"}]}`. Rate limit 5/h.
 - **`DELETE /api/me`** `{confirm:"DELETE"}`, with a sign-in within 24 h. Rate limit 3/h. Steps, each safe to repeat:
-  1. Delete all progress docs.
-  2. Delete the user doc.
-  3. Write tombstone `sha256("studyhubs-tombstone-v1:"+uid)`.
+  1. Write tombstone `sha256("studyhubs-tombstone-v1:"+uid)` (first, so no sync can recreate a doc after step 2).
+  2. Delete all progress docs.
+  3. Delete the user doc.
   4. Delete the Firebase Auth user (fake mode: no-op).
   5. Clear cookies.
   6. Return 204.
 
   The client then wipes local hub data (`wipeKeys`) and broadcasts `logout`.
+- **No re-sync under a deleted account:** another device keeps a valid session cookie (normal requests use `check_revoked=False`). When `put_parts` finds no hub document yet, it also reads the uid's tombstone in the same transaction (+1 read on a hub's first write only; 0 when the doc exists); if present it writes nothing and raises `AccountDeleted`, and `POST /api/sync` answers 401 `unauthenticated`, clears both cookies (the bridge maps 401 → `revoked`, the hub goes browser-only) and remembers the uid in-process, so that instance's next `GET /api/progress`/seed is `signedIn:false` with no read. GET itself does not check tombstones (a missing doc is the normal first visit; the check would cost a read there).
 
 ## 19. Admin API (all `GET`/`PUT`/`POST` under `/api/admin`, admin only)
 - **`GET /api/admin/stats`:** the shape in spec §4.9, without the `host.instanceHoursMonth` and `migrationTriggers` fields if they can't be computed.

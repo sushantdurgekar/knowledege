@@ -216,17 +216,49 @@ def test_delete_account_cascade_and_tombstone(api: TestClient) -> None:
 def test_delete_steps_are_safe_to_repeat(api: TestClient, user: dict[str, Any]) -> None:
     assert sync(api, {"ai103": {"main": main()}}).status_code == 200
     s = store(api)
-    s.fail_next("put_tombstone", Unavailable("emulated outage"))
+    s.fail_next("delete_user", Unavailable("emulated outage"))
     failed = delete_me(api)
     assert failed.status_code == 503
     assert failed.json()["code"] == "unavailable"
     assert "set-cookie" not in failed.headers  # still signed in: the client can retry
-    assert s.list_hubs("user-1") == []  # steps 1-2 ran
-    assert not s.is_tombstoned([tombstone_hash("user-1")])
+    assert s.is_tombstoned([tombstone_hash("user-1")]) == {tombstone_hash("user-1")}  # step 1 ran
+    assert len(s.list_hubs("user-1")) == 1
 
     retried = delete_me(api)
     assert retried.status_code == 204
+    assert s.list_hubs("user-1") == []
     assert s.is_tombstoned([tombstone_hash("user-1")]) == {tombstone_hash("user-1")}
+
+
+def test_other_device_cannot_resync_a_deleted_account(
+    api: TestClient, make_client: Any, clock: FixedClock
+) -> None:
+    """Another device (here another server instance, sharing the store and the session
+    keys) keeps a valid cookie after DELETE /api/me: its next sync is 401, signs it out,
+    and recreates nothing."""
+    other = make_client(store=store(api), auth=runtime(api).auth, clock=clock)
+    sign_in(api, "user-1")
+    sign_in(other, "user-1")
+    assert sync(other, {"ai103": {"main": main()}}).status_code == 200
+    assert delete_me(api).status_code == 204
+    assert runtime(other).deleted_uids == set()  # the other instance was not told
+
+    s = store(api)
+    before = s.ops.snapshot()
+    response = sync(other, {"ai103": {"main": main(upd=T + 1)}, "ai901": {"legacy": legacy()}})
+    assert response.status_code == 401
+    assert response.json() == {"code": "unauthenticated", "message": "This account was deleted"}
+    assert_cleared(response)
+    assert (s.ops.snapshot() - before).writes == 0
+    assert (s.ops.snapshot() - before).reads == 2  # the first hub's stamps + tombstone
+    dump = s.dump()
+    assert [p for p in dump["progress"] if p["uid"] == "user-1"] == []
+    assert [u for u in dump["users"] if u["uid"] == "user-1"] == []
+
+    # That instance now treats the cookie as signed out without another read.
+    before = s.ops.snapshot()
+    assert other.get("/api/progress/ai103").json() == {"signedIn": False}
+    assert (s.ops.snapshot() - before).reads == 0
 
 
 def test_delete_needs_confirmation_recent_sign_in_and_csrf(api: TestClient, user: dict[str, Any]) -> None:

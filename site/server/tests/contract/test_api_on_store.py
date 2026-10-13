@@ -23,7 +23,8 @@ def test_sign_in_sync_and_read_back(adapter: Adapter, make_client: Any, uid: str
     results = response.json()["results"]
     assert {p: r["status"] for p, r in results["ai103"].items()} == dict.fromkeys(payloads, "accepted")
     reads, writes = adapter.wire_counts()
-    assert (reads - before[0], writes - before[1]) == (2, 2)  # 1 read + 1 write per hub
+    # 1 read + 1 write per hub, +1 read each: a hub's first write reads the tombstone
+    assert (reads - before[0], writes - before[1]) == (4, 2)
 
     body = client.get("/api/progress/ai103").json()
     assert body["parts"] == payloads

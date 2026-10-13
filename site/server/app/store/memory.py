@@ -3,7 +3,7 @@
 - One lock guards every dict, so `put_parts` is as atomic as a Firestore transaction.
 - Reads and writes are counted the way Firestore bills them: `get_hub` is 1 read
   (+1 when some part is newer than a non-empty `known`), `put_parts` is 1 read + at
-  most 1 write.
+  most 1 write (+1 read on a hub's first write: the tombstone check).
 - Fault hooks: `fail_next(op, exc, count=1)` raises `exc` from the next `count` calls of
   `op` ("any" matches every operation) and `latency_ms` sleeps before each call.
 - M2 scans (`iter_*`, `storage_scan`) page by document id like the Firestore cursors
@@ -28,6 +28,7 @@ from app.progress.decide import decide
 from app.store.base import (
     COUNT_KINDS,
     PARTS,
+    AccountDeleted,
     HubSummary,
     LaterMethods,
     OpCounter,
@@ -41,6 +42,7 @@ from app.store.base import (
     merged_done,
     progress_doc_id,
     progress_range,
+    tombstone_hash,
 )
 
 LOGIN_TOUCH_INTERVAL = timedelta(hours=24)
@@ -191,6 +193,10 @@ class MemoryStore(LaterMethods):
         with self._lock:
             doc = self._progress.get(doc_id)
             self.ops.add(reads=1, fs_egress=_stamps_size(doc))
+            if doc is None:  # a hub's first write: refuse a deleted account (+1 read)
+                self.ops.add(reads=1)
+                if tombstone_hash(uid) in self._tombstones:
+                    raise AccountDeleted("the account was deleted")
             stored = {p: s.upd for p, s in doc.parts.items()} if doc else {}
             results: dict[str, PartResult] = {}
             accepted: set[str] = set()

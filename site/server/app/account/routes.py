@@ -8,7 +8,7 @@
 The listing and the export are one id-range query over the user's hub documents
 (1 read per document); both add the user document (1 read: the listing's `joined`, the
 account page's "Joined" date, is its `createdAt`). Deleting runs
-steps that are each safe to repeat: progress docs, the user doc, the tombstone, the
+steps that are each safe to repeat: the tombstone, progress docs, the user doc, the
 Firebase Auth user, then the cookies.
 """
 
@@ -141,9 +141,13 @@ async def export(request: Request, viewer: User) -> Response:
 
 
 def delete_account(runtime: Runtime, uid: str) -> None:
-    """The deletion steps, in order; each one is safe to repeat after a failure."""
-    runtime.store.delete_user(uid)  # 1 + 2: progress docs, then the user doc
-    runtime.store.put_tombstone(tombstone_hash(uid), runtime.clock.now())  # 3
+    """The deletion steps, in order; each one is safe to repeat after a failure.
+
+    The tombstone goes first: from then on `put_parts` refuses a hub's first write under
+    the uid, so another device's sync cannot recreate a document after step 2 removed it.
+    """
+    runtime.store.put_tombstone(tombstone_hash(uid), runtime.clock.now())  # 1
+    runtime.store.delete_user(uid)  # 2 + 3: progress docs, then the user doc
     runtime.auth.delete_user(uid)  # 4: the Firebase Auth user (fake mode: no-op)
 
 
