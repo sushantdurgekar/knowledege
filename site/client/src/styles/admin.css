@@ -123,3 +123,43 @@
   min-height: 88px;
   resize: vertical;
 }
+/* Restore wizard (build-contracts §25) */
+.restore-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 12px 0 4px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  list-style: none;
+  counter-reset: step;
+}
+.restore-steps li {
+  counter-increment: step;
+}
+.restore-steps li::before {
+  content: counter(step) '. ';
+}
+.restore-steps li[data-done='true'] {
+  color: var(--fg);
+}
+.restore-steps li[aria-current='step'] {
+  color: var(--fg);
+  font-weight: 700;
+  text-decoration: underline 2px var(--accent);
+  text-underline-offset: 4px;
+}
+.admin-progress {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+.admin-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.2s;
+}

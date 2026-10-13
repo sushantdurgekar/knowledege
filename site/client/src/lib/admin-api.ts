@@ -27,15 +27,19 @@ export interface BackupLogEntry {
   consistent: boolean;
 }
 
+/** A maintenance window, or a restore job (kind "restore": `runAt`, `fileName`, no window). */
 export interface Job {
   id: string;
   kind: string;
   state: string;
   mode: string;
-  startAt: string;
+  startAt?: string;
+  runAt?: string;
+  fileName?: string;
+  error?: string | null;
   endAt?: string;
   tz: string;
-  durationMin: number;
+  durationMin?: number;
   message: string | null;
   createdAt?: string;
   createdBy?: string | null;
@@ -65,6 +69,8 @@ export interface Stats {
   upcoming: Upcoming | null;
   jobs: Job[];
   missedJobs?: Job[];
+  /** Restore jobs in `needs_attention` (the site stays in full maintenance). */
+  attentionJobs?: Job[];
   lastBackup: BackupLogEntry | null;
   tier: number | string;
   adminTz?: string;
@@ -170,6 +176,17 @@ export function startDownload(url: string, fileName: string): void {
 }
 
 // --- helpers ----------------------------------------------------------------------------------
+
+/** "Read-only", "Full", or "Restore (merge)" for a restore job. */
+export const jobLabel = (job: Job): string =>
+  job.kind === 'restore' ? `Restore (${job.mode})` : (MODE_LABEL[job.mode] ?? job.mode);
+
+/** When a job starts: a window's `startAt`, a restore's `runAt`. */
+export const jobStart = (job: Job): string | undefined => job.startAt ?? job.runAt;
+
+/** A window can be cancelled while scheduled or running; a restore only before it starts. */
+export const cancellable = (job: Job): boolean =>
+  job.state === 'scheduled' || (job.state === 'running' && job.kind !== 'restore');
 
 /** Meter tone (build-contracts §21): good below 50%, trap below 80%, bad from there on. */
 export function meterTone(used: number, limit: number): 'good' | 'trap' | 'bad' {

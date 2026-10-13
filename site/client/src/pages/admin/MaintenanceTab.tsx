@@ -4,10 +4,13 @@ import { BusyLine, FormMessage, TextField } from '../../components/forms';
 import {
   cancelJob,
   CONFIRM,
+  cancellable,
   createJob,
   formatIn,
   getMaintenance,
   getSettings,
+  jobLabel,
+  jobStart,
   listJobs,
   MAX_MESSAGE,
   MODE_LABEL,
@@ -369,19 +372,19 @@ function JobsList({ jobs, tz, onChanged }: { jobs: Job[]; tz: string; onChanged:
           <tbody>
             {jobs.map((job) => (
               <tr key={job.id}>
-                <td>{MODE_LABEL[job.mode] ?? job.mode}</td>
-                <td>{formatIn(job.startAt, job.tz || tz)}</td>
-                <td>{job.durationMin} min</td>
+                <td>{jobLabel(job)}</td>
+                <td>{formatIn(jobStart(job), job.tz || tz)}</td>
+                <td>{job.durationMin ? `${job.durationMin} min` : '—'}</td>
                 <td>
                   <StateChip state={job.state} />
                 </td>
-                <td>{job.message ?? '—'}</td>
+                <td>{job.kind === 'restore' ? (job.fileName ?? '—') : (job.message ?? '—')}</td>
                 <td>
-                  {(job.state === 'scheduled' || job.state === 'running') && (
+                  {cancellable(job) && (
                     <button
                       type="button"
                       className="btn btn--small"
-                      aria-label={`Cancel the ${MODE_LABEL[job.mode] ?? job.mode} window at ${formatIn(job.startAt, job.tz || tz)}`}
+                      aria-label={`Cancel the ${jobLabel(job)} ${job.kind === 'restore' ? 'job' : 'window'} at ${formatIn(jobStart(job), job.tz || tz)}`}
                       onClick={() => setCancelling(job)}
                     >
                       Cancel
@@ -395,7 +398,7 @@ function JobsList({ jobs, tz, onChanged }: { jobs: Job[]; tz: string; onChanged:
       </div>
       {cancelling && (
         <Dialog
-          title="Cancel this window?"
+          title={cancelling.kind === 'restore' ? 'Cancel this restore?' : 'Cancel this window?'}
           onCancel={busy ? undefined : close}
           actions={
             <>
@@ -408,14 +411,14 @@ function JobsList({ jobs, tz, onChanged }: { jobs: Job[]; tz: string; onChanged:
                 disabled={busy || confirm.trim() !== CONFIRM.cancel}
                 onClick={() => void doCancel(cancelling)}
               >
-                {busy ? 'Cancelling…' : 'Cancel window'}
+                {busy ? 'Cancelling…' : cancelling.kind === 'restore' ? 'Cancel restore' : 'Cancel window'}
               </button>
             </>
           }
         >
           <p>
-            {MODE_LABEL[cancelling.mode] ?? cancelling.mode} from {formatIn(cancelling.startAt, cancelling.tz || tz)} for{' '}
-            {cancelling.durationMin} min.{' '}
+            {jobLabel(cancelling)} from {formatIn(jobStart(cancelling), cancelling.tz || tz)}
+            {cancelling.durationMin ? ` for ${cancelling.durationMin} min` : ''}.{' '}
             {cancelling.state === 'running' ? 'It is running now: the previous mode comes back at once.' : ''}
           </p>
           <TextField

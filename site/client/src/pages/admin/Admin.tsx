@@ -1,4 +1,4 @@
-// `/admin` (build-contracts.md §21): a lazy chunk with four tabs. Shown in the menu only when
+// `/admin` (build-contracts.md §21, §25): a lazy chunk with five tabs. Shown in the menu only when
 // /api/me says `user.admin`; the server checks again on every /api/admin call, and anyone who
 // is not an admin sees the same "Page not found" as for any unknown path.
 import '../../styles/admin.css';
@@ -10,11 +10,13 @@ import { NotFound } from '../NotFound';
 import { BackupTab } from './BackupTab';
 import { MaintenanceTab } from './MaintenanceTab';
 import { OverviewTab } from './OverviewTab';
+import { RestoreTab } from './RestoreTab';
 import { SettingsTab } from './SettingsTab';
 
 const TABS = [
   { to: '/admin', label: 'Overview', end: true },
   { to: '/admin/backup', label: 'Backup', end: false },
+  { to: '/admin/restore', label: 'Restore', end: false },
   { to: '/admin/maintenance', label: 'Maintenance & schedule', end: false },
   { to: '/admin/settings', label: 'Settings', end: false },
 ];
@@ -48,6 +50,7 @@ function AdminConsole() {
       <Routes>
         <Route index element={<OverviewTab />} />
         <Route path="backup" element={<BackupTab />} />
+        <Route path="restore" element={<RestoreTab />} />
         <Route path="maintenance" element={<MaintenanceTab />} />
         <Route path="settings" element={<SettingsTab />} />
         <Route path="*" element={<NotFound />} />

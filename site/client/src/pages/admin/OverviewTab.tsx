@@ -48,6 +48,14 @@ export function OverviewTab() {
           </p>
         </FormMessage>
       )}
+      {(stats.attentionJobs ?? []).length > 0 && (
+        <FormMessage tone="error">
+          <p>
+            A restore needs attention: {stats.attentionJobs!.map((job) => `${job.fileName ?? job.id}: ${job.error ?? 'see the report'}`).join('; ')}.
+            The site stays in full maintenance until you set the mode. <Link to="/admin/restore">Open Restore</Link>
+          </p>
+        </FormMessage>
+      )}
       {stats.maintenance.mode !== 'off' && (
         <FormMessage tone="info">
           Maintenance is on: <strong>{MODE_LABEL[stats.maintenance.mode] ?? stats.maintenance.mode}</strong>
