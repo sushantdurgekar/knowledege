@@ -159,7 +159,7 @@ Playwright uses `PLAYWRIGHT_BROWSERS_PATH` when it is set, and `/opt/pw-browsers
 
 | Variable | Default | Notes |
 |---|---|---|
-| `AUTH_MODE` | `firebase` in production, `fake` otherwise | `fake` (sign in with `"fake:" + base64url(JSON {uid, email, emailVerified?, provider?})`) is refused in production |
+| `AUTH_MODE` | `firebase` in production, `fake` otherwise | `fake` (sign in with `"fake:" + base64url(JSON {uid, email, emailVerified?, provider?})`) is refused in production, and on a real Firestore (`STORE=firestore` without `FIRESTORE_EMULATOR_HOST`) in any environment |
 | `STORE` | `firestore` in production, `memory` otherwise | `memory` is refused in production; `postgres` arrives in M3 |
 | `SECRET_KEY` | dev/test: a fixed constant plus a warning | Production: required, ≥ 32 bytes (Render generates it). Signs `publicId` and fake sessions; changing it changes every `publicId` |
 | `SESSION_DAYS` | `14` | Session cookie lifetime (`__Host-sh_session` on https, `sh_session` on http) |

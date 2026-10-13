@@ -256,6 +256,15 @@ class Settings:
             decode_service_account_b64(self.firebase_service_account_b64)
         if prod and self.firestore_emulator_host:
             raise ConfigError("FIRESTORE_EMULATOR_HOST must not be set when APP_ENV=production")
+        if store == "firestore" and not self.firestore_emulator_host:
+            # Real data: fake sign-in (any uid) and the test-only routes never touch it, in any env.
+            if auth_mode == "fake":
+                raise ConfigError(
+                    "AUTH_MODE=fake works only with STORE=memory or the Firestore emulator "
+                    "(set AUTH_MODE=firebase, or FIRESTORE_EMULATOR_HOST)"
+                )
+            if self.is_test:
+                raise ConfigError("APP_ENV=test with STORE=firestore needs FIRESTORE_EMULATOR_HOST")
 
         hops = self.trusted_proxy_hops
         if hops is None:

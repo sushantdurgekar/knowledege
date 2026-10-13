@@ -132,3 +132,18 @@ def test_reads_m1_environment(tmp_path: Path) -> None:
 def test_maintenance_force_off_means_unset() -> None:
     assert Settings.from_env({"MAINTENANCE_FORCE": "off"}).maintenance_force is None
     assert Settings.from_env({"MAINTENANCE_FORCE": "full"}).maintenance_force == "full"
+
+
+@pytest.mark.parametrize("app_env", ["development", "test"])
+def test_fake_auth_and_test_routes_never_reach_a_real_firestore(app_env: str) -> None:
+    """Fake sign-in (any uid) and /api/test/* only ever run on the memory store or the emulator."""
+    real = {"APP_ENV": app_env, "STORE": "firestore", "FIREBASE_PROJECT_ID": "study-hubs-real"}
+    with pytest.raises(ConfigError, match="AUTH_MODE=fake works only"):
+        Settings.from_env(real)  # AUTH_MODE defaults to fake outside production
+    if app_env == "test":
+        with pytest.raises(ConfigError, match="needs FIRESTORE_EMULATOR_HOST"):
+            Settings.from_env({**real, "AUTH_MODE": "firebase"})
+    else:
+        assert Settings.from_env({**real, "AUTH_MODE": "firebase"}).auth_mode == "firebase"
+    emulator = Settings.from_env({**real, "FIRESTORE_EMULATOR_HOST": "127.0.0.1:8080"})
+    assert (emulator.auth_mode, emulator.store) == ("fake", "firestore")

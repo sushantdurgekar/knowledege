@@ -161,7 +161,7 @@ These sections are binding for M1. Where they are silent, follow [architecture-s
 
 | Var | Default | Notes |
 |---|---|---|
-| `AUTH_MODE` | `firebase` in production, `fake` in test/development | `fake` is **refused** when `APP_ENV=production` |
+| `AUTH_MODE` | `firebase` in production, `fake` in test/development | `fake` is **refused** when `APP_ENV=production`, and with `STORE=firestore` unless `FIRESTORE_EMULATOR_HOST` is set (`APP_ENV=test` with `STORE=firestore` needs the emulator too) |
 | `STORE` | `firestore` in production, `memory` otherwise | `memory` is refused in production. `postgres` arrives in M3 |
 | `SECRET_KEY` | dev/test: a fixed constant plus a warning | Production: required, ≥ 32 bytes. Used for `publicId` and fake session signing |
 | `SESSION_DAYS` | `14` | |
