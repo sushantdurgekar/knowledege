@@ -4,7 +4,7 @@ import { Link, NavLink, useLocation } from 'react-router';
 import { useMe } from '../context/me';
 import type { MeUser } from '../lib/api';
 
-/** Header account area: "Sign in", or the user's initial with a small menu (Account, Sign out). */
+/** Header account area: "Sign in", or the user's initial with a small menu (Account, Admin for admins, Sign out). */
 export function AccountNav() {
   const { me } = useMe();
   if (me.status === 'loading') return <span className="avatar avatar--placeholder" aria-hidden="true" />;
@@ -70,6 +70,11 @@ export function UserMenu({ user }: { user: MeUser }) {
           <li>
             <Link to="/account">Account</Link>
           </li>
+          {user.admin && (
+            <li>
+              <Link to="/admin">Admin</Link>
+            </li>
+          )}
           <li>
             <Link to="/signout">Sign out</Link>
           </li>

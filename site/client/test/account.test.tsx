@@ -216,7 +216,7 @@ describe('/account', () => {
     expect(screen.getByText('Email and password')).toBeInTheDocument();
     expect(screen.getByRole('main')).not.toHaveTextContent(USER.publicId);
 
-    const local = screen.getByRole('region', { name: 'Progress in this browser' });
+    const local = screen.getByRole('region', { name: 'Your progress' });
     await within(local).findByRole('link', { name: 'DSA L1 Foundation Hub' });
     const row = (title: string) => within(local).getByRole('link', { name: title }).closest('li')!;
     expect(row('DSA L1 Foundation Hub')).toHaveTextContent('Not synced yet');
@@ -226,7 +226,7 @@ describe('/account', () => {
     expect(await screen.findByText('Everything in this browser is saved to your account.')).toBeInTheDocument();
     expect(server.to('POST /api/sync')).toHaveLength(1);
     expect(row('DSA L1 Foundation Hub')).toHaveTextContent('Synced');
-    expect(screen.getByRole('button', { name: 'Export my data' })).toBeDisabled();
+    expect(server.to('GET /api/me/progress').length).toBeGreaterThanOrEqual(2); // reloaded after the sync
   });
 
   it('resolves an account mismatch by discarding this browser’s progress after confirming', async () => {

@@ -1,11 +1,13 @@
 """The signed-in user's own data (build-contracts.md section 18).
 
-    GET    /api/me/progress   {"hubs":[{"hub","slug","title","parts":{"<part>":{"upd","bytes"}},"done"}]}
+    GET    /api/me/progress   {"hubs":[{"hub","slug","title","parts":{"<part>":{"upd","bytes"}},"done"}],
+                               "joined": ISO | null}
     GET    /api/me/export     attachment studyhubs-export-<YYYYMMDD>.json (5/h)
     DELETE /api/me            {confirm:"DELETE"} + a sign-in within 24 h (3/h) -> 204
 
 The listing and the export are one id-range query over the user's hub documents
-(1 read per document); the export adds the user document (1 read). Deleting runs
+(1 read per document); both add the user document (1 read: the listing's `joined`, the
+account page's "Joined" date, is its `createdAt`). Deleting runs
 steps that are each safe to repeat: progress docs, the user doc, the tombstone, the
 Firebase Auth user, then the cookies.
 """
@@ -72,6 +74,7 @@ async def my_progress(request: Request, viewer: User) -> JSONResponse:
     _no_full_maintenance(runtime)
     rate_limit(runtime, "uid:" + viewer.uid, ratelimit.PROGRESS)
     summaries = await _store_call(runtime.store.list_hubs, viewer.uid)
+    record = await _store_call(runtime.store.get_user, viewer.uid)
     catalog = get_state(request).catalog
     hubs = []
     for summary in summaries:
@@ -89,7 +92,8 @@ async def my_progress(request: Request, viewer: User) -> JSONResponse:
                 "done": summary.done if summary.done is not None else 0,
             }
         )
-    return JSONResponse({"hubs": hubs}, headers=NO_STORE)
+    joined = iso_utc(record.created_at) if record is not None and record.created_at else None
+    return JSONResponse({"hubs": hubs, "joined": joined}, headers=NO_STORE)
 
 
 def _user_json(record: UserRecord | None, viewer: Viewer) -> dict[str, Any]:

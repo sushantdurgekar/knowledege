@@ -73,7 +73,10 @@ def test_progress_needs_a_session(api: TestClient) -> None:
 
 
 def test_progress_lists_every_hub_with_parts_and_done(api: TestClient, user: dict[str, Any]) -> None:
-    assert api.get("/api/me/progress").json() == {"hubs": []}
+    empty = api.get("/api/me/progress").json()
+    assert empty["hubs"] == []
+    assert isinstance(empty["joined"], str)  # the user doc's createdAt
+    assert empty["joined"].endswith("Z")
     hubs = {
         "ai103": {"main": main(done=3), "mocks": mocks(), "cards": cards()},
         "ai901": {"legacy": legacy()},
@@ -88,7 +91,8 @@ def test_progress_lists_every_hub_with_parts_and_done(api: TestClient, user: dic
     response = api.get("/api/me/progress")
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
-    assert (store(api).ops.snapshot() - before).reads == 3  # one id-range query: 1 read per doc
+    # One id-range query (1 read per doc) plus the user doc for `joined`.
+    assert (store(api).ops.snapshot() - before).reads == 3 + 1
     listed = {h["hub"]: h for h in response.json()["hubs"]}
     assert set(listed) == {"ai103", "ai901", "gone-hub"}
 
@@ -206,7 +210,7 @@ def test_delete_account_cascade_and_tombstone(api: TestClient) -> None:
     sign_in(api, "user-1")
     assert "user-1" not in runtime(api).auth.revoked  # type: ignore[attr-defined]
     assert api.get("/api/me").json()["signedIn"] is True
-    assert api.get("/api/me/progress").json() == {"hubs": []}
+    assert api.get("/api/me/progress").json()["hubs"] == []
 
 
 def test_delete_steps_are_safe_to_repeat(api: TestClient, user: dict[str, Any]) -> None:

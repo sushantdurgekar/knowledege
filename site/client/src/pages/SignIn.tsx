@@ -14,13 +14,15 @@ export function SignIn() {
   useDocumentTitle('Sign in');
   const [params] = useSearchParams();
   const next = safeNext(params.get('next'));
+  // A destructive action answered 403 reauth_required: sign in again even though signed in.
+  const reauth = params.get('reauth') === '1';
   const { me } = useMe();
   const configState = useSiteConfig();
   const config = configState.status === 'ready' ? configState.config : null;
   const kitState = useAuthKit(config);
   const flow = useSignInCompletion(next, 'signin');
 
-  if (me.status === 'signed-in' && !flow.busy) {
+  if (me.status === 'signed-in' && !flow.busy && !reauth) {
     const who = me.user.email || me.user.name || 'your account';
     return (
       <section className="page auth" aria-labelledby="page-title">
@@ -45,8 +47,15 @@ export function SignIn() {
   return (
     <section className="page auth" aria-labelledby="page-title">
       <p className="eyebrow">Account</p>
-      <h1 id="page-title">Sign in</h1>
-      <p className="lede">Sign in to keep your progress in sync across devices. Every hub also works without an account.</p>
+      <h1 id="page-title">{reauth ? 'Sign in again' : 'Sign in'}</h1>
+      {reauth ? (
+        <p className="lede">
+          To confirm it’s you, sign in again. Deleting an account and admin actions such as backups need a sign-in
+          within the last 24 hours.
+        </p>
+      ) : (
+        <p className="lede">Sign in to keep your progress in sync across devices. Every hub also works without an account.</p>
+      )}
 
       {flow.error && <FormMessage tone="error">{flow.error.message}</FormMessage>}
       {flow.step && <BusyLine>{STEP_LABELS[flow.step]}</BusyLine>}
@@ -167,10 +176,11 @@ export function FakeSignInForm({
   const [uid, setUid] = useState('');
   const [email, setEmail] = useState('');
   const [verified, setVerified] = useState(true);
+  const [provider, setProvider] = useState('password');
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    onSubmit({ uid: uid.trim(), email: email.trim(), emailVerified: verified });
+    onSubmit({ uid: uid.trim(), email: email.trim(), emailVerified: verified, provider });
   };
 
   return (
@@ -207,6 +217,14 @@ export function FakeSignInForm({
           onChange={(event) => setVerified(event.target.checked)}
         />
         <label htmlFor="test-verified">Email verified</label>
+      </div>
+      <div className="field">
+        <label htmlFor="test-provider">Sign-in method</label>
+        <select id="test-provider" value={provider} onChange={(event) => setProvider(event.target.value)}>
+          <option value="password">Email and password</option>
+          {/* Only Google accounts listed in ADMIN_EMAILS are admins (build-contracts §17). */}
+          <option value="google.com">Google</option>
+        </select>
       </div>
       <button type="submit" className="btn btn--primary btn--wide" disabled={disabled}>
         Test sign-in

@@ -93,7 +93,7 @@ describe('/signin in fake auth mode', () => {
     expect(session?.headers.get('X-StudyHubs')).toBe('1');
     expect(session?.credentials).toBe('same-origin');
     const { idToken } = JSON.parse(String(session?.body));
-    expect(decodeToken(idToken)).toEqual({ uid: 'alice', email: 'alice@example.com', emailVerified: true });
+    expect(decodeToken(idToken)).toEqual({ uid: 'alice', email: 'alice@example.com', emailVerified: true, provider: 'password' });
 
     const [sync] = server.to('POST /api/sync');
     expect(sync?.headers.get('Content-Encoding')).toBe(typeof CompressionStream === 'function' ? 'gzip' : null);

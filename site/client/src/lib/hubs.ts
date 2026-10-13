@@ -111,9 +111,8 @@ export function exportFileName(now = new Date()): string {
   return `study-hubs-unsynced-progress-${now.toISOString().slice(0, 10)}.json`;
 }
 
-/** Save `data` as a JSON file through a temporary object URL. */
-export function downloadJson(fileName: string, data: unknown): void {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+/** Save `blob` as a file through a temporary object URL. */
+export function saveBlob(fileName: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -124,6 +123,11 @@ export function downloadJson(fileName: string, data: unknown): void {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** Save `data` as a JSON file through a temporary object URL. */
+export function downloadJson(fileName: string, data: unknown): void {
+  saveBlob(fileName, new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
 }
 
 /** Download every unsynced part in `hubs` as one JSON file. */

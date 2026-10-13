@@ -79,8 +79,10 @@ describe('routes', () => {
     ['/verify', 'Verify your email'],
     ['/signout', 'You’re signed out'],
     ['/account', 'You’re not signed in'],
-    ['/admin', 'Coming soon'],
-    ['/admin/backup', 'Coming soon'],
+    // Not an admin (here: anonymous): the admin pages look like any unknown path.
+    ['/admin', 'Page not found'],
+    ['/admin/backup', 'Page not found'],
+    ['/privacy', 'What this site stores'],
   ])('renders the page at %s', async (path, heading) => {
     renderAt(path);
     expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument();
@@ -97,10 +99,19 @@ describe('routes', () => {
     }
   });
 
-  it('shows the privacy page', () => {
+  it('shows the privacy page: what, why, retention, export and deletion, processors, contact', async () => {
     renderAt('/privacy');
-    expect(screen.getByRole('heading', { level: 1, name: 'What this site stores' })).toBeInTheDocument();
-    expect(screen.getByRole('main')).toHaveTextContent('local storage');
+    expect(await screen.findByRole('heading', { level: 1, name: 'What this site stores' })).toBeInTheDocument();
+    const main = screen.getByRole('main');
+    expect(main).toHaveTextContent('local storage');
+    for (const heading of ['In your browser', 'With an account', 'Who processes it', 'How long we keep it', 'Export and deletion', 'Contact']) {
+      expect(within(main).getByRole('heading', { level: 2, name: heading })).toBeInTheDocument();
+    }
+    expect(main).toHaveTextContent('Firebase Authentication');
+    expect(main).toHaveTextContent('Download my data');
+    expect(main).toHaveTextContent('Delete my account');
+    expect(within(main).getByRole('link', { name: 'their GitHub profile' })).toHaveAttribute('href', 'https://github.com/sushantdurgekar');
+    expect(main.textContent).not.toMatch(/@[a-z0-9-]+\.[a-z]{2,}/i); // no email address
   });
 });
 

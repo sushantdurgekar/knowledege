@@ -632,7 +632,9 @@ code {
 .field label {
   font-weight: 700;
 }
-.field input {
+.field input,
+.field select,
+.field textarea {
   width: 100%;
   min-height: 44px;
   padding: 8px 12px;
@@ -641,7 +643,9 @@ code {
   background: var(--surface);
   font-size: 16px;
 }
-.field input:focus-visible {
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible {
   outline-offset: 0;
   border-color: var(--accent);
 }
@@ -856,6 +860,19 @@ code {
 .chip-status--warn {
   background: var(--bad-soft);
   color: var(--bad);
+}
+.chip-status--info {
+  background: var(--info-soft);
+  color: var(--info);
+}
+.chip-status--muted {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.progress-list__cols {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 200px;
 }
 
 /* Preferences ------------------------------------------------------------ */
