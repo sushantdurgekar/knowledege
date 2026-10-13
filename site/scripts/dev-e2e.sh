@@ -17,9 +17,12 @@
 # E2E_STORE=postgres runs the server on Postgres instead (STORE=postgres, DATABASE_URL must be
 # set; scripts/dev-e2e-pg.sh does both). It keeps the Firestore quota and sync tiers the M1
 # specs expect (QUOTA_ENFORCE=1 and the default SYNC_TIERS), and the specs see E2E_STORE.
+# E2E_STORE=firestore runs it on the Firestore emulator (`make emulator` first;
+# FIRESTORE_EMULATOR_HOST must be set) in the project demo-e2e, which /api/test/reset wipes.
 #
 # Env: PORT (10000), BASE_URL (http://127.0.0.1:$PORT), HEALTH_TIMEOUT seconds (30),
-#      E2E_STORE (memory | postgres), DATABASE_URL (with postgres).
+#      E2E_STORE (memory | postgres | firestore), DATABASE_URL (with postgres),
+#      FIRESTORE_EMULATOR_HOST (with firestore).
 #      The server log goes to site/e2e/server.log.
 set -eu
 
@@ -42,8 +45,14 @@ case "$E2E_STORE" in
       exit 2
     fi
     ;;
+  firestore)
+    if [ -z "${FIRESTORE_EMULATOR_HOST:-}" ]; then
+      echo "dev-e2e: E2E_STORE=firestore needs FIRESTORE_EMULATOR_HOST (make -C site emulator, then 127.0.0.1:8080)" >&2
+      exit 2
+    fi
+    ;;
   *)
-    echo "dev-e2e: E2E_STORE must be memory or postgres, got $E2E_STORE" >&2
+    echo "dev-e2e: E2E_STORE must be memory, postgres or firestore, got $E2E_STORE" >&2
     exit 2
     ;;
 esac
@@ -84,6 +93,8 @@ else
     cd "$SITE/server"
     if [ "$E2E_STORE" = postgres ]; then
       export STORE=postgres DATABASE_URL QUOTA_ENFORCE=1 SYNC_TIERS="$FIRESTORE_SYNC_TIERS"
+    elif [ "$E2E_STORE" = firestore ]; then
+      export STORE=firestore FIRESTORE_EMULATOR_HOST FIREBASE_PROJECT_ID=demo-e2e
     else
       export STORE=memory
     fi

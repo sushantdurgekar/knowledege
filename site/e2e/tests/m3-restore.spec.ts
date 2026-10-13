@@ -1,7 +1,8 @@
 /**
  * M3 restore (build-contracts.md sections 24-26), in the serial project. Meant for a
  * Postgres-backed server (scripts/dev-e2e-pg.sh sets E2E_STORE=postgres, and the store kind is
- * then checked); on the memory store it runs the same way.
+ * then checked); on the memory store and the Firestore emulator (E2E_STORE=firestore, merge
+ * only) it runs the same way.
  *
  * The admin restore wizard end to end: a backup produced by the app (Backup tab) is uploaded
  * after the data is lost, validated, run "Now", watched until it succeeds, and a synced hub on a
@@ -112,7 +113,12 @@ test('the admin restore wizard restores a backup made by the app, and a synced h
     await expect(form.getByRole('radio', { name: /Merge/ })).toBeChecked();
     await expect(form.getByRole('radio', { name: /^Now/ })).toBeChecked();
     if (stats.store === 'postgres') await expect(form.getByRole('radio', { name: /Replace/ })).toBeVisible();
-    await expect(form.getByRole('radio', { name: /quota reset/ })).toHaveCount(0); // Firestore only
+    if (stats.store === 'firestore') {
+      await expect(form.getByRole('radio', { name: /Replace/ })).toHaveCount(0); // merge only on Firestore
+      await expect(form.getByRole('radio', { name: /quota reset/ })).toBeVisible();
+    } else {
+      await expect(form.getByRole('radio', { name: /quota reset/ })).toHaveCount(0); // Firestore only
+    }
     const start = form.getByRole('button', { name: 'Start restore' });
     await expect(start).toBeDisabled();
     await form.getByRole('textbox', { name: 'Type RESTORE to confirm' }).fill('RESTORE');

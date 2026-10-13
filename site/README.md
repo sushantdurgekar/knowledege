@@ -144,6 +144,7 @@ sh site/scripts/dev-e2e.sh --grep @smoke         # HTTP contract only
 sh site/scripts/dev-e2e.sh tests/ai.spec.ts      # one file
 sh site/scripts/dev-e2e-pg.sh                    # m3-restore.spec.ts on Postgres (starts dev_pg.sh if needed)
 sh site/scripts/dev-e2e-pg.sh --project=sync     # every serial spec on Postgres
+E2E_STORE=firestore FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 sh site/scripts/dev-e2e.sh --project=sync   # on the emulator (make emulator)
 cd site/e2e && BASE_URL=https://study-hubs.onrender.com npx playwright test --project=chromium --grep @smoke   # a deployed site
 ```
 
@@ -153,7 +154,7 @@ cd site/e2e && BASE_URL=https://study-hubs.onrender.com npx playwright test --pr
 | `E2E_EXPECT_HSTS` | `1` for https, else `0` | Whether `Strict-Transport-Security` must be present (production only) |
 | `E2E_EXPECT_SLUGS` | the 7 original slugs | Comma list that must be in the catalog; empty disables the check |
 | `E2E_WORKERS` | 4 (2 in CI) | Parallel browsers |
-| `E2E_STORE` | unset (any) | `memory` or `postgres`: the store the server must run (`m3-restore.spec.ts` checks it); `dev-e2e.sh` sets it |
+| `E2E_STORE` | unset (any) | `memory`, `postgres` or `firestore`: the store the server must run (`m3-restore.spec.ts` checks it); `dev-e2e.sh` sets it (`firestore` needs `FIRESTORE_EMULATOR_HOST` and uses the emulator project `demo-e2e`) |
 
 Playwright uses `PLAYWRIGHT_BROWSERS_PATH` when it is set, and `/opt/pw-browsers` when that folder exists. Otherwise, install Chromium once with `cd site/e2e && npx playwright install chromium`.
 
@@ -370,9 +371,10 @@ Then deploy (Manual Deploy, or push to `main` and let CI do it).
    - When: **Now**, **Tonight 00:00** (in `ADMIN_TZ`), or **After the next Firestore quota reset** (Firestore only: Pacific midnight + 5 min).
    - Keep **Leave maintenance when the restore succeeds** ticked to get the previous mode back afterwards.
 5. **Confirm.** Type the phrase the page shows: `RESTORE` for a merge, `REPLACE <n> USERS` for a replace (n = the users on the site now). Press **Start restore**.
-6. **Watch the job.** The page shows the state, the records applied out of the total and, at the end, the report. **Cancel restore** (type `CANCEL`) works only while it is still `scheduled`.
+6. **Watch the job.** The page shows the state, the records applied out of the total and, at the end, the report. **Cancel restore** (type `CANCEL`) works only while it is still `scheduled`, and deletes the staged upload too (upload it again to restore later).
    - Firestore: writes start at 50/s and speed up every 5 minutes. When the day's write budget runs out the job pauses (`paused_quota`) and resumes after the reset, so a large restore can take several days (the plan said how many).
    - A job left `running` by an instance that died is picked up again 2 minutes after its last heartbeat and continues from its checkpoint; no batch is applied twice.
+   - A **Full** maintenance window that ends while a restore that started inside it is still running, paused or failed does not lift the maintenance: the restore takes over the window's previous mode and puts it back when it succeeds.
    - **Success:** the counts are checked against the backup's, a 1% sample (at most 200 parts) is read back and compared, the staged file is deleted and the previous mode comes back.
    - **Failure:** the job becomes `needs_attention`, the site stays in **Full** maintenance, and **Overview** shows a banner with the error. Fix the cause, then run the restore again, or set the mode by hand in **Maintenance & schedule**.
 7. **Check.** Sign in as a learner in a private window and open a hub: it shows the restored progress. **Overview** shows the user count.
