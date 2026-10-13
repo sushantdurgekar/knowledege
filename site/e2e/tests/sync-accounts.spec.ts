@@ -114,7 +114,14 @@ test.describe('S13 account switch on one browser', () => {
     const dialog = shell.getByRole('dialog', { name: 'This browser has progress from another account' });
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText('1 change');
+    // While the dialog is open the cookies are B's and A's hub tab has not heard of it yet: its
+    // flush timer, a hide or a close must not send A's change with B's cookie.
+    await flushNow(page);
+    await firePagehide(page);
+    await settle(shell, 300);
     expect(await storedUpd(request, userB.uid, hub, 'main'), 'nothing is pushed before the choice').toBe(0);
+    expect((await syncStats(page)).outbox.dead, "A's tab stopped syncing").toBe('revoked');
+    expect(await notices(page)).toContain('auth');
     await dialog.getByRole('button', { name: 'Discard and continue' }).click();
     await shell.waitForURL((u) => u.pathname === '/');
 

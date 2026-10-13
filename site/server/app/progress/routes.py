@@ -28,6 +28,8 @@ from app.runtime import Runtime, get_runtime
 from app.state import get_state
 
 NO_STORE = {"Cache-Control": "no-store"}
+# The publicId of the account a hub page belongs to (the bridge sends it with every request).
+ACCOUNT_HEADER = "x-studyhubs-account"
 
 router = APIRouter()
 
@@ -39,6 +41,19 @@ def maintenance_error(runtime: Runtime) -> ApiError:
         runtime.maintenance()["message"] or "Maintenance in progress",
         retry_after=300,
     )
+
+
+def check_account(request: Request, public_id: str | None) -> None:
+    """409 `account_changed` when the page says it belongs to another account than the session.
+
+    A hub page keeps the account it booted with. If another account signs in on this browser
+    (another tab), the page's in-memory progress must never be written under, or mixed with,
+    the new account's: the cookie alone cannot tell, the page's claim can. Requests without
+    the header (the site shell's reconcile) are not affected.
+    """
+    claimed = request.headers.get(ACCOUNT_HEADER)
+    if claimed is not None and claimed != public_id:
+        raise ApiError(409, "account_changed", "This page belongs to another account; reload it")
 
 
 def rate_limit(runtime: Runtime, key: str, *rules: ratelimit.Rule) -> None:
@@ -79,6 +94,7 @@ async def get_progress(request: Request, hub_id: str, known: str | None = None) 
     viewer = await get_viewer(request)
     if viewer.identity is None:
         return JSONResponse({"signedIn": False}, headers=NO_STORE)
+    check_account(request, viewer.public_id)
     if runtime.maintenance_mode == "full":
         raise maintenance_error(runtime)
     uid = viewer.identity.uid
@@ -111,6 +127,7 @@ async def sync(request: Request) -> JSONResponse:
     runtime = get_runtime(request)
     settings = runtime.settings
     viewer = await require_user(request)
+    check_account(request, viewer.public_id)
     if runtime.maintenance_mode in ("read_only", "full"):
         raise maintenance_error(runtime)
     uid = viewer.uid

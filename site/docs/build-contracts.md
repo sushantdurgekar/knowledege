@@ -232,8 +232,9 @@ These sections are binding for M1. Where they are silent, follow [architecture-s
   - Success: 200 `{"results":{"<hubId>":{"<part>":{"status":"accepted|duplicate|stale|rejected","upd":n,"code"?:"too_large|invalid"}}},"policy":{…}}`.
     - `upd` in each result is the **stored** stamp after the decision.
     - A part over `MAX_PART_GZ` (gzip of the compact JSON), or a doc over `MAX_DOC_GZ`, is `rejected` with `too_large`.
-  - Request-level errors: 401 `unauthenticated`, 403 `csrf`/`email_unverified`, 404 unknown hub, 413 `too_large` (body), 422 `invalid`/`clock_skew`, 429 `rate_limited`/`sync_paused` (with `retryAt` ISO + `Retry-After`), 503 `maintenance`/`unavailable`.
+  - Request-level errors: 401 `unauthenticated`, 403 `csrf`/`email_unverified`, 404 unknown hub, 409 `account_changed`, 413 `too_large` (body), 422 `invalid`/`clock_skew`, 429 `rate_limited`/`sync_paused` (with `retryAt` ISO + `Retry-After`), 503 `maintenance`/`unavailable`.
   - Rate limit: 12/min burst 6 per uid, plus `USER_WRITES_PER_DAY`.
+- **Account binding** (`/api/progress` and `/api/sync`): a request may carry `X-StudyHubs-Account: <publicId>`, the account the hub page belongs to. When it differs from the session's publicId (another account signed in from another tab), the answer is 409 `account_changed` and nothing is read or written. Requests without the header (the site shell) are unaffected.
 - **Newest wins:** `decide(stored_upd, incoming_upd)` in `app/progress/decide.py`:
   - no stored part → `accepted`
   - incoming greater → `accepted`
@@ -328,8 +329,9 @@ These sections are binding for M1. Where they are silent, follow [architecture-s
   - At most one request in flight.
   - Unload uses `fetch(keepalive)` when the body is ≤ 60,000 B. Otherwise it lazy-loads `/_sh/fflate.js` (once the pending body passes 48 KB) and gzips synchronously, falling back to a normal fetch.
   - Requests always carry `X-StudyHubs: 1` and `credentials: "same-origin"`.
+  - **Account binding:** after the prefetch (or the legacy seed) every request carries `X-StudyHubs-Account` = the publicId the server named. None is sent once `sh_hint` differs from its value at boot. A 409 `account_changed`, or that local check, stops sync for the page, turns the logout guard on and shows "You signed in with another account — reload this page".
 - **Acknowledgement and error mapping** per spec §4.5:
-  - 401 → `revoked`
+  - 401, 409 `account_changed` → `revoked`
   - 403 → `not_granted`
   - 400/404/422 `invalid` → `invalid_argument`
   - 422 `clock_skew` → `unavailable` + notice

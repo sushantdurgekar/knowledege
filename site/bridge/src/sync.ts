@@ -13,9 +13,18 @@
  *   timeout, 503 maintenance, 400/403/404/422 → null
  *   429 / 5xx / network  → DB anyway: get() rejects "unavailable" ("Sync paused") until the server
  *                          answers, and changes queue in the outbox meanwhile.
+ *
+ * Account binding: the page belongs to the account the server named when sync started (the
+ * prefetch reply's publicId, checked against the owner tag, or the legacy seed's). Every later
+ * request carries it as X-StudyHubs-Account, and none is sent once sh_hint differs from the
+ * value the page booted with (someone signed in from another tab: the session cookie is theirs
+ * now). The server refuses a mismatch with 409 `account_changed` too. Either way sync stops, the logout
+ * guard keeps this page's in-memory progress out of the browser's storage, and the page asks
+ * for a reload, so nothing of one account is ever written under, or mixed with, another's.
  */
+import { AUTH_NOTICE_ID, cookieOf } from "./auth-events";
 import type { Chrome } from "./chrome";
-import type { BridgeConfig } from "./config";
+import { HINT_COOKIE, readCookie, type BridgeConfig } from "./config";
 import { createDb, isSignedInReply, type HubDb } from "./db";
 import {
   PARTS,
@@ -31,6 +40,9 @@ import {
 import { createOutbox, type OutboxEvent, type OutboxStats, type Payload } from "./outbox";
 import type { HubWrite, StorageHook } from "./storage-hook";
 import { PREFETCH_TIMEOUT_MS, createTransport, loadFflate, type Reply, type Transport } from "./transport";
+
+/** Server code (409) for a request from a page whose account is no longer the session's. */
+export const ACCOUNT_CHANGED = "account_changed";
 import { warn } from "./util";
 
 /** What sync needs to know about (and tell) the page's account state (index.ts). */
@@ -99,7 +111,21 @@ export function createSync(o: SyncOptions): Sync {
   const now = o.now || Date.now;
   const legacy = cfg.engine === "legacy";
   const key = cfg.legacyKeys[0] || "";
-  const transport = o.transport || createTransport(now);
+  const network = o.transport || createTransport(now);
+  /** The account this page belongs to: the publicId the server named (prefetch or legacy seed). */
+  let account: string | null = null;
+  let switched = false;
+  const transport: Transport = {
+    count: () => network.count(),
+    request(method, path, opts = {}) {
+      const hint = readCookie(cookieOf(doc), HINT_COOKIE);
+      if (switched || (hint && cfg.hint && hint !== cfg.hint)) {
+        // Another account's cookie: sending anything now would act as that account.
+        return Promise.resolve({ status: 409, body: { code: ACCOUNT_CHANGED }, retryAt: 0 });
+      }
+      return network.request(method, path, { ...opts, account });
+    },
+  };
   const rec0 = parseHubRecord(hook.getItem(cfg.lkey));
   /** Stamps of the record this tab loaded (what the hub is about to read) or last wrote itself. */
   const tabU: PartStamps = rec0 ? { ...rec0.U } : { main: 0, mocks: 0, cards: 0 };
@@ -119,6 +145,22 @@ export function createSync(o: SyncOptions): Sync {
       detail: "Progress is saved in this browser.",
       link: { href: cfg.signInPath, label: "Sign in" },
       tone: "warn",
+    });
+  }
+
+  /** This page's account is no longer the session's: stop for good and ask for a reload. */
+  function accountChanged(): void {
+    if (!switched) {
+      switched = true;
+      hook.setLoggedOut(true); // this page's in-memory progress must not land in the new owner's storage
+      outbox.stop("revoked");
+    }
+    chrome.showNotice({
+      id: AUTH_NOTICE_ID,
+      text: "You signed in with another account — reload this page",
+      action: { label: "Reload", run: o.reload || (() => win.location.reload()) },
+      tone: "warn",
+      dismissible: false,
     });
   }
 
@@ -158,7 +200,8 @@ export function createSync(o: SyncOptions): Sync {
     } else if (e.type === "maintenance") maintenance(null, e.message);
     else if (e.type === "too_large") {
       notice("too-large", "Some progress is too large to sync", "It is still saved in this browser.");
-    } else if (e.code === "revoked") sessionEnded();
+    } else if (e.reason === ACCOUNT_CHANGED) accountChanged();
+    else if (e.code === "revoked") sessionEnded();
     else warn(`sync stopped (${e.code})`);
   }
 
@@ -193,6 +236,10 @@ export function createSync(o: SyncOptions): Sync {
   /** Every progress reply (prefetch, refetch, legacy check). */
   function onReply(r: Reply): void {
     const b = r.body;
+    if (r.status === 409 && b && b.code === ACCOUNT_CHANGED) {
+      if (active) accountChanged(); // at boot: decide() keeps the page local
+      return;
+    }
     if (r.status === 401 || (r.status === 200 && b && b.signedIn === false)) {
       if (!active) return o.account.signedOut(); // at boot: simply anonymous
       outbox.stop("revoked");
@@ -238,6 +285,7 @@ export function createSync(o: SyncOptions): Sync {
       const user = r.body!.user;
       const pid = user && typeof user.publicId === "string" && user.publicId ? user.publicId : cfg.hint;
       if (!pid || !o.account.claim(pid)) return false;
+      account = pid;
       ready = true;
       profile(pid);
       return true;
@@ -248,7 +296,9 @@ export function createSync(o: SyncOptions): Sync {
       warn(`progress prefetch refused (${r.status} ${String(code || "")})`);
       return false;
     }
-    return !!cfg.hint && o.account.claim(cfg.hint);
+    if (!cfg.hint || !o.account.claim(cfg.hint)) return false;
+    account = cfg.hint; // the server could not say; the next answer checks it (409 if it differs)
+    return true;
   }
 
   async function checkLegacy(): Promise<void> {
@@ -304,6 +354,7 @@ export function createSync(o: SyncOptions): Sync {
     },
     startLegacy(known, policy, publicId) {
       if (!legacy || active) return;
+      account = publicId;
       outbox.setPolicy(policy);
       if (known) outbox.noteKnown("legacy", known);
       ready = active = true;

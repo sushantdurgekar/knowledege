@@ -17,6 +17,7 @@ afterEach(() => {
 describe("error mapping (build-contracts §13)", () => {
   it.each([
     [401, "unauthenticated", "revoked"],
+    [409, "account_changed", "revoked"],
     [403, "csrf", "not_granted"],
     [403, "email_unverified", "not_granted"],
     [400, "invalid", "invalid_argument"],
@@ -49,6 +50,13 @@ describe("requests", () => {
     ]);
     expect(server.calls[1].headers["content-type"]).toBe("application/json");
     expect(t.count()).toBe(3);
+  });
+
+  it("the page's account goes out as X-StudyHubs-Account when given", async () => {
+    const t = createTransport();
+    await t.request("POST", "/sync", { body: "{}", account: "pub_A" });
+    await t.request("GET", "/me");
+    expect(server.calls.map((c) => c.headers["x-studyhubs-account"])).toEqual(["pub_A", undefined]);
   });
 
   it("never rejects: network errors are status 0, timeouts are flagged", async () => {

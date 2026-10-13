@@ -297,6 +297,47 @@ describe("learner sessions", () => {
     expect(JSON.parse(localStorage.getItem(LKEY)!).S.done.m1).toBe(true);
   });
 
+  it("another account signs in from another tab: nothing more is sent, the page asks for a reload", async () => {
+    signIn("pub_A");
+    const { hub, handle } = await openHub();
+    hub.touch("main", () => (hub.S.done.mineA = true)); // A's change, not synced yet (tier-1 window)
+    await vi.advanceTimersByTimeAsync(1500);
+    // The other tab's sign-in replaced both cookies; its dialog is still open (no broadcast yet).
+    signIn("pub_B");
+    server.publicId = "pub_B";
+    await handle.api.flushNow();
+    window.dispatchEvent(new Event("pagehide"));
+    await vi.advanceTimersByTimeAsync(130_000);
+    await tick();
+    expect(server.syncs(), "A's progress never goes out with B's cookie").toHaveLength(0);
+    expect(server.store[HUB]).toBeUndefined();
+    expect(handle.api.stats()).toMatchObject({ outbox: { dead: "revoked" }, storage: { loggedOut: true } });
+    expect(handle.api.stats().chrome.notices).toContain("auth");
+    expect(hub.SYNC.db).toBeNull();
+    hub.touch("main", () => (hub.S.done.later = true));
+    expect(JSON.parse(localStorage.getItem(LKEY)!).S.done.later, "the logout guard keeps A's memory out of storage").toBeUndefined();
+  });
+
+  it("every request after the prefetch names the page's account; the server's 409 stops sync", async () => {
+    signIn("pub_A");
+    const { hub, handle } = await openHub();
+    expect(server.progressGets()[0].headers["x-studyhubs-account"], "the prefetch learns the account").toBeUndefined();
+    hub.touch("main", () => (hub.S.done.m1 = true));
+    await handle.api.flushNow();
+    expect(server.syncs()[0].headers["x-studyhubs-account"]).toBe("pub_A");
+    // The session became B's while sh_hint did not change (a race the cookie check cannot see).
+    server.publicId = "pub_B";
+    await vi.advanceTimersByTimeAsync(1500);
+    hub.touch("main", () => (hub.S.done.m2 = true));
+    await handle.api.flushNow();
+    await tick();
+    expect(server.syncs()).toHaveLength(2);
+    expect(server.store[HUB].main.S.done.m2, "refused: nothing of A lands under B").toBeUndefined();
+    expect(handle.api.stats()).toMatchObject({ outbox: { dead: "revoked" }, storage: { loggedOut: true } });
+    expect(handle.api.stats().chrome.notices).toContain("auth");
+    expect(handle.api.stats().chrome.notices).not.toContain("session");
+  });
+
   it("413 → the hub's 'Account storage is full' toast and a too-large notice", async () => {
     signIn();
     const { hub, handle } = await openHub();

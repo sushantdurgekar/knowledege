@@ -482,3 +482,35 @@ def test_seed_failures_are_503_js(api: TestClient, make_client: Any, user: dict[
 def test_new_session_token_for_other_user(api: TestClient) -> None:
     token = make_fake_token("x1", emailVerified=True)
     assert api.post("/api/auth/session", json={"idToken": token}, headers=API).status_code == 200
+
+
+# -- the page's account (X-StudyHubs-Account) --------------------------------------------
+
+
+def test_page_of_another_account_is_refused(api: TestClient) -> None:
+    """A hub page that booted as alice keeps sending alice's publicId. After bob signs in on
+    the same browser (the cookie is now bob's), nothing that page sends lands under bob, and
+    it reads nothing of bob's."""
+    alice = sign_in(api, "alice")["publicId"]
+    sync(api, {"ai103": {"main": main(upd=T)}})
+    bob = sign_in(api, "bob")["publicId"]
+    page_of_alice = {"X-StudyHubs-Account": alice}
+
+    late = sync(api, {"ai103": {"main": main(upd=T + 5)}}, headers=page_of_alice)
+    assert late.status_code == 409
+    assert late.json()["code"] == "account_changed"
+    read = api.get("/api/progress/ai103", headers=page_of_alice)
+    assert (read.status_code, read.json()["code"]) == (409, "account_changed")
+    assert [p for p in store(api).dump()["progress"] if p["uid"] == "bob"] == []
+
+    # bob's own pages (and the site shell, which sends no header) work as before.
+    mine = {"X-StudyHubs-Account": bob}
+    assert sync(api, {"ai103": {"main": main(upd=T + 6)}}, headers=mine).status_code == 200
+    assert api.get("/api/progress/ai103", headers=mine).json()["parts"]["main"]["upd"] == T + 6
+    assert sync(api, {"ai103": {"cards": cards()}}).status_code == 200
+
+
+def test_account_header_does_not_change_anonymous_answers(api: TestClient) -> None:
+    claimed = {"X-StudyHubs-Account": "pub_someone"}
+    assert api.get("/api/progress/ai103", headers=claimed).json() == {"signedIn": False}
+    assert sync(api, {"ai103": {"main": main()}}, headers=claimed).status_code == 401
