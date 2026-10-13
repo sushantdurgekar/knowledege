@@ -7,6 +7,9 @@ when APP_ENV=test; a unit test asserts it is absent otherwise.
     POST /api/test/reset
     GET  /api/test/store
 
+`reset` and `store` work on the memory store and on the Firestore emulator (so the M1
+e2e specs also run with STORE=firestore); any other store answers 501.
+
 Every route requires `X-StudyHubs: 1`. The Origin rule is relaxed for these routes
 only: a test runner's request context sends no Origin, so a missing Origin is
 accepted, but a present one must still equal PUBLIC_ORIGIN.
@@ -18,13 +21,14 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
 
 from app.auth.csrf import PROTOCOL_HEADER, PROTOCOL_VERSION
 from app.errors import ApiError
 from app.progress.validate import decode_gz, loads, read_body
 from app.runtime import Fault, Runtime, get_runtime
-from app.store.base import USAGE_COUNTERS
+from app.store.base import USAGE_COUNTERS, StoreError
 
 MAX_BODY = 16 * 1024
 FAULT_OPS = ("get", "put", "any")
@@ -106,9 +110,16 @@ def reset_runtime(runtime: Runtime) -> None:
     runtime.clock.offset_ms = 0
 
 
+def _not_supported(exc: StoreError) -> ApiError:
+    return ApiError(501, "not_supported", f"This store cannot do that here: {exc}")
+
+
 @router.post("/reset")
 async def reset(request: Request) -> Response:
-    reset_runtime(get_runtime(request))
+    try:
+        await run_in_threadpool(reset_runtime, get_runtime(request))
+    except StoreError as exc:  # e.g. a real Firestore project: only the emulator is wiped
+        raise _not_supported(exc) from None
     return Response(status_code=204)
 
 
@@ -117,7 +128,10 @@ async def store(request: Request) -> JSONResponse:
     runtime = get_runtime(request)
     dump = getattr(runtime.store, "dump", None)
     if not callable(dump):
-        raise ApiError(501, "not_supported", "Only the memory store can be dumped")
-    body = dump(decode_gz)
+        raise ApiError(501, "not_supported", "This store cannot be dumped")
+    try:
+        body = await run_in_threadpool(dump, decode_gz)
+    except StoreError as exc:
+        raise _not_supported(exc) from None
     body["meter"] = {name: runtime.meter.today()[name] for name in USAGE_COUNTERS}
     return JSONResponse(body)

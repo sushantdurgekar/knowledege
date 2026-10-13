@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import urllib.request
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -453,6 +454,74 @@ class FirestoreStore(LaterMethods):
             raise self._translate(exc, outcome.get("phase", "reads")) from exc
         self.ops.add(writes=1)
         return version
+
+    # -- test support (emulator only) ----------------------------------------------------
+    # The test-only routes (`POST /api/test/reset`, `GET /api/test/store`, APP_ENV=test) use
+    # these so the M1 e2e specs can run against the Firestore emulator as well as the memory
+    # store. Both refuse to touch anything but an emulator, and neither is billed.
+
+    def _require_emulator(self) -> str:
+        if not self._emulator_host:
+            raise StoreError("only available on the Firestore emulator")
+        return self._emulator_host
+
+    def reset(self) -> None:
+        """Wipe the emulator database and the op counter (`POST /api/test/reset`)."""
+        host = self._require_emulator()
+        url = f"http://{host}/emulator/v1/projects/{self._project_id}/databases/(default)/documents"
+        request = urllib.request.Request(url, method="DELETE")  # the emulator, never a real project
+        with urllib.request.urlopen(request, timeout=TIMEOUT):  # noqa: S310
+            pass
+        self.ops.reset()
+
+    def dump(self, decode: Callable[[bytes], Any]) -> dict[str, Any]:
+        """Users, decoded progress and usage, like `MemoryStore.dump` (`GET /api/test/store`)."""
+        self._require_emulator()
+        users = []
+        for snap in self.db.collection("users").stream(timeout=TIMEOUT):
+            d = snap.to_dict() or {}
+            users.append(
+                {
+                    "uid": snap.id,
+                    "email": d.get("email"),
+                    "emailVerified": bool(d.get("emailVerified")),
+                    "name": d.get("name"),
+                    "photo": d.get("photo"),
+                    "provider": d.get("provider"),
+                    "createdAt": _iso(d.get("createdAt")),
+                    "lastLoginAt": _iso(d.get("lastLoginAt")),
+                }
+            )
+        progress = []
+        for snap in self.db.collection("progress").stream(timeout=TIMEOUT):
+            d = snap.to_dict() or {}
+            for part, upd in _stamps(d).items():
+                blob = d.get(f"p_{part}")
+                if isinstance(blob, bytes):
+                    progress.append(
+                        {
+                            "uid": d.get("uid"),
+                            "hub": d.get("hub"),
+                            "part": part,
+                            "upd": upd,
+                            "data": decode(blob),
+                            "rawLen": d.get(f"n_{part}"),
+                            "done": d.get("done"),
+                        }
+                    )
+        usage = {
+            snap.id: {k: int(v) for k, v in (snap.to_dict() or {}).items() if isinstance(v, int)}
+            for snap in self.db.collection("usage").stream(timeout=TIMEOUT)
+        }
+        users.sort(key=lambda u: u["uid"])
+        progress.sort(key=lambda p: (str(p["uid"]), str(p["hub"]), PARTS.index(p["part"])))
+        return {"users": users, "progress": progress, "usage": dict(sorted(usage.items()))}
+
+
+def _iso(moment: Any) -> str | None:
+    if not isinstance(moment, datetime):
+        return None
+    return moment.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _stamps(data: dict[str, Any] | None) -> dict[str, int]:
