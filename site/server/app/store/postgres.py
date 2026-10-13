@@ -208,18 +208,28 @@ class PostgresStore:
             except Exception:
                 logger.debug("Postgres pool close failed", exc_info=True)
 
-    def fail_next(self, op: str, exc: BaseException, count: int = 1) -> None:
-        """Test hook: raise `exc` at the named point (`restore_batch`: before the checkpoint)."""
+    def fail_next(self, op: str, exc: BaseException | Callable[[Any], None], count: int = 1) -> None:
+        """Test hook at the named point, inside the transaction (`restore_batch`: after the
+        records, before the checkpoint; `swap_replace`: after TRUNCATE and the INSERTs).
+        An exception is raised there; a callable gets the connection instead (e.g. to kill
+        its backend, a real connection loss) and the transaction carries on."""
         with self._fault_lock:
             self._faults.append([op, exc, count])
 
-    def _fault(self, op: str) -> None:
+    def _fault(self, op: str, conn: psycopg.Connection[Any] | None = None) -> None:
+        action: Any = None
         with self._fault_lock:
             for fault in self._faults:
                 if fault[0] == op and fault[2] > 0:
                     fault[2] -= 1
+                    action = fault[1]
                     self._faults = [f for f in self._faults if f[2] > 0]
-                    raise fault[1]
+                    break
+        if action is None:
+            return
+        if isinstance(action, BaseException):
+            raise action
+        action(conn)
 
     # -- health and users ------------------------------------------------------------------
 
@@ -730,7 +740,7 @@ class PostgresStore:
                         (written if result.status == "accepted" else kept)["progress"] += 1
             writes += written["user"] if mode == "merge" else 0
             writes += written["tombstone"]
-            self._fault("restore_batch")  # tests: a crash here rolls the whole batch back
+            self._fault("restore_batch", conn)  # tests: a crash here rolls the whole batch back
             final = with_counts(checkpoint, written, kept)
             conn.execute(
                 "UPDATE jobs SET doc = jsonb_set(doc, '{checkpoint}', %s), updated_at = now() WHERE id = %s",
@@ -774,6 +784,7 @@ class PostgresStore:
             )
             conn.execute("DELETE FROM users_import WHERE job_id = %s", (job_id,))
             conn.execute("DELETE FROM progress_import WHERE job_id = %s", (job_id,))
+            self._fault("swap_replace", conn)  # tests: a crash here keeps the old data
             final = deepcopy(checkpoint)
             conn.execute(
                 "UPDATE jobs SET doc = jsonb_set(doc, '{checkpoint}', %s), updated_at = now() WHERE id = %s",

@@ -821,7 +821,7 @@ function JobStep(props: { job: RestoreJob; adminTz: string; onChange: (job: Rest
             </>
           }
         >
-          <p>It has not started yet. The upload stays validated, so you can schedule it again.</p>
+          <p>It has not started yet. Cancelling also deletes the uploaded backup from the server; upload it again to restore later.</p>
           <TextField
             label={`Type ${CONFIRM.cancel} to confirm`}
             name="confirm"

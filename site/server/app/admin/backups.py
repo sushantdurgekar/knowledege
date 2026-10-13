@@ -202,8 +202,8 @@ def stream(runtime: Any, ticket: Ticket) -> Iterator[bytes]:
             source=BackupSource(
                 version=__version__,
                 commit=settings.git_commit,
-                store=settings.store,
-                project=settings.firebase_project_id if settings.store == "firestore" else None,
+                store=runtime.store.kind,  # the store the data comes from (what the reader reports)
+                project=settings.firebase_project_id if runtime.store.kind == "firestore" else None,
                 origin=settings.public_origin,
             ),
             created_at=runtime.clock.now(),

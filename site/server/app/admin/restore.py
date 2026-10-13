@@ -19,6 +19,7 @@ rules: a sign-in within 24 h and `confirm` = "RESTORE" (merge) or "REPLACE <n> U
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Annotated, Any
 from zoneinfo import ZoneInfo
@@ -46,6 +47,10 @@ MAX_PASSPHRASE = 1024
 MAX_DAYS_AHEAD = 60
 CONFIRM_RESTORE = "RESTORE"
 ACTIVE_RESTORE = {"scheduled", "running", "paused_quota"}
+INDEX_RE = re.compile(
+    r"[0-9]{1,6}"
+)  # ASCII only: str.isdigit() also takes superscripts and other scripts' digits
+LENGTH_RE = re.compile(r"[0-9]{1,19}")
 
 router = APIRouter(prefix="/api/admin/restore", dependencies=[Depends(require_admin)])
 Admin = Annotated[Viewer, Depends(require_admin)]
@@ -108,7 +113,7 @@ async def list_uploads(request: Request, admin: Admin) -> JSONResponse:
 
 async def _read_chunk(request: Request) -> bytes:
     declared = request.headers.get("content-length")
-    if declared is not None and (not declared.isdigit() or int(declared) > CHUNK_SIZE):
+    if declared is not None and (LENGTH_RE.fullmatch(declared) is None or int(declared) > CHUNK_SIZE):
         raise ApiError(413, "too_large", f"A chunk is at most {CHUNK_SIZE} bytes")
     body = bytearray()
     async for piece in request.stream():
@@ -121,7 +126,7 @@ async def _read_chunk(request: Request) -> bytes:
 @router.put("/uploads/{upload_id}/chunks/{n}", dependencies=CSRF)
 async def put_chunk(request: Request, upload_id: str, n: str, admin: Admin) -> JSONResponse:
     runtime = get_runtime(request)
-    if not n.isdigit() or len(n) > 6:
+    if INDEX_RE.fullmatch(n) is None:
         raise ApiError(422, "invalid", "The chunk index must be a number")
     body = await _read_chunk(request)
     uploads = runtime.restore.uploads

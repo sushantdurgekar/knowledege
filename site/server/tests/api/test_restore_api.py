@@ -367,7 +367,10 @@ def test_restore_job_rules(make_client: Any, tmp_path: Path, source: MemoryStore
     cancel = client.post(f"/api/admin/jobs/{job['id']}/cancel", json={"confirm": "CANCEL"}, headers=API)
     assert cancel.status_code == 200, cancel.text
     assert cancel.json()["job"]["state"] == "cancelled"
-    assert client.delete(f"/api/admin/restore/uploads/{upload_id}", headers=API).status_code == 204
+    # Cancelling drops the staging (the upload and its decrypted copy): nothing stays at rest.
+    assert not (tmp_path / "data" / "restore" / upload_id).exists()
+    assert client.get(f"/api/admin/restore/uploads/{upload_id}").status_code == 404
+    assert client.delete(f"/api/admin/restore/uploads/{upload_id}", headers=API).status_code == 404
 
 
 def test_upcoming_restore_and_missed(make_client: Any, tmp_path: Path, source: MemoryStore) -> None:
@@ -502,3 +505,274 @@ def test_only_admins_sign_in_during_full_maintenance(make_client: Any, tmp_path:
     ):
         blocked = client.post("/api/auth/session", json={"idToken": token}, headers=API)
         assert (blocked.status_code, blocked.json()["code"]) == (503, "maintenance")
+
+
+def test_a_full_window_ending_mid_restore_keeps_full_and_hands_its_mode_over(
+    make_client: Any, tmp_path: Path, source: MemoryStore
+) -> None:
+    """A full maintenance window that was on when a restore started must not end the
+    maintenance under the restore: the window's end keeps `full` and hands the mode it
+    replaced to the restore, which puts it back when it succeeds."""
+    from datetime import datetime
+
+    from app.store.base import QuotaExhausted
+
+    path = write_backup(source, tmp_path / "s.backup")
+    target = MemoryStore()
+    client = admin_client(make_client, tmp_path, store=target)
+    rt = runtime(client)
+    clock = rt.clock
+    assert isinstance(clock, FixedClock)
+    window = client.post(
+        "/api/admin/jobs",
+        json={
+            "kind": "maintenance",
+            "mode": "full",
+            "startAt": "2026-10-12T10:14:00Z",
+            "durationMin": 30,
+            "confirm": "FULL",
+        },
+        headers=API,
+    )
+    assert window.status_code == 201, window.text
+    clock.advance(60_000)
+    assert rt.scheduler.tick() == [f"started {window.json()['job']['id']}"]
+    assert rt.maintenance_mode == "full"
+
+    upload_id = upload(client, path)
+    validate(client, upload_id)
+    reset = datetime(2026, 10, 13, 7, tzinfo=datetime.now().astimezone().tzinfo)
+    target.fail_next("restore_batch", QuotaExhausted("writes", reset))
+    job = start_job(client, upload_id).json()["job"]
+    paused = wait_job(client, job["id"], states={"paused_quota"})
+    assert paused["prev"]["mode"] == "full"  # it started inside the window
+
+    clock.advance(31 * 60_000)  # the window ends while the restore waits for the quota reset
+    assert rt.scheduler.tick() == [f"finished {window.json()['job']['id']}"]
+    assert rt.maintenance_mode == "full", "the window's end must not lift maintenance under a restore"
+    handed = client.get(f"/api/admin/jobs/{job['id']}").json()["job"]
+    assert handed["prev"]["mode"] == "off"
+
+    clock.set(int(datetime.fromisoformat("2026-10-13T07:05:00+00:00").timestamp() * 1000))
+    assert rt.scheduler.tick() == [f"resumed {job['id']}"]
+    done = wait_job(client, job["id"])
+    assert done["state"] == "succeeded", done
+    assert state_of(target) == state_of(source)
+    assert rt.maintenance_mode == "off"  # the mode the window replaced
+
+
+def test_a_failed_replace_keeps_the_old_data_and_drops_its_staged_rows(
+    make_client: Any, tmp_path: Path, source: MemoryStore
+) -> None:
+    """The swap keeps failing (store unavailable past the retries): the job needs attention,
+    the site stays in full maintenance, the target keeps exactly its old data, and the
+    rows the job staged for the swap are wiped (no orphaned import rows)."""
+    from app.store.base import Unavailable
+
+    path = write_backup(source, tmp_path / "s.backup")
+    target = MemoryStore()
+    seed(target, 3, prefix="old")
+    before = state_of(target)
+    client = admin_client(make_client, tmp_path, store=target)
+    rt = runtime(client)
+    rt.restore._sleep = lambda _s: None  # no real back-off between retries
+    upload_id = upload(client, path)
+    validate(client, upload_id)
+    target.fail_next("swap_replace", Unavailable("store down"), count=10)
+    created = start_job(client, upload_id, mode="replace", confirm="REPLACE 3 USERS")
+    assert created.status_code == 201, created.text
+    done = wait_job(client, created.json()["job"]["id"])
+    assert done["state"] == "needs_attention", done
+    assert "store down" in done["error"]
+    assert state_of(target) == before
+    assert rt.maintenance_mode == "full"
+    assert target._imports == {}  # staged rows wiped
+    assert (tmp_path / "data" / "restore" / upload_id).is_dir()  # the upload stays for another run
+
+
+def test_the_passphrase_is_never_stored_logged_or_returned(
+    make_client: Any, tmp_path: Path, source: MemoryStore, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A wrong passphrase, then the right one, then a restore: neither passphrase appears in
+    any log record, any staged file, any API answer or the job; the validation thread is gone."""
+    import logging
+
+    secret = "Tr0ub4dor&3-zebra-passphrase"
+    wrong = "wrong-" + secret
+    path = write_backup(source, tmp_path / "s.backup", passphrase=secret)
+    client = admin_client(make_client, tmp_path)
+    rt = runtime(client)
+    caplog.set_level(logging.DEBUG)
+    upload_id = upload(client, path)
+    answers = [validate(client, upload_id, wrong)]
+    assert answers[0]["state"] == "invalid"
+    answers.append(validate(client, upload_id, secret))
+    assert answers[-1]["state"] == "validated"
+    staged = [p.read_bytes() for p in (tmp_path / "data").rglob("*") if p.is_file()]
+    answers.append(client.get("/api/admin/restore/uploads").json())
+    job = start_job(client, upload_id).json()["job"]
+    answers.append(wait_job(client, job["id"]))
+    answers.append(client.get("/api/admin/jobs").json())
+    formatter = logging.Formatter()
+    logged = "\n".join(
+        record.getMessage() + (formatter.formatException(record.exc_info) if record.exc_info else "")
+        for record in caplog.records
+    )
+    for value in (secret, wrong):
+        assert value not in logged
+        assert value not in repr(answers)
+        assert all(value.encode() not in blob for blob in staged)
+    assert rt.restore._validations == {}
+
+
+def test_upload_ids_and_chunk_indexes_are_checked_before_any_file_is_touched(
+    make_client: Any, tmp_path: Path
+) -> None:
+    client = admin_client(make_client, tmp_path)
+    info = client.post(
+        "/api/admin/restore/uploads", json={"name": "a.backup", "size": 100, "lastModified": 1}, headers=API
+    ).json()
+    upload_id = info["uploadId"]
+    root = tmp_path / "data" / "restore"
+    before = sorted(p.relative_to(root).as_posix() for p in root.rglob("*"))
+    for n in ("-1", "1e3", "0x1", "9999999", "\u0661", "\u00b2"):  # sign, exponent, hex, too long, non-ASCII
+        assert put_chunk(client, upload_id, n, b"x" * 100).status_code == 422, n  # type: ignore[arg-type]
+    for bad_id in ("u" + "0" * 24, upload_id.upper(), upload_id + "0", "..", "u%2e%2e"):
+        response = put_chunk(client, bad_id, 0, b"x" * 100)
+        assert response.status_code == 404, bad_id
+    assert sorted(p.relative_to(root).as_posix() for p in root.rglob("*")) == before
+
+
+def test_a_lost_reply_after_a_committed_batch_applies_it_once(
+    make_client: Any, tmp_path: Path, source: MemoryStore
+) -> None:
+    """The store commits a batch but the reply is lost (the runner sees Unavailable): the
+    retry finds the checkpoint already past the batch, the runner continues from the stored
+    checkpoint, and the counts and the data come out exactly once."""
+    from app.restore import runner as runner_module
+    from app.store.base import Unavailable
+
+    path = write_backup(source, tmp_path / "s.backup")
+    target = MemoryStore()
+    client = admin_client(make_client, tmp_path, store=target)
+    rt = runtime(client)
+    rt.restore._sleep = lambda _s: None
+    original = target.restore_batch
+    lost: list[int] = []
+
+    def commit_then_lose_the_reply(*args: Any, **kwargs: Any) -> Any:
+        result = original(*args, **kwargs)
+        if result.applied and len(lost) < 2:
+            lost.append(int(kwargs["checkpoint"]["line"]))
+            raise Unavailable("connection reset after commit")
+        return result
+
+    target.restore_batch = commit_then_lose_the_reply  # type: ignore[method-assign]
+    upload_id = upload(client, path)
+    validate(client, upload_id)
+    old_records = runner_module.BATCH_RECORDS
+    runner_module.BATCH_RECORDS = 10  # several batches
+    try:
+        job = start_job(client, upload_id).json()["job"]
+        done = wait_job(client, job["id"])
+    finally:
+        runner_module.BATCH_RECORDS = old_records
+    assert len(lost) == 2
+    assert done["state"] == "succeeded", done
+    report = done["report"]
+    assert report["countsOk"]
+    assert report["ok"]
+    assert report["written"] == {"settings": 0, "tombstone": 0, "user": 12, "progress": 40}
+    assert state_of(target) == state_of(source)
+
+
+def test_two_instances_ticking_at_once_run_the_job_once(
+    make_client: Any, tmp_path: Path, source: MemoryStore
+) -> None:
+    """Two instances on one store (and one DATA_DIR volume) reach the job's runAt together:
+    exactly one claims and runs it, the other never starts a runner, and every record is
+    applied once."""
+    import threading
+
+    path = write_backup(source, tmp_path / "s.backup")
+    target = MemoryStore()
+    first = admin_client(make_client, tmp_path, store=target)
+    second = admin_client(make_client, tmp_path, store=target)
+    upload_id = upload(first, path)
+    validate(first, upload_id)
+    job = start_job(first, upload_id, runAt="2026-10-12T10:20:00Z").json()["job"]
+    events: list[list[str]] = []
+    barrier = threading.Barrier(2)
+    instances = [runtime(first), runtime(second)]
+    for rt in instances:
+        clock = rt.clock
+        assert isinstance(clock, FixedClock)
+        clock.advance(7 * 60_000)
+        rt.scheduler.refresh()
+
+    def tick(rt: Any) -> None:
+        barrier.wait()
+        events.append(rt.scheduler.tick())
+
+    threads = [threading.Thread(target=tick, args=(rt,)) for rt in instances]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(30)
+    assert sorted(events) == [[], [f"started {job['id']}"]]
+    done = wait_job(first, job["id"])
+    assert done["state"] == "succeeded", done
+    assert done["report"]["written"] == {"settings": 0, "tombstone": 0, "user": 12, "progress": 40}
+    assert state_of(target) == state_of(source)
+    for rt in instances:  # one runner thread ever existed, on the instance that claimed it
+        rt.restore.join(job["id"])
+    assert sum(1 for rt in instances if job["id"] in rt.restore._threads) == 1
+
+
+def test_every_restore_route_is_admin_only_csrf_checked_and_destructive_where_due(
+    make_client: Any, tmp_path: Path, source: MemoryStore
+) -> None:
+    path = write_backup(source, tmp_path / "s.backup")
+    client = admin_client(make_client, tmp_path)
+    upload_id = upload(client, path)
+    validate(client, upload_id)
+    job = start_job(client, upload_id, runAt="tonight").json()["job"]
+    staging = tmp_path / "data" / "restore"
+    listing = sorted(p.name for p in staging.rglob("*"))
+    routes = [
+        ("get", "/api/admin/restore/uploads", None),
+        ("post", "/api/admin/restore/uploads", {"name": "x.backup", "size": 100, "lastModified": 2}),
+        ("get", f"/api/admin/restore/uploads/{upload_id}", None),
+        ("put", f"/api/admin/restore/uploads/{upload_id}/chunks/0", None),
+        ("post", f"/api/admin/restore/uploads/{upload_id}/validate", {}),
+        ("delete", f"/api/admin/restore/uploads/{upload_id}", None),
+        ("post", "/api/admin/jobs", {"kind": "restore", "uploadId": upload_id, "confirm": "RESTORE"}),
+        ("get", f"/api/admin/jobs/{job['id']}", None),
+        ("post", f"/api/admin/jobs/{job['id']}/cancel", {"confirm": "CANCEL"}),
+    ]
+
+    def call(method: str, url: str, body: Any, headers: dict[str, str]) -> Any:
+        if method == "put":
+            return client.put(url, content=b"x" * 16, headers={**headers, "X-Chunk-SHA256": "0" * 64})
+        if method in ("get", "delete"):
+            return getattr(client, method)(url, headers=headers)
+        return client.post(url, json=body, headers=headers)
+
+    for who in ("anonymous", "learner"):
+        client.cookies.clear()
+        if who == "learner":
+            session(client, "someone", email="someone@example.com")
+        for method, url, body in routes:
+            response = call(method, url, body, API)
+            assert (response.status_code, response.json()["code"]) == (404, "not_found"), (who, method, url)
+    session(client)  # the admin, but no CSRF header: every write is refused
+    for method, url, body in routes:
+        if method != "get":
+            assert call(method, url, body, {}).status_code == 403, (method, url)
+    session(client, auth_age_s=25 * 3600)  # the admin with an old sign-in: destructive steps refused
+    for method, url, body in routes[6:]:
+        if method == "post":
+            response = call(method, url, body, API)
+            assert (response.status_code, response.json()["code"]) == (403, "reauth_required"), url
+    assert sorted(p.name for p in staging.rglob("*")) == listing  # nothing staged or removed
+    assert client.get(f"/api/admin/jobs/{job['id']}").json()["job"]["state"] == "scheduled"

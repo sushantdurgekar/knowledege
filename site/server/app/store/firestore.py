@@ -742,6 +742,10 @@ class FirestoreStore:
         The job write carries a precondition on the job document's update time, so the
         batch commits only if nobody touched the job since it was read (no zombie runner
         applies a batch after a reclaim); the batch is atomic, so it applies exactly once.
+        Every record write is conditional too (`create` for a document that was missing,
+        an update time precondition for one that existed): a sign-in, sync or deletion
+        landing between the reads and the commit fails the batch (Conflict; the runner
+        re-reads and retries) instead of being overwritten by older backup data.
         """
         if mode != "merge":
             raise Unsupported("replace is not supported on Firestore: use merge")
@@ -761,7 +765,7 @@ class FirestoreStore:
             if stone.h in found:
                 kept["tombstone"] += 1
             else:
-                batch.set(ref, {"at": stone.at})
+                batch.create(ref, {"at": stone.at})
                 found.add(stone.h)
                 written["tombstone"] += 1
         users = [i.user for i in recs if i.t == "user" and i.user is not None]
@@ -771,7 +775,7 @@ class FirestoreStore:
             if user.uid in found:
                 kept["user"] += 1
                 continue
-            batch.set(
+            batch.create(
                 ref,
                 {
                     "email": user.email,
@@ -789,9 +793,10 @@ class FirestoreStore:
         kept["progress"] += dropped
         keys = list(groups)
         snaps = self._get_all([self._progress_ref(uid, hub) for uid, hub in keys], STAMP_FIELDS)
-        current = {snap.id: _stamps(snap.to_dict()) if snap.exists else {} for snap in snaps}
+        current = {snap.id: snap for snap in snaps if snap.exists}
         for uid, hub in keys:
-            stamps = current.get(progress_doc_id(uid, hub), {})
+            snap = current.get(progress_doc_id(uid, hub))
+            stamps = _stamps(snap.to_dict()) if snap is not None else {}
             parts = groups[(uid, hub)]
             update: dict[str, Any] = {}
             accepted: set[str] = set()
@@ -809,7 +814,11 @@ class FirestoreStore:
                 if done is not None:
                     update["done"] = done
                 update.update({"uid": uid, "hub": hub, "t": SERVER_TIMESTAMP})
-                batch.set(self._progress_ref(uid, hub), update, merge=True)
+                ref = self._progress_ref(uid, hub)
+                if snap is None:
+                    batch.create(ref, update)
+                else:
+                    batch.update(ref, update, option=self.db.write_option(last_update_time=snap.update_time))
         final = with_counts(checkpoint, written, kept)
         batch.update(
             job_ref,
@@ -819,8 +828,8 @@ class FirestoreStore:
         writes = len(batch._write_pbs)
         try:
             batch.commit(retry=RETRY, timeout=TIMEOUT)
-        except gexc.FailedPrecondition as exc:
-            raise Conflict("the job changed while the batch was prepared") from exc
+        except (gexc.FailedPrecondition, gexc.AlreadyExists, gexc.NotFound) as exc:
+            raise Conflict("the job or a document changed while the batch was prepared") from exc
         except Exception as exc:
             raise self._translate(exc, "writes") from exc
         self.ops.add(writes=writes)

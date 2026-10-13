@@ -331,6 +331,9 @@ def _cancel(runtime: Runtime, job: dict[str, Any], holder: str) -> dict[str, Any
     stored = store.get_job(job_id) or job
     stored["finishedAt"] = iso_utc(runtime.clock.now())
     store.put_job(stored)
+    if job.get("kind") == "restore" and isinstance(job.get("uploadId"), str):
+        # A cancelled restore leaves no staging behind (the upload and its decrypted copy).
+        runtime.restore.uploads.discard(job["uploadId"])
     runtime.scheduler.refresh()
     return stored
 

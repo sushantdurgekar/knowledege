@@ -184,3 +184,57 @@ def test_quota_pause_and_resume(fresh: Adapter, make_client: Any, tmp_path: Path
     assert state["report"]["ok"]
     assert state_of(fresh.store) == expected
     assert rt.maintenance_mode == "off"
+
+
+def test_a_firestore_backup_restores_identically_into_postgres(
+    emulator_ready: bool, make_client: Any, tmp_path: Path
+) -> None:
+    """S17 across stores: a backup taken through the admin API of a Firestore-backed
+    instance (emulator) restores into a Postgres instance with the same decoded state:
+    users (timestamps included), every part's upd and JSON, and the hubs' done counts."""
+    import uuid
+
+    from tests.contract.conftest import _wipe_emulator, drop_schema, make_firestore, make_postgres
+
+    if not emulator_ready:
+        pytest.skip("FIRESTORE_EMULATOR_HOST is not set")
+    project = "demo-fs2pg-" + uuid.uuid4().hex[:12]
+    schema = "fresh_" + uuid.uuid4().hex[:12]
+    source = make_firestore(project)
+    target = make_postgres(schema)  # skips (or fails with REQUIRE_PG=1) without Postgres
+    try:
+        seed(source.store, 15)
+        source.store.put_tombstone(tombstone_hash(DELETED), AT)
+        expected = state_of(source.store)
+        expected = {k: [row for row in rows if row[0] != DELETED] for k, rows in expected.items()}
+        src: TestClient = make_client(
+            store=source.store, clock=FixedClock(NOW_MS), admin_emails=(ADMIN,), data_dir=tmp_path / "source"
+        )
+        wait_for_meter(src)
+        session(src)
+        created = src.post(
+            "/api/admin/backups",
+            json={"passphrase": PASS, "requireReadOnly": True, "confirm": "BACKUP"},
+            headers=API,
+        )
+        assert created.status_code == 200, created.text
+        download = src.get(f"/api/admin/backups/{created.json()['ticket']}")
+        assert download.status_code == 200
+        path = tmp_path / created.json()["filename"]
+        path.write_bytes(download.content)
+
+        client = target_client(make_client, target, tmp_path)
+        upload_id = upload(client, path)
+        info = validate(client, upload_id, PASS)
+        assert info["state"] == "validated", info
+        assert info["report"]["header"]["source"]["store"] == "firestore"
+        done = wait_job(client, start_job(client, upload_id).json()["job"]["id"])
+        assert done["state"] == "succeeded", done
+        assert done["report"]["ok"]
+        assert done["report"]["sample"]["mismatched"] == 0
+        assert state_of(target.store) == expected
+    finally:
+        source.store.close()
+        target.store.close()
+        _wipe_emulator(project)
+        drop_schema(schema)

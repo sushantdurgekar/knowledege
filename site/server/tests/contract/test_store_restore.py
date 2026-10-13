@@ -230,3 +230,115 @@ def test_restore_lookup(adapter: Adapter, uid: str) -> None:
     existing, stamps = store.restore_lookup([uid, uid + "x"], [(uid, "ai103"), (uid, "ai901")])
     assert existing == {uid}
     assert stamps == {(uid, "ai103"): {"main": T, "cards": T + 1}}
+
+
+def test_merge_never_overwrites_a_write_that_lands_mid_batch(adapter: Adapter, uid: str) -> None:
+    """Firestore prepares a batch from reads, then commits it: a user's write (or sign-in)
+    landing in between must not be overwritten by the older backup data. The batch is
+    refused (Conflict: the runner re-reads and retries) and a retry keeps the newer data.
+    Postgres and memory decide under a row lock or the store lock, so no gap exists."""
+    if adapter.kind != "firestore":
+        pytest.skip("Postgres and memory decide and write under one lock")
+    store = adapter.store
+    store.put_parts(uid, "ai103", {"main": part(T)}, NOW_MS)
+    other = uid + "n"
+    original = store._get_all  # type: ignore[attr-defined]
+    landed: list[str] = []
+
+    def racing_get_all(refs: list[Any], fields: list[str]) -> list[Any]:
+        snaps = original(refs, fields)
+        if fields == ["createdAt"] and "user" not in landed:
+            landed.append("user")  # the user signs up between the read and the commit
+            store.upsert_user(UserRecord(other, "live@example.com", last_login_at=AT), touch_login=True)
+        if fields[:1] == ["u_main"] and "progress" not in landed:
+            landed.append("progress")  # the learner syncs a newer part meanwhile
+            store.put_parts(uid, "ai103", {"main": part(T + 50)}, NOW_MS)
+        return list(snaps)
+
+    store._get_all = racing_get_all  # type: ignore[attr-defined]
+    job_id = running_job(adapter)
+    items = [
+        user_item(1, other, "old@example.com"),
+        progress_item(2, uid, "ai103", "main", part(T + 10)),  # newer than T, older than T + 50
+    ]
+    with pytest.raises(Conflict):
+        store.restore_batch(items, mode="merge", job_id=job_id, checkpoint=cp(1, 2), holder=HOLDER)
+    assert landed == ["user", "progress"]
+    assert {p: o.upd for p, o in store.get_hub(uid, "ai103", {}).items()} == {"main": T + 50}
+    live = store.get_user(other)
+    assert live is not None
+    assert live.email == "live@example.com"
+    stored = store.get_job(job_id)
+    assert stored is not None
+    assert stored["checkpoint"] == {"line": 0}  # nothing of the batch applied
+    retry = store.restore_batch(items, mode="merge", job_id=job_id, checkpoint=cp(1, 2), holder=HOLDER)
+    assert retry.applied
+    assert retry.kept == {"settings": 0, "tombstone": 0, "user": 1, "progress": 1}
+    assert {p: o.upd for p, o in store.get_hub(uid, "ai103", {}).items()} == {"main": T + 50}
+    live = store.get_user(other)
+    assert live is not None
+    assert live.email == "live@example.com"
+
+
+def test_a_swap_that_fails_midway_leaves_the_old_data(fresh: Adapter) -> None:
+    """Replace swaps in one transaction (Postgres) or under one lock (memory): a failure
+    after the old rows are gone (Postgres: after TRUNCATE and the INSERTs) rolls back to
+    the old data, the staged rows stay for a retry, and the retry swaps once."""
+    if fresh.kind == "firestore":
+        pytest.skip("replace is not supported on Firestore")
+    store = fresh.store
+    store.upsert_user(UserRecord("old-user", "old@example.com", last_login_at=AT), touch_login=True)
+    store.put_parts("old-user", "ai103", {"main": part(T)}, NOW_MS)
+    job_id = running_job(fresh, "replace")
+    items = [user_item(1, "new-user"), progress_item(2, "new-user", "dsa-l1", "main", part(T + 3, done=5))]
+    store.restore_batch(items, mode="replace", job_id=job_id, checkpoint=cp(1, 2), holder=HOLDER)
+    store.fail_next("swap_replace", Unavailable("crash mid-swap"))  # type: ignore[attr-defined]
+    final = {"line": 2, "phase": "swapped"}
+    with pytest.raises(Unavailable, match="mid-swap"):
+        store.swap_replace(job_id, holder=HOLDER, expected={"user": 1, "progress": 1}, checkpoint=final)
+    assert [u.uid for u in store.iter_users()] == ["old-user"]
+    assert [h.hub for h in store.list_hubs("old-user")] == ["ai103"]
+    assert store.list_hubs("new-user") == []
+    stored = store.get_job(job_id)
+    assert stored is not None
+    assert stored["checkpoint"]["line"] == 2
+    assert stored["checkpoint"].get("phase") != "swapped"
+    swapped = store.swap_replace(job_id, holder=HOLDER, expected={"user": 1, "progress": 1}, checkpoint=final)
+    assert swapped.applied
+    assert [u.uid for u in store.iter_users()] == ["new-user"]
+    assert store.list_hubs("old-user") == []
+
+
+def test_postgres_connection_lost_mid_batch_applies_nothing(fresh: Adapter, uid: str) -> None:
+    """The server end of the connection is killed in the middle of a batch's transaction
+    (pg_terminate_backend after the records, before the checkpoint): nothing of the batch
+    is applied, the store answers Unavailable, the pool replaces the dead connection and
+    the retried batch applies once."""
+    if fresh.kind != "postgres":
+        pytest.skip("Postgres only: a real connection loss")
+    import psycopg
+
+    from tests.contract.conftest import PG_URL
+
+    store = fresh.store
+    job_id = running_job(fresh)
+    items = [user_item(1, uid), progress_item(2, uid, "ai103", "main", part(T))]
+
+    def kill(conn: Any) -> None:
+        pid = conn.info.backend_pid
+        with psycopg.connect(PG_URL, autocommit=True) as admin:
+            admin.execute("SELECT pg_terminate_backend(%s)", (pid,))
+
+    store.fail_next("restore_batch", kill)  # type: ignore[attr-defined]
+    with pytest.raises(Unavailable):
+        store.restore_batch(items, mode="merge", job_id=job_id, checkpoint=cp(1, 2), holder=HOLDER)
+    assert store.get_user(uid) is None
+    assert store.get_hub(uid, "ai103", {}) == {}
+    stored = store.get_job(job_id)
+    assert stored is not None
+    assert stored["checkpoint"] == {"line": 0}
+    result = store.restore_batch(items, mode="merge", job_id=job_id, checkpoint=cp(1, 2), holder=HOLDER)
+    assert result.applied
+    assert result.written["user"] == result.written["progress"] == 1
+    again = store.restore_batch(items, mode="merge", job_id=job_id, checkpoint=cp(1, 2), holder=HOLDER)
+    assert not again.applied

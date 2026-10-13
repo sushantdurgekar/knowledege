@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import re
 import zlib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -69,6 +70,11 @@ def syncable_hub(catalog: Catalog | None, hub_id: str) -> Hub:
 
 # -- GET /api/progress?known= -------------------------------------------------------
 
+ASCII_NUMBER = re.compile(
+    r"[0-9]{1,16}"
+)  # ASCII only: str.isdigit() also takes superscripts and other scripts' digits
+ASCII_LENGTH = re.compile(r"[0-9]{1,19}")
+
 
 def parse_known(value: str | None, allowed: tuple[str, ...]) -> dict[str, int]:
     """`main:<upd>,mocks:<upd>,cards:<upd>` -> {part: upd}. Parts of other engines are ignored."""
@@ -79,7 +85,7 @@ def parse_known(value: str | None, allowed: tuple[str, ...]) -> dict[str, int]:
         raise invalid("known is too long")
     for item in value.split(","):
         part, sep, number = item.strip().partition(":")
-        if not sep or part not in V2_PARTS + LEGACY_PARTS or not number.isdigit() or len(number) > 16:
+        if not sep or part not in V2_PARTS + LEGACY_PARTS or ASCII_NUMBER.fullmatch(number) is None:
             raise invalid("known must look like main:<upd>,mocks:<upd>,cards:<upd>")
         if part in allowed:
             known[part] = int(number)
@@ -117,7 +123,7 @@ def gunzip_bounded(data: bytes, limit: int) -> bytes:
 async def read_wire_body(request: Request, *, max_wire: int) -> bytes:
     """The raw request body as sent, refused (413) as soon as it passes `max_wire` bytes."""
     declared = request.headers.get("content-length")
-    if declared is not None and declared.isdigit() and int(declared) > max_wire:
+    if declared is not None and ASCII_LENGTH.fullmatch(declared) and int(declared) > max_wire:
         raise ApiError(413, "too_large", "Request body is too large")
     chunks: list[bytes] = []
     total = 0

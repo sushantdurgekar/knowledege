@@ -12,7 +12,9 @@ maintenance windows.
   and does not run; the admin page shows a banner for it.
 - At `startAt` a job sets the maintenance mode (remembering the previous one in the
   job) and at `startAt + durationMin` restores it, unless an admin changed the mode in
-  between (then the admin's choice stands).
+  between (then the admin's choice stands). A full window that ends while a restore
+  which started inside it is still on (running, paused for quota, or failed) keeps
+  `full` and hands the mode it replaced to the restore, which restores it on success.
 - Every state change is an atomic `claim_job` transition, so with several instances
   (or a restart racing a tick) exactly one of them applies it.
 - A store failure never strands a window: the instance that claimed a job retries the
@@ -54,6 +56,8 @@ TICK_S = 20.0
 REFRESH_S = 300.0
 NOTICE_BEFORE = timedelta(minutes=10)
 MAX_ACTIVE = 100
+# Restore jobs that hold the site in `full` maintenance (a failed one keeps it until an admin acts).
+RESTORE_HOLDS_FULL = {"running", "paused_quota", "needs_attention"}
 
 
 def parse_iso(value: Any) -> datetime | None:
@@ -278,7 +282,33 @@ class Scheduler:
         """
         stored = job if "prev" in job else (self._store.get_job(str(job.get("id"))) or job)
         prev = self._replaced.get(str(job.get("id"))) or Maintenance.from_json(stored.get("prev"))
+        if stored.get("mode") == "full" and self._hand_over_to_restore(stored, prev):
+            return
         self._undo(stored, prev)
+
+    def _hand_over_to_restore(self, window: dict[str, Any], prev: Maintenance) -> bool:
+        """A full window ending (or cancelled) while a restore that started inside it is
+        still running, paused for quota or failed (needs_attention, the site must stay in
+        `full`): keep `full` and give the restore the mode the window replaced, which the
+        restore puts back when it succeeds. True when the window must leave the mode alone."""
+        started = str(window.get("startedAt") or window.get("startAt") or "")
+        for job in self._store.list_jobs(RESTORE_HOLDS_FULL, limit=MAX_ACTIVE):
+            took_over = job.get("prev")
+            if job.get("kind") != "restore" or not isinstance(took_over, dict):
+                continue
+            if took_over.get("mode") != "full":
+                continue  # it started before the window: the window's own `prev` is right
+            if job.get("state") == "needs_attention" and str(job.get("finishedAt") or "") < started:
+                continue  # an old failure, not this window's
+            handed = {"prev": prev.stored_json()}
+            if self._store.update_job(str(job["id"]), handed, expect={"prev": took_over}):
+                logger.info(
+                    "Scheduler: window %s ended during restore %s; full maintenance stays until it ends",
+                    window.get("id"),
+                    job["id"],
+                )
+            return True
+        return False
 
     def _undo(self, job: dict[str, Any], prev: Maintenance) -> None:
         def change(current: SiteSettings) -> SiteSettings:

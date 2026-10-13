@@ -440,7 +440,8 @@ class RestoreService:
         self._retry(self.site.update, change)
 
     def _leave_full(self, job: dict[str, Any]) -> None:
-        prev = Maintenance.from_json(job.get("prev"))
+        # Re-read: a full window that ended meanwhile handed its previous mode to this job.
+        prev = Maintenance.from_json(self._job(str(job["id"])).get("prev"))
 
         def change(current: SiteSettings) -> SiteSettings:
             if current.maintenance.mode != "full":
@@ -476,6 +477,17 @@ class RestoreService:
             fields["report"] = report
         if self.store.update_job(job_id, fields, expect=self._mine()):
             logger.error("Restore job %s -> %s: %s", job_id, state, error)
+            self._wipe_staged(job_id)
+
+    def _wipe_staged(self, job_id: str) -> None:
+        """A replace that ended without its swap leaves no import rows behind (a failed job
+        never resumes; another run stages its own rows). Best effort: they are keyed by job."""
+        try:
+            job = self.store.get_job(job_id)
+            if job is not None and job.get("mode") == "replace":
+                self.store.wipe_for_replace(job_id)
+        except StoreError as exc:
+            logger.warning("Restore job %s: staged rows not wiped: %s", job_id, exc)
 
     # -- apply ------------------------------------------------------------------------------------------
 
