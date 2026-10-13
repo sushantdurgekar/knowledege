@@ -202,7 +202,9 @@ def test_delete_account_cascade_and_tombstone(api: TestClient) -> None:
     assert sync(api, hubs).status_code == 401
 
     # A fresh sign-in (fake mode reuses the uid) works again, with no old data.
+    assert "user-1" in runtime(api).auth.revoked  # type: ignore[attr-defined]
     sign_in(api, "user-1")
+    assert "user-1" not in runtime(api).auth.revoked  # type: ignore[attr-defined]
     assert api.get("/api/me").json()["signedIn"] is True
     assert api.get("/api/me/progress").json() == {"hubs": []}
 

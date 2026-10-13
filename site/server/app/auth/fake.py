@@ -92,6 +92,7 @@ class FakeAuthenticator:
 
     def create_session(self, id_token: str, identity: Identity) -> str:
         now = int(self._clock.now_s())
+        self.revoked.discard(identity.uid)  # a new sign-in (fake mode reuses a deleted uid)
         body = {
             "uid": identity.uid,
             "email": identity.email,
