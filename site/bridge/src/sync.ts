@@ -16,15 +16,15 @@
  *
  * Account binding: the page belongs to the account the server named when sync started (the
  * prefetch reply's publicId, checked against the owner tag, or the legacy seed's). Every later
- * request carries it as X-StudyHubs-Account, and none is sent once sh_hint differs from the
- * value the page booted with (someone signed in from another tab: the session cookie is theirs
- * now). The server refuses a mismatch with 409 `account_changed` too. Either way sync stops, the logout
- * guard keeps this page's in-memory progress out of the browser's storage, and the page asks
- * for a reload, so nothing of one account is ever written under, or mixed with, another's.
+ * request carries it as X-StudyHubs-Account. When someone signs in with another account from
+ * another tab, the session cookie is theirs, and the server answers this page's requests with
+ * 409 `account_changed` instead of reading or writing anything. Sync then stops for good, the
+ * logout guard keeps this page's in-memory progress out of the browser's storage, and the page
+ * asks for a reload, so nothing of one account is ever written under, or mixed with, another's.
  */
-import { AUTH_NOTICE_ID, cookieOf } from "./auth-events";
+import { AUTH_NOTICE_ID } from "./auth-events";
 import type { Chrome } from "./chrome";
-import { HINT_COOKIE, readCookie, type BridgeConfig } from "./config";
+import type { BridgeConfig } from "./config";
 import { createDb, isSignedInReply, type HubDb } from "./db";
 import {
   PARTS,
@@ -118,11 +118,9 @@ export function createSync(o: SyncOptions): Sync {
   const transport: Transport = {
     count: () => network.count(),
     request(method, path, opts = {}) {
-      const hint = readCookie(cookieOf(doc), HINT_COOKIE);
-      if (switched || (hint && cfg.hint && hint !== cfg.hint)) {
-        // Another account's cookie: sending anything now would act as that account.
-        return Promise.resolve({ status: 409, body: { code: ACCOUNT_CHANGED }, retryAt: 0 });
-      }
+      // No document.cookie read here: it can block on the browser process, and on pagehide that
+      // delay can cost the keepalive request. The server's check is the authoritative one.
+      if (switched) return Promise.resolve({ status: 409, body: { code: ACCOUNT_CHANGED }, retryAt: 0 });
       return network.request(method, path, { ...opts, account });
     },
   };

@@ -297,7 +297,7 @@ describe("learner sessions", () => {
     expect(JSON.parse(localStorage.getItem(LKEY)!).S.done.m1).toBe(true);
   });
 
-  it("another account signs in from another tab: nothing more is sent, the page asks for a reload", async () => {
+  it("another account signs in from another tab: nothing of A lands under B, the page asks for a reload", async () => {
     signIn("pub_A");
     const { hub, handle } = await openHub();
     hub.touch("main", () => (hub.S.done.mineA = true)); // A's change, not synced yet (tier-1 window)
@@ -309,8 +309,9 @@ describe("learner sessions", () => {
     window.dispatchEvent(new Event("pagehide"));
     await vi.advanceTimersByTimeAsync(130_000);
     await tick();
-    expect(server.syncs(), "A's progress never goes out with B's cookie").toHaveLength(0);
-    expect(server.store[HUB]).toBeUndefined();
+    expect(server.syncs(), "one refused request, then nothing more").toHaveLength(1);
+    expect(server.syncs()[0].headers["x-studyhubs-account"]).toBe("pub_A");
+    expect(server.store[HUB], "A's progress never lands under B").toBeUndefined();
     expect(handle.api.stats()).toMatchObject({ outbox: { dead: "revoked" }, storage: { loggedOut: true } });
     expect(handle.api.stats().chrome.notices).toContain("auth");
     expect(hub.SYNC.db).toBeNull();

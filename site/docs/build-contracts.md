@@ -329,7 +329,7 @@ These sections are binding for M1. Where they are silent, follow [architecture-s
   - At most one request in flight.
   - Unload uses `fetch(keepalive)` when the body is ≤ 60,000 B. Otherwise it lazy-loads `/_sh/fflate.js` (once the pending body passes 48 KB) and gzips synchronously, falling back to a normal fetch.
   - Requests always carry `X-StudyHubs: 1` and `credentials: "same-origin"`.
-  - **Account binding:** after the prefetch (or the legacy seed) every request carries `X-StudyHubs-Account` = the publicId the server named. None is sent once `sh_hint` differs from its value at boot. A 409 `account_changed`, or that local check, stops sync for the page, turns the logout guard on and shows "You signed in with another account — reload this page".
+  - **Account binding:** after the prefetch (or the legacy seed) every request carries `X-StudyHubs-Account` = the publicId the server named. A 409 `account_changed` stops sync for the page for good, turns the logout guard on and shows "You signed in with another account — reload this page".
 - **Acknowledgement and error mapping** per spec §4.5:
   - 401, 409 `account_changed` → `revoked`
   - 403 → `not_granted`
