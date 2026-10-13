@@ -10,10 +10,16 @@
 # The server runs as the M1 and M2 suites need it (build-contracts.md sections 8, 15, 17):
 # APP_ENV=test (mounts /api/test/*), AUTH_MODE=fake (sign in with "fake:" tokens),
 # STORE=memory (wiped by POST /api/test/reset), a fixed test SECRET_KEY, and
-# ADMIN_EMAILS=admin@studyhubs.test with ADMIN_TZ=Asia/Kolkata (the m2-*.spec.ts admin).
-# A server you started yourself must run the same way, or the sync-*/m2-* specs fail.
+# ADMIN_EMAILS=admin@studyhubs.test with ADMIN_TZ=Asia/Kolkata (the m2-*.spec.ts admin), and
+# a DATA_DIR of its own (restore staging, m3-restore.spec.ts), deleted afterwards.
+# A server you started yourself must run the same way, or the sync-*/m2-*/m3-* specs fail.
 #
-# Env: PORT (10000), BASE_URL (http://127.0.0.1:$PORT), HEALTH_TIMEOUT seconds (30).
+# E2E_STORE=postgres runs the server on Postgres instead (STORE=postgres, DATABASE_URL must be
+# set; scripts/dev-e2e-pg.sh does both). It keeps the Firestore quota and sync tiers the M1
+# specs expect (QUOTA_ENFORCE=1 and the default SYNC_TIERS), and the specs see E2E_STORE.
+#
+# Env: PORT (10000), BASE_URL (http://127.0.0.1:$PORT), HEALTH_TIMEOUT seconds (30),
+#      E2E_STORE (memory | postgres), DATABASE_URL (with postgres).
 #      The server log goes to site/e2e/server.log.
 set -eu
 
@@ -25,7 +31,23 @@ HEALTH_TIMEOUT=${HEALTH_TIMEOUT:-30}
 # Test-only signing key (>= 32 bytes; never used outside APP_ENV=test).
 E2E_SECRET_KEY="e2e-only-secret-key-0123456789abcdef-not-for-production"
 LOG="$SITE/e2e/server.log"
-export BASE_URL
+E2E_STORE=${E2E_STORE:-memory}
+# The Firestore defaults of build-contracts.md section 8 (STORE=postgres would default to one 30 s tier).
+FIRESTORE_SYNC_TIERS="0.5:120:0:60,0.8:300:60:120,1.0:900:60:300"
+case "$E2E_STORE" in
+  memory) ;;
+  postgres)
+    if [ -z "${DATABASE_URL:-}" ]; then
+      echo "dev-e2e: E2E_STORE=postgres needs DATABASE_URL (sh site/scripts/dev-e2e-pg.sh sets it)" >&2
+      exit 2
+    fi
+    ;;
+  *)
+    echo "dev-e2e: E2E_STORE must be memory or postgres, got $E2E_STORE" >&2
+    exit 2
+    ;;
+esac
+export BASE_URL E2E_STORE
 
 # Exit 0 when $BASE_URL/healthz answers 2xx (node is needed anyway; curl may not be).
 healthy() {
@@ -34,11 +56,15 @@ healthy() {
 }
 
 SERVER_PID=""
+DATA_DIR_E2E=""
 # shellcheck disable=SC2317,SC2329  # invoked by the EXIT trap (SC2329 on ShellCheck 0.11+)
 cleanup() {
   if [ -n "$SERVER_PID" ]; then
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
+  fi
+  if [ -n "$DATA_DIR_E2E" ]; then
+    rm -rf "$DATA_DIR_E2E"
   fi
 }
 trap cleanup EXIT
@@ -52,10 +78,16 @@ else
     echo "dev-e2e: $UVICORN not found; run: sh site/scripts/dev-build.sh" >&2
     exit 2
   fi
-  echo "dev-e2e: starting uvicorn on 127.0.0.1:$PORT (log: $LOG)"
+  DATA_DIR_E2E=$(mktemp -d "${TMPDIR:-/tmp}/studyhubs-e2e.XXXXXX")
+  echo "dev-e2e: starting uvicorn on 127.0.0.1:$PORT, STORE=$E2E_STORE (log: $LOG)"
   (
     cd "$SITE/server"
-    APP_ENV=test AUTH_MODE=fake STORE=memory PUBLIC_ORIGIN="http://127.0.0.1:$PORT" \
+    if [ "$E2E_STORE" = postgres ]; then
+      export STORE=postgres DATABASE_URL QUOTA_ENFORCE=1 SYNC_TIERS="$FIRESTORE_SYNC_TIERS"
+    else
+      export STORE=memory
+    fi
+    APP_ENV=test AUTH_MODE=fake PUBLIC_ORIGIN="http://127.0.0.1:$PORT" DATA_DIR="$DATA_DIR_E2E" \
       SECRET_KEY="$E2E_SECRET_KEY" ADMIN_EMAILS="admin@studyhubs.test" ADMIN_TZ="Asia/Kolkata" \
       exec "$UVICORN" app.main:app --host 127.0.0.1 --port "$PORT" --workers 1
   ) >"$LOG" 2>&1 &
