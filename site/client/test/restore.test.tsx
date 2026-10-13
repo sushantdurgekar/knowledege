@@ -438,6 +438,15 @@ describe('Restore wizard', () => {
     expect(within(group).getByText('cancelled')).toBeInTheDocument();
   });
 
+  it('says a fresh restore waits for the maintenance drain before it writes', async () => {
+    const job = { id: 'job-r4', kind: 'restore', state: 'running', uploadId: 'u1', fileName: 'site.backup', mode: 'merge', runAt: '2026-10-13T08:30:00Z', drainUntil: '2026-10-13T08:31:05Z', tz: 'Asia/Kolkata', progress: { done: 0, total: 14 } };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ jobId: 'job-r4' }));
+    asAdmin({ 'GET /api/admin/jobs': { jobs: [job] }, 'GET /api/admin/jobs/job-r4': { job } });
+    renderApp('/admin/restore');
+    const group = await screen.findByRole('group', { name: 'Restore job' });
+    expect(group).toHaveTextContent('Full maintenance is on. Writing starts after 13 Oct, 14:01');
+  });
+
   it('explains a job that needs attention', async () => {
     const job = { id: 'job-r2', kind: 'restore', state: 'needs_attention', uploadId: 'u1', fileName: 'site.backup', mode: 'merge', runAt: '2026-10-13T08:30:00Z', tz: 'Asia/Kolkata', progress: { done: 5, total: 14 }, error: 'verification failed: see the report' };
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ jobId: 'job-r2' }));

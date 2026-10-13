@@ -94,6 +94,8 @@ export interface RestoreJob {
   mode: RestoreMode;
   runAt: string;
   resumeAt?: string;
+  /** A fresh start waits until then in full maintenance before its first write. */
+  drainUntil?: string;
   tz: string;
   exitMaintenanceOnSuccess?: boolean;
   total?: number;

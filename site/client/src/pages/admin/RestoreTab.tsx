@@ -743,6 +743,12 @@ function JobStep(props: { job: RestoreJob; adminTz: string; onChange: (job: Rest
         total={progress.total}
         text={`${fmtNumber(progress.done)} of ${fmtNumber(progress.total)}`}
       />
+      {job.state === 'running' && job.drainUntil && progress.done === 0 && (
+        <FormMessage tone="info">
+          Full maintenance is on. Writing starts after {formatIn(job.drainUntil, adminTz)}, once every instance has
+          stopped accepting changes.
+        </FormMessage>
+      )}
       {job.state === 'paused_quota' && (
         <FormMessage tone="info">
           Paused: today’s Firestore quota is used up. It resumes {formatIn(job.resumeAt, adminTz)}.
