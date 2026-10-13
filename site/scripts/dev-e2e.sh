@@ -7,10 +7,11 @@
 # $BASE_URL/healthz, waits for /healthz, runs `npx playwright test "$@"`, then stops the
 # server it started. Build first (sh site/scripts/dev-build.sh).
 #
-# The server runs as the M1 suite needs it (build-contracts.md sections 8 and 15):
+# The server runs as the M1 and M2 suites need it (build-contracts.md sections 8, 15, 17):
 # APP_ENV=test (mounts /api/test/*), AUTH_MODE=fake (sign in with "fake:" tokens),
-# STORE=memory (wiped by POST /api/test/reset) and a fixed test SECRET_KEY. A server you
-# started yourself must run the same way, or the sync-*.spec.ts files fail.
+# STORE=memory (wiped by POST /api/test/reset), a fixed test SECRET_KEY, and
+# ADMIN_EMAILS=admin@studyhubs.test with ADMIN_TZ=Asia/Kolkata (the m2-*.spec.ts admin).
+# A server you started yourself must run the same way, or the sync-*/m2-* specs fail.
 #
 # Env: PORT (10000), BASE_URL (http://127.0.0.1:$PORT), HEALTH_TIMEOUT seconds (30).
 #      The server log goes to site/e2e/server.log.
@@ -55,7 +56,7 @@ else
   (
     cd "$SITE/server"
     APP_ENV=test AUTH_MODE=fake STORE=memory PUBLIC_ORIGIN="http://127.0.0.1:$PORT" \
-      SECRET_KEY="$E2E_SECRET_KEY" \
+      SECRET_KEY="$E2E_SECRET_KEY" ADMIN_EMAILS="admin@studyhubs.test" ADMIN_TZ="Asia/Kolkata" \
       exec "$UVICORN" app.main:app --host 127.0.0.1 --port "$PORT" --workers 1
   ) >"$LOG" 2>&1 &
   SERVER_PID=$!

@@ -4,7 +4,7 @@ This folder holds the public website for the vault's Study Hubs. Every `*-hub.ht
 
 The hub files are **never edited**. The server adds one `<script>` (the *bridge*) before `</head>`. The bridge answers the hub's `window.claude` calls and adds a small floating menu. The download link always serves the original file, byte for byte.
 
-**Milestones M0 (static site) and M1 (accounts and sync)** are built: hubs, catalog, downloads, the anonymous bridge and the AI notice, plus optional accounts (Firebase Auth: Google or email/password) whose progress syncs to Firestore through the server. Admin tools arrive in M2, Postgres and restore in M3. See [docs/implementation-plan.md](docs/implementation-plan.md) and, for M1 setup, [M1: accounts and sync](#m1-accounts-and-sync).
+**Milestones M0 (static site), M1 (accounts and sync) and M2 (admin, account data, maintenance, backups)** are built: hubs, catalog, downloads, the anonymous bridge and the AI notice, optional accounts (Firebase Auth: Google or email/password) whose progress syncs to Firestore through the server, and an admin area with meters, maintenance windows and downloadable backups; learners can export or delete their data. Postgres and restore arrive in M3. See [docs/implementation-plan.md](docs/implementation-plan.md) and, for setup, [M1: accounts and sync](#m1-accounts-and-sync) and [M2: admin, backups and maintenance](#m2-admin).
 
 | Doc | What it is |
 |---|---|
@@ -118,15 +118,16 @@ The suite runs against a live server. It reads the server's `/catalog.json` and 
 | M0 API | The `/api` routes, redirects and 404s |
 | M1 sync (`sync-*.spec.ts`) | S3 one coalesced request, S4 newer remote adopted, S5 anonymous progress merged at first sign-in, S6 faults (503, 429, 401, 413), S8 cost and keepalive on close, S9 AI-901 across two devices, S10 sign-out wipe and restore, S12 write budget per tier under `page.clock`, S13 account switch, S14 device clock ahead, S16 quota at the budget ([build-contracts.md §16](docs/build-contracts.md)) |
 | M1 client | Test sign-in, `next` handling, header menu, `/verify` detour, `/signout` |
+| M2 (`m2-*.spec.ts`) | Admin overview for an admin and 404 for everyone else; `read_only` → "Sync paused" and local saves, `off` → the outbox drains; a scheduled window fires and ends on the test clock; a backup downloaded through its ticket passes `backup_tool.py verify` (plain and encrypted); account export, delete (cookies, local data, store) and the 24 h re-sign-in ([build-contracts.md §22](docs/build-contracts.md)) |
 
-The M1 specs sign in with fake ID tokens and drive the test-only routes, so the server must run with `APP_ENV=test AUTH_MODE=fake STORE=memory` (`dev-e2e.sh` starts it that way, with a fixed test `SECRET_KEY`). They reset the shared memory store before each test and set faults, quota and clock offsets, so they run in their own Playwright project, `sync`, one test at a time; the M0 specs (`chromium` project) stay fully parallel next to them. Against a deployed site only the `@smoke` M0 subset makes sense.
+The M1 and M2 specs sign in with fake ID tokens and drive the test-only routes, so the server must run with `APP_ENV=test AUTH_MODE=fake STORE=memory ADMIN_EMAILS=admin@studyhubs.test` (`dev-e2e.sh` starts it that way, with a fixed test `SECRET_KEY` and `ADMIN_TZ=Asia/Kolkata`). They reset the shared memory store before each test and set faults, quota and clock offsets, so they run in their own Playwright project, `sync`, one test at a time; the M0 specs (`chromium` project) stay fully parallel next to them. Against a deployed site only the `@smoke` M0 subset makes sense.
 
 The bridge's modal and menu sit in **closed** shadow roots. Tests reach them through the Chrome DevTools Protocol (accessibility tree and real mouse clicks; see `e2e/tests/support/shadow.ts`). Google Fonts is stubbed with an empty stylesheet, so runs are offline-safe and deterministic.
 
 ```bash
-sh site/scripts/dev-e2e.sh                       # whole suite, M0 + M1 (~3 min; the sync project is serial)
+sh site/scripts/dev-e2e.sh                       # whole suite, M0 + M1 + M2 (~3 min; the sync project is serial)
 sh site/scripts/dev-e2e.sh --project=chromium    # M0 only (~30 s, 4 workers)
-sh site/scripts/dev-e2e.sh --project=sync        # M1 only
+sh site/scripts/dev-e2e.sh --project=sync        # M1 + M2 only
 sh site/scripts/dev-e2e.sh --grep @smoke         # HTTP contract only
 sh site/scripts/dev-e2e.sh tests/ai.spec.ts      # one file
 cd site/e2e && BASE_URL=https://study-hubs.onrender.com npx playwright test --project=chromium --grep @smoke   # a deployed site
@@ -176,7 +177,17 @@ Playwright uses `PLAYWRIGHT_BROWSERS_PATH` when it is set, and `/opt/pw-browsers
 | `USER_WRITES_PER_DAY` | `300` | Accepted hub-doc writes per user per Pacific day, then `429 sync_paused` |
 | `MAINTENANCE_FORCE` | unset | `read_only` or `full` |
 
-**Later milestones:** M2 adds `ADMIN_EMAILS`, `ADMIN_TZ` and `DATA_DIR`; M3/M4 add `DATABASE_URL` and the backup settings ([architecture-spec.md §4.12](docs/architecture-spec.md), commented in [render.yaml](render.yaml)).
+**M2 (admin, maintenance, backups, [build-contracts.md §17](docs/build-contracts.md)):**
+
+| Variable | Default | Notes |
+|---|---|---|
+| `ADMIN_EMAILS` | empty (no admins) | Comma-separated, case-insensitive. An admin is a **Google** sign-in with a verified email in this list |
+| `ADMIN_TZ` | `Asia/Kolkata` | Default time zone of the admin pages and of "Tonight 00:00" (Settings can change the site's zone) |
+| `DATA_DIR` | `/tmp/studyhubs` | Scratch only (backups stream straight to the browser) |
+| `JOB_GRACE_MIN` | `60` | A scheduled window this many minutes late is `missed` and does not run |
+| `MAX_BACKUP_BYTES` | `2147483648` | |
+
+**Later milestones:** M3/M4 add `DATABASE_URL` and restore ([architecture-spec.md §4.12](docs/architecture-spec.md)).
 
 ## Deploy on Render
 
@@ -280,7 +291,39 @@ Then deploy (Manual Deploy, or push to `main` and let CI do it).
 8. `/signout` → the hub's progress is gone from this browser; sign in again → it comes back.
 9. Firestore → Usage stays tiny (about one write per hub per flush), and `usage/<YYYY-MM-DD>` counts reads and writes. Firestore → Rules → **Rules Playground**: an unauthenticated `get` on `/progress/x` is denied.
 
-### 4. Keep it awake (UptimeRobot)
+### 4. M2: admin, backups and maintenance
+
+<a id="m2-admin"></a>
+**Make yourself an admin**
+1. Render → **study-hubs → Environment**: set **`ADMIN_EMAILS`** to your Google address (several: comma-separated), and `ADMIN_TZ` if you are not on IST. Save; Render redeploys.
+2. Sign in with **Continue with Google** using that address. Only a Google sign-in with a verified email counts: the same address signed in with a password is not an admin. The header menu now has **Admin**; for everyone else `/admin` and every `/api/admin/*` route answer 404, as if they did not exist.
+3. Destructive actions (taking a backup, entering **Full** maintenance, cancelling a window, deleting an account) need a sign-in within the last 24 hours. If yours is older, the page sends you to **Sign in again** and back.
+4. Check: `curl -s -o /dev/null -w '%{http_code}\n' https://<host>/api/admin/stats` prints `404` (anonymous), and **Admin → Overview** shows today's Firestore meters, the next quota reset in IST and Pacific time, the user count and the last backup.
+
+**Take a backup**
+1. **Admin → Backup.** The estimate shows the reads a backup needs (about one per user, progress document and deleted-account marker). It must fit in today's remaining reads with 20% kept in reserve; if not, wait for the quota reset shown on **Overview** (midnight Pacific).
+2. Optional: tick **Encrypt with a passphrase**. A random passphrase is filled in (you can type your own, 12+ characters). Put it in your password manager **now**: it is shown once, never stored, and without it the file can't be restored.
+3. Keep **Use read-only maintenance during backup** ticked: sync pauses for the few seconds of the run (hubs keep saving in the browser and catch up afterwards), so the file is a consistent snapshot. The previous mode comes back on its own.
+4. Type **BACKUP** and press **Create backup and download**. The browser saves `studyhubs-YYYYMMDD-HHMMSSZ.backup` through a single-use link (valid 120 s); keep the tab open until it finishes. **Refresh log** then shows its size and SHA-256.
+5. Verify the file offline, then store it off your laptop:
+   ```bash
+   site/server/.venv/bin/python site/scripts/backup_tool.py verify ~/Downloads/studyhubs-20261013-183000Z.backup
+   # encrypted: add --passphrase-file pass.txt (or set BACKUP_PASSPHRASE)
+   ```
+   It prints the record counts and `fileSha256`, which must match the log. Restoring arrives in M3.
+
+**Schedule a maintenance window at midnight**
+1. **Admin → Maintenance & schedule → Schedule a window:** mode **Read-only** (sync pauses, everything else works) or **Full** (every account API answers 503; type **FULL**), start **Tonight 00:00** (midnight in the site time zone shown next to it: **Settings**, default `ADMIN_TZ`) or a date and time, a duration in minutes and an optional message for learners. Press **Schedule window**.
+2. From 10 minutes before the start, signed-in pages get the upcoming window with `/api/me`. At the start the server switches the mode, and at start + duration it restores the mode that was set before. The jobs list shows `scheduled → running → succeeded`.
+3. The scheduler runs inside the web service (a tick every 20 s), so the service must be awake: keep the UptimeRobot monitor (step 5). A window that starts more than `JOB_GRACE_MIN` (60) minutes late becomes `missed`, does not run, and **Overview** shows a banner.
+4. **Cancel** in the jobs list (type **CANCEL**) removes a scheduled window, or ends a running one at once. The **Maintenance mode** form at the top sets the mode by hand (Off, Read-only, Full); `MAINTENANCE_FORCE` in the environment overrides both.
+
+**Account deletion and export (learners)**
+- **Account → Download my data** gives the learner everything stored for them as `studyhubs-export-YYYYMMDD.json` (5 per hour).
+- **Account → Delete my account** (type **DELETE**; a sign-in within 24 h; 3 per hour) deletes the progress documents and the user document, records a tombstone (a SHA-256 of the uid, so an M3 restore never brings the account back), deletes the Firebase Auth user and clears the cookies. The browser then wipes its hub progress and tells open hub tabs, and the learner lands on the catalog signed out. Each step is safe to repeat, so a failure part-way can simply be retried.
+- There is no admin tool to delete someone else's account in M2: point learners to their account page (`/privacy` explains both).
+
+### 5. Keep it awake (UptimeRobot)
 
 Render's free instances sleep after about 15 idle minutes, and the first visit then waits for a cold start. A free UptimeRobot monitor prevents this:
 

@@ -1,12 +1,14 @@
 /**
- * Playwright config for the Study Hubs e2e suite (M0 and M1 acceptance, build-contracts.md).
+ * Playwright config for the Study Hubs e2e suite (M0, M1 and M2 acceptance, build-contracts.md).
  *
  * Two projects:
  *   - chromium: the M0 specs (static site, anonymous visitors), fully parallel.
- *   - sync:     the M1 specs (tests/sync-*.spec.ts: fake sign-in, signed-in sync). They reset
- *               the server's memory store and set faults, quota and clock offsets that the whole
- *               server shares, so they run one test at a time (workers: 1), alongside M0.
- *               The server must run with APP_ENV=test AUTH_MODE=fake STORE=memory.
+ *   - sync:     the M1 and M2 specs (tests/sync-*.spec.ts: fake sign-in, signed-in sync;
+ *               tests/m2-*.spec.ts: admin, maintenance, scheduler, backups, account export and
+ *               delete). They reset the server's memory store and set faults, quota, clock
+ *               offsets and maintenance that the whole server shares, so they run one test at a
+ *               time (workers: 1), alongside M0. The server must run with APP_ENV=test
+ *               AUTH_MODE=fake STORE=memory ADMIN_EMAILS=admin@studyhubs.test.
  *
  * The suite runs against a live server; it never starts one itself:
  *   - local:  sh ../scripts/dev-e2e.sh          (starts uvicorn, runs this suite, stops it)
@@ -30,8 +32,8 @@ if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync(PREINSTALLED)) {
 
 const CI = !!process.env.CI;
 
-/** M1 specs: they change state the whole server shares (see the header). */
-const SYNC_SPECS = '**/sync-*.spec.ts';
+/** M1 and M2 specs: they change state the whole server shares (see the header). */
+const SYNC_SPECS = ['**/sync-*.spec.ts', '**/m2-*.spec.ts'];
 
 export default defineConfig({
   testDir: './tests',
