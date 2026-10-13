@@ -402,3 +402,122 @@ All require `X-StudyHubs: 1`. They are never mounted outside test (a unit test a
 - **S14:** device clock +1 day → notice, nothing stored.
 - **S16:** quota at budget → "Sync paused", no "storage full" toast, a reset-time notice, and the outbox drains after `/api/test/reset`.
 - **Every M0 spec must still pass.**
+
+---
+
+# M2: admin, account, maintenance, backups
+
+These sections are binding for M2. Where they are silent, follow [architecture-spec.md](architecture-spec.md):
+- §4.7 for the API
+- §4.9 for meters
+- §4.10 for the backup format and scheduler
+- §4.11 for pages
+
+Restore (upload, validate, apply) is **M3**; M2 only writes backups.
+
+## 17. Admin authorization (plan §9 trims apply)
+- **Admin:**
+  - The session's email is in `ADMIN_EMAILS` (comma-separated, case-insensitive), `email_verified` is true and the provider is `google.com`.
+  - Admin routes re-verify the session with `check_revoked=True` (cached at most 60 s).
+  - Not admin → 404 `not_found`, which hides that the route exists.
+- **Destructive actions:** creating a backup, entering `full` maintenance, deleting a scheduled job, and `DELETE /api/me` need:
+  - `auth_time` within 24 h (otherwise 403 `reauth_required`; the client sends the user to `/signin?next=…`), and
+  - a typed confirmation in the body (`confirm` must equal the exact phrase the UI shows).
+
+  There is no `X-Reauth` header.
+- **New env:** `ADMIN_EMAILS` (empty = no admins), `ADMIN_TZ` (default `Asia/Kolkata`), `DATA_DIR` (default `/tmp/studyhubs`; only scratch files live there), `JOB_GRACE_MIN=60`, `MAX_BACKUP_BYTES=2147483648`.
+
+## 18. Account API (user session; CSRF on non-GET)
+- **`GET /api/me/progress`** → `{"hubs":[{"hub","slug","title","parts":{"<part>":{"upd","bytes"}},"done":n}]}`.
+  - One id-range query with a field mask: 1 read per doc.
+  - Hubs missing from the catalog are still listed, with `slug: null`.
+- **`GET /api/me/export`** → a JSON attachment `studyhubs-export-<YYYYMMDD>.json`: `{"exportedAt","user":{…no uid…},"progress":[{"hub","part","upd","data"}]}`. Rate limit 5/h.
+- **`DELETE /api/me`** `{confirm:"DELETE"}`, with a sign-in within 24 h. Rate limit 3/h. Steps, each safe to repeat:
+  1. Delete all progress docs.
+  2. Delete the user doc.
+  3. Write tombstone `sha256("studyhubs-tombstone-v1:"+uid)`.
+  4. Delete the Firebase Auth user (fake mode: no-op).
+  5. Clear cookies.
+  6. Return 204.
+
+  The client then wipes local hub data (`wipeKeys`) and broadcasts `logout`.
+
+## 19. Admin API (all `GET`/`PUT`/`POST` under `/api/admin`, admin only)
+- **`GET /api/admin/stats`:** the shape in spec §4.9, without the `host.instanceHoursMonth` and `migrationTriggers` fields if they can't be computed.
+  - It must include: `store`, `users` (`count()` aggregation, 1 read per 1,000), `quotaDay {day, resetsAt, resetsAtLocal}`, and `firestore {writes, reads, deletes {used, limit}, storage {estBytes, limit, asOf}, egressMonth}`.
+  - It also includes `host {egressMonth {bytes, limit}, rssBytes, ramLimit}`, `maintenance`, `jobs` (next 10), `lastBackup`, and the tier and policy.
+  - The storage estimate comes from summing `n_*` at the last backup or a manual "Recount" (`POST /api/admin/stats/recount`, 1 read per doc; refused if it would use more than 20% of today's reads).
+- **`GET/PUT /api/admin/maintenance`:** `{mode:"off|read_only|full", message, until}`, stored in `meta/settings` with optimistic `version`. `MAINTENANCE_FORCE` overrides it. `full` needs the destructive-action rules. Every instance re-reads settings at most every 60 s, and immediately after its own PUT.
+- **`GET/PUT /api/admin/settings`:** `{tz, notice}`.
+- **Jobs (maintenance windows only in M2; restore jobs are M3):**
+  - `POST /api/admin/jobs {kind:"maintenance", mode:"read_only"|"full", startAt (ISO or "tonight"), tz, durationMin, message}`. `"tonight"` means 00:00 in `tz`.
+  - `GET /api/admin/jobs`, `GET /api/admin/jobs/{id}`, `POST /api/admin/jobs/{id}/cancel`.
+  - States: `scheduled → running → succeeded | failed | cancelled | missed`.
+  - Store: `jobs/{id}` docs (Firestore) and a dict (memory). `claim_job` is atomic (transaction).
+- **Scheduler** (`app/jobs/scheduler.py`):
+  - An asyncio task ticking every 20 s, with jobs cached and refreshed every 5 min (at most 288 reads/day) and right after admin edits.
+  - At T−10 min, `/api/me` and progress responses carry `upcoming {mode, startAt, message}`.
+  - A job more than `JOB_GRACE_MIN` late becomes `missed` (with a banner) and does not run.
+  - A maintenance job sets the mode at `startAt` and restores the previous mode at `startAt + durationMin`.
+  - Survives restarts: on boot it re-reads jobs; a `running` job whose end time has passed is finished.
+- **Backups:**
+  - `GET /api/admin/backups/estimate` → `{users, docs, tombstones, estReads, readsLeftToday, fits}`.
+  - `POST /api/admin/backups {passphrase?: string ≥ 12 chars | null, requireReadOnly: bool, confirm:"BACKUP"}` → `{ticket, filename, expiresIn:120}`.
+    - 409 `quota` if the estimated reads exceed today's remaining reads minus a 20% reserve.
+    - If `requireReadOnly`, the server enters `read_only` maintenance for the run and restores the previous mode afterwards; the header then says `consistent: true`.
+  - `GET /api/admin/backups/{ticket}` (single use, admin cookie) → streamed `.backup`.
+  - `GET /api/admin/backups/log` → `[{at, bytes, fileSha256, counts, encrypted, consistent}]`, the last 20, kept in `meta/backups`.
+
+## 20. `.backup` v1 format (`app/backup/format.py`, `writer.py`, `crypto.py`; reader in M3)
+- **Framing:**
+  - `"SHBK"` (4 bytes), version `1` (1 byte), flags (1 byte; bit 0 = encrypted).
+  - A u32 BE header length, then the header JSON (UTF-8, no secrets), then the body.
+- **Header:** `{"format":"studyhubs-backup","v":1,"createdAt","app":{"version","commit"},"source":{"store","project","origin"},"consistent":bool,"compression":"gzip","encryption":null|{"alg":"AES-256-GCM-STREAM-1","kdf":"scrypt","n":32768,"r":8,"p":1,"salt":b64(16),"noncePrefix":b64(7),"segment":1048576},"estimated":{"user":n,"progress":n}}`.
+- **Body, unencrypted:** one gzip stream of NDJSON records, in this order:
+  - `settings` (whitelisted keys `tz`, `notice` only; never maintenance, jobs or secrets)
+  - `tombstone` (`{t,h,at}`)
+  - `user` (`{t,uid,email,emailVerified,name,photo,provider,createdAt,lastLoginAt}`)
+  - `progress` (`{t,uid,hub,part,upd,data}` with `data` the exact payload object)
+  - and finally `{"t":"end","counts":{…},"sha256":"<hex of all preceding lines incl. \n>"}`.
+- **Body, encrypted:**
+  - Frames of `[u32 BE len][ciphertext‖16-byte tag]`, each over a 1 MiB segment of the gzip stream.
+  - Nonce = `noncePrefix(7) ‖ u32 BE counter ‖ last-flag(1)`.
+  - AAD = `SHA-256(magic‖version‖flags‖headerLen‖headerJSON)`.
+  - Key = `cryptography` `Scrypt(salt, length=32, n=2**15, r=8, p=1)` over the NFKC passphrase.
+- **Writer:** a sync generator (cursor pages by document id, never offsets → lines → running sha256 → `zlib.compressobj(6, wbits=31)` → optional framer). Memory ≤ one page + 2 MiB. The file's sha256 is computed while streaming and logged.
+- **`scripts/backup_tool.py inspect|verify|decrypt <file>`:** offline (verify checks counts, the `end` sha256 and, if encrypted, every frame tag). Also used by the tests.
+- Add `cryptography` (pinned, hash-locked) to the requirements.
+
+## 21. Client (M2)
+- **`/account`:**
+  - Profile (email, provider, joined).
+  - Server progress per hub (`/api/me/progress`) next to local progress and synced state.
+  - "Download my data" (`/api/me/export`).
+  - "Delete my account": type DELETE; on `reauth_required` → `/signin?next=/account`; on success → `wipeKeys` + broadcast `logout` + `/`.
+  - The browser storage panel (local bytes per hub, and "remove local copy" only for fully synced hubs).
+- **`/admin`** (lazy chunk; shown in the menu only when `/api/me` returns `user.admin: true`). Tabs:
+  - **Overview:** meter bars `--good` < 50%, `--trap` < 80%, `--bad` otherwise; the next quota reset in IST and Pacific; users; last backup.
+  - **Backup:** the estimate, an optional passphrase (≥ 12 chars, shown once, "can't be recovered" warning), "Use read-only maintenance during backup" (checked by default), typed confirmation, the download via ticket, and the log.
+  - **Maintenance & schedule:** the current mode, set the mode, schedule a window with the "Tonight 00:00" preset in `ADMIN_TZ`, the jobs list with cancel.
+  - **Settings:** timezone and notice.
+- **`/privacy`:** what is stored (local and server), why, retention, deletion and export, Firebase/Google as processors, and contact via the GitHub repo owner (no email address).
+- **Budgets:** main ≤ 90 KB gz; the admin chunk ≤ 40 KB gz.
+
+## 22. Tests (M2)
+- **Server:**
+  - admin predicate matrix
+  - destructive-action rules
+  - stats shape
+  - maintenance modes + `MAINTENANCE_FORCE`
+  - scheduler with an injected clock: due, grace/missed, restart, end restores the previous mode
+  - backup round-trip, plain and encrypted, through `backup_tool.py verify`: a flipped byte, truncation, a reordered frame, extra trailing bytes and a wrong passphrase must all fail
+  - a backup of 20k synthetic docs stays under 300 MB peak RSS (memory store), with a separate test for the Firestore emulator streaming path
+  - delete-account cascade + tombstone
+  - export shape
+  - the contract suite extended to `list_hubs`, `delete_user`, the `iter_*` methods (1,234 docs, page 100: exact, ordered, no duplicates) and `claim_job` exclusivity
+- **E2E (`m2-*.spec.ts`, serial project):**
+  - admin overview renders for an admin fake user and 404s for others
+  - set `read_only` → the hub shows "Sync paused" and saves locally; `off` → it drains
+  - a scheduled window with a near `startAt` fires (test clock)
+  - backup download → `backup_tool.py verify` passes
+  - account export and delete (cookies cleared, local wiped, `/api/test/store` empty for that uid)
