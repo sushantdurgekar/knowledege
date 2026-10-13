@@ -471,3 +471,34 @@ def test_plan_on_a_firestore_target_estimates_writes(tmp_path: Path, source: Mem
     assert short["compared"] is False  # the lookups would cost more than 80% of the reads left
     assert "users" not in short
     assert (short["estWrites"], short["daysNeeded"], short["fitsToday"]) == (29, 2, False)
+
+
+def test_test_reset_forgets_uploads(make_client: Any, tmp_path: Path) -> None:
+    client = admin_client(make_client, tmp_path)
+    body = {"name": "x.backup", "size": 100, "lastModified": 1}
+    assert client.post("/api/admin/restore/uploads", json=body, headers=API).status_code == 201
+    assert client.post("/api/test/reset", headers={"X-StudyHubs": "1"}).status_code == 204
+    session(client)
+    assert client.get("/api/admin/restore/uploads").json() == {"uploads": []}
+
+
+def test_only_admins_sign_in_during_full_maintenance(make_client: Any, tmp_path: Path) -> None:
+    from tests.api.conftest import sign_in
+    from tests.api.test_admin_api import put
+
+    client = admin_client(make_client, tmp_path)
+    assert put(client, "/api/admin/maintenance", {"mode": "full", "confirm": "FULL"}).json()["mode"] == "full"
+    client.cookies.clear()
+    sign_in(client, "boss-2", email=ADMIN)  # a long restore must not lock the admin out
+    assert client.get("/api/admin/stats").status_code == 200
+    store = store_of(client)
+    assert store.get_user("boss-2") is None  # no user write during maintenance
+    client.cookies.clear()
+    from app.auth.fake import make_fake_token
+
+    for token in (
+        make_fake_token("learner", "l@example.com", emailVerified=True, provider="google.com"),
+        "x",
+    ):
+        blocked = client.post("/api/auth/session", json={"idToken": token}, headers=API)
+        assert (blocked.status_code, blocked.json()["code"]) == (503, "maintenance")

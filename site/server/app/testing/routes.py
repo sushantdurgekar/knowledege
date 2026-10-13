@@ -115,6 +115,8 @@ def reset_runtime(runtime: Runtime) -> None:
         runtime.scheduler.reset()
     if runtime.backups is not None:
         runtime.backups.reset()
+    if runtime.restore is not None:
+        runtime.restore.reset()
 
 
 def _not_supported(exc: StoreError) -> ApiError:

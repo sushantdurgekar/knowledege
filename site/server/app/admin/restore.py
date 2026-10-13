@@ -75,9 +75,15 @@ async def _uploads_call(fn: Any, *args: Any, **kwargs: Any) -> Any:
         raise _error(exc) from None
 
 
-def _jobs_using(runtime: Runtime, upload_id: str) -> list[dict[str, Any]]:
-    jobs = runtime.store.list_jobs(ACTIVE_RESTORE, limit=50)
-    return [j for j in jobs if j.get("kind") == "restore" and j.get("uploadId") == upload_id]
+def _jobs_using(runtime: Runtime, upload_id: str, *, fresh: bool = False) -> list[dict[str, Any]]:
+    """Active restore jobs of this upload: from the scheduler's cache (refreshed whenever a
+    job is created), or from the store when `fresh` (no read per uploaded chunk)."""
+    jobs = runtime.store.list_jobs(ACTIVE_RESTORE, limit=50) if fresh else runtime.scheduler.active()
+    return [
+        j
+        for j in jobs
+        if j.get("kind") == "restore" and j.get("uploadId") == upload_id and j.get("state") in ACTIVE_RESTORE
+    ]
 
 
 @router.post("/uploads", dependencies=CSRF)
@@ -160,7 +166,7 @@ async def delete_upload(request: Request, upload_id: str, admin: Admin) -> Respo
     upload = await _uploads_call(runtime.restore.uploads.get, upload_id)
     if upload.state == "validating":
         raise ApiError(409, "busy", "The upload is being validated")
-    if await run_in_threadpool(_jobs_using, runtime, upload_id):
+    if await run_in_threadpool(_jobs_using, runtime, upload_id, fresh=True):
         raise ApiError(409, "busy", "A restore job uses this upload; cancel it first")
     await _uploads_call(runtime.restore.uploads.delete, upload_id)
     logger.info("Restore upload %s deleted by an admin", upload_id)

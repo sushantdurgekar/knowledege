@@ -43,8 +43,9 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.admin.site import Maintenance, SiteSettings, SiteSettingsCache
+from app.admin.site import MAX_NOTICE, Maintenance, SiteSettings, SiteSettingsCache
 from app.backup import reader
 from app.clock import Clock
 from app.config import Settings
@@ -145,6 +146,11 @@ class RestoreService:
         self._threads: dict[str, threading.Thread] = {}
         self._validations: dict[str, threading.Thread] = {}
         self._beat: dict[str, float] = {}
+
+    def reset(self) -> None:
+        """Forget every staged upload (`POST /api/test/reset`)."""
+        for upload in self.uploads.all():
+            self.uploads.discard(upload.id)
 
     # -- validation ---------------------------------------------------------------------------
 
@@ -444,8 +450,16 @@ class RestoreService:
         self._retry(self.site.update, change)
 
     def _apply_site(self, value: dict[str, Any]) -> None:
-        tz = value.get("tz") if isinstance(value.get("tz"), str) and value.get("tz") else None
+        """A replace takes the backup's site settings (tz, notice), when they are valid."""
+        tz = value.get("tz") if isinstance(value.get("tz"), str) else None
+        try:
+            if tz:
+                ZoneInfo(tz)
+        except (ZoneInfoNotFoundError, ValueError):
+            tz = None
         notice = value.get("notice") if isinstance(value.get("notice"), str) else None
+        if notice is not None and len(notice) > MAX_NOTICE:
+            notice = None
 
         def change(current: SiteSettings) -> SiteSettings:
             wanted = replace(current, tz=tz or current.tz, notice=notice or None)
