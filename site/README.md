@@ -4,7 +4,7 @@ This folder holds the public website for the vault's Study Hubs. Every `*-hub.ht
 
 The hub files are **never edited**. The server adds one `<script>` (the *bridge*) before `</head>`. The bridge answers the hub's `window.claude` calls and adds a small floating menu. The download link always serves the original file, byte for byte.
 
-**Milestone M0 (static site)** is the current scope: hubs, catalog, downloads, the anonymous bridge and the AI notice. Accounts and sync arrive in M1, admin tools in M2, Postgres and restore in M3. See [docs/implementation-plan.md](docs/implementation-plan.md).
+**Milestones M0 (static site) and M1 (accounts and sync)** are built: hubs, catalog, downloads, the anonymous bridge and the AI notice, plus optional accounts (Firebase Auth: Google or email/password) whose progress syncs to Firestore through the server. Admin tools arrive in M2, Postgres and restore in M3. See [docs/implementation-plan.md](docs/implementation-plan.md) and, for M1 setup, [M1: accounts and sync](#m1-accounts-and-sync).
 
 | Doc | What it is |
 |---|---|
@@ -27,7 +27,8 @@ The hub files are **never edited**. The server adds one `<script>` (the *bridge*
 ```
 
 - **Browser on `/h/<slug>`:** the hub runs as a top-level page. `bridge.js` runs first.
-  - In M0, `use("db")` and `use("user")` resolve `null`, so the hub shows "Saved in this browser".
+  - Anonymous (no `sh_hint` cookie): `use("db")` and `use("user")` resolve `null`, so the hub shows "Saved in this browser".
+  - Signed in (M1): the bridge prefetches `GET /api/progress/<hubId>` and hands the hub a db whose writes go through an outbox that batches them into `POST /api/sync` (120 s at tier 1, always on hide or close). The pill shows "Synced to your account". The server writes Firestore with a service account; browsers never reach Firestore.
   - `use("sample")` resolves to an AI shim. Every AI button opens the "AI isn't supported here" notice, which offers **Download this hub**.
   - An anonymous visitor makes **zero** `/api` requests. The legacy AI-901 hub is the one exception: it loads its tiny seed script.
 - **Collector** (`scripts/collect-hubs.mjs`):
@@ -46,6 +47,7 @@ site/
   bridge/     TypeScript -> one IIFE (<= 14 KB gz)       see bridge/README.md
   client/     React + Vite catalog shell                 see client/README.md
   server/     FastAPI app, pytest                        see server/README.md
+  firebase/   Firestore rules + index exemptions, emulator config
   scripts/    collector, context and image checks, dev-build.sh, dev-e2e.sh
   e2e/        Playwright acceptance tests (Chromium)
   docs/       plan, contracts, spec, prototype
@@ -72,6 +74,14 @@ You can also run `sh site/scripts/dev-build.sh` from any directory. It installs 
 
 **After editing a hub** in the vault, run `make -C site collect`, then reload `/h/<slug>`.
 
+**Accounts and sync locally (fake auth).** Outside production the server defaults to `AUTH_MODE=fake` and `STORE=memory`, so no Firebase project is needed:
+1. `make -C site serve`, open http://127.0.0.1:10000/signin.
+2. The page shows a **Test sign-in** form (user id, email, "Email verified"). Any user id signs in; untick "Email verified" to see the `/verify` detour. The Firebase SDK is never loaded in this mode.
+3. Open a hub: the pill says "Synced to your account". Changes are batched (120 s at tier 1) and always sent when the tab is hidden or closed; `window.__studyhubsBridge.flushNow()` in the console sends them at once, and `__studyhubsBridge.stats()` shows the outbox.
+4. Progress lives in the server process and is gone after a restart. With `APP_ENV=test` the test-only routes `/api/test/{faults,clock,quota,reset,store}` are mounted too ([build-contracts.md §15](docs/build-contracts.md)); `curl -H 'X-StudyHubs: 1' http://127.0.0.1:10000/api/test/store` dumps users and decoded progress.
+
+**Store contract on the Firestore emulator** (Java 21 needed): run `make -C site emulator` in one terminal and `make -C site test-contract` in another. The same suite runs on the memory store in `make -C site test`.
+
 ### Commands
 
 | Command | What it does |
@@ -79,8 +89,10 @@ You can also run `sh site/scripts/dev-build.sh` from any directory. It installs 
 | `make -C site help` | List all targets |
 | `make -C site build-bridge` / `build-client` / `collect` | One build step (`collect STRICT=1` fails on a rejected hub) |
 | `make -C site test` | Every unit suite: bridge (tsc + vitest), client (vitest), collector (`node --test`), server (ruff + pytest) |
-| `make -C site e2e` | Playwright suite. It starts uvicorn on `PORT` (default 10000) unless `BASE_URL` already answers, then stops it |
+| `make -C site e2e` | Playwright suite (M0 + M1). It starts uvicorn on `PORT` (default 10000) unless `BASE_URL` already answers, then stops it |
 | `make -C site e2e-smoke` | The fast `@smoke` subset (HTTP contract, catalog), about 3 s |
+| `make -C site emulator` | Firestore emulator on 127.0.0.1:8080 (`firebase-tools@15.31.0`, needs Java 21), in the foreground |
+| `make -C site test-contract` | Store contract tests on memory and on the running emulator (`FIRESTORE_EMULATOR_HOST=127.0.0.1:8080`) |
 | `make -C site lint` | Type-check the e2e suite and lint the server |
 | `make -C site docker` | Build the image and run `check-image.sh` on it (needs a Docker daemon) |
 | `make -C site clean` | Delete `build/`, `server/public/` and Playwright output |
@@ -104,21 +116,27 @@ The suite runs against a live server. It reads the server's `/catalog.json` and 
 | Caching | 304 on revisit, via `If-None-Match` and a real browser reload |
 | Security | Security headers and the per-hub CSP |
 | M0 API | The `/api` routes, redirects and 404s |
+| M1 sync (`sync-*.spec.ts`) | S3 one coalesced request, S4 newer remote adopted, S5 anonymous progress merged at first sign-in, S6 faults (503, 429, 401, 413), S8 cost and keepalive on close, S9 AI-901 across two devices, S10 sign-out wipe and restore, S12 write budget per tier under `page.clock`, S13 account switch, S14 device clock ahead, S16 quota at the budget ([build-contracts.md §16](docs/build-contracts.md)) |
+| M1 client | Test sign-in, `next` handling, header menu, `/verify` detour, `/signout` |
+
+The M1 specs sign in with fake ID tokens and drive the test-only routes, so the server must run with `APP_ENV=test AUTH_MODE=fake STORE=memory` (`dev-e2e.sh` starts it that way, with a fixed test `SECRET_KEY`). They reset the shared memory store before each test and set faults, quota and clock offsets, so they run in their own Playwright project, `sync`, one test at a time; the M0 specs (`chromium` project) stay fully parallel next to them. Against a deployed site only the `@smoke` M0 subset makes sense.
 
 The bridge's modal and menu sit in **closed** shadow roots. Tests reach them through the Chrome DevTools Protocol (accessibility tree and real mouse clicks; see `e2e/tests/support/shadow.ts`). Google Fonts is stubbed with an empty stylesheet, so runs are offline-safe and deterministic.
 
 ```bash
-sh site/scripts/dev-e2e.sh                       # whole suite (~30 s, 4 workers)
+sh site/scripts/dev-e2e.sh                       # whole suite, M0 + M1 (~3 min; the sync project is serial)
+sh site/scripts/dev-e2e.sh --project=chromium    # M0 only (~30 s, 4 workers)
+sh site/scripts/dev-e2e.sh --project=sync        # M1 only
 sh site/scripts/dev-e2e.sh --grep @smoke         # HTTP contract only
 sh site/scripts/dev-e2e.sh tests/ai.spec.ts      # one file
-cd site/e2e && BASE_URL=https://study-hubs.onrender.com npx playwright test --grep @smoke   # a deployed site
+cd site/e2e && BASE_URL=https://study-hubs.onrender.com npx playwright test --project=chromium --grep @smoke   # a deployed site
 ```
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `BASE_URL` | `http://127.0.0.1:10000` | Server under test |
 | `E2E_EXPECT_HSTS` | `1` for https, else `0` | Whether `Strict-Transport-Security` must be present (production only) |
-| `E2E_EXPECT_SLUGS` | the 7 current slugs | Comma list that must be in the catalog; empty disables the check |
+| `E2E_EXPECT_SLUGS` | the 7 original slugs | Comma list that must be in the catalog; empty disables the check |
 | `E2E_WORKERS` | 4 (2 in CI) | Parallel browsers |
 
 Playwright uses `PLAYWRIGHT_BROWSERS_PATH` when it is set, and `/opt/pw-browsers` when that folder exists. Otherwise, install Chromium once with `cd site/e2e && npx playwright install chromium`.
@@ -137,10 +155,28 @@ Playwright uses `PLAYWRIGHT_BROWSERS_PATH` when it is set, and `/opt/pw-browsers
 | `GIT_COMMIT` / `RENDER_GIT_COMMIT` | `dev` | Reported by `/api/version`, which the deploy job waits for |
 | `LOG_LEVEL` | `INFO` | |
 
-**Later milestones (placeholders):** these are listed in [architecture-spec.md §4.12](docs/architecture-spec.md) and commented in [render.yaml](render.yaml).
-- **M1:** `STORE`, `AUTH_MODE`, `SECRET_KEY`, `SESSION_DAYS`, `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_CONFIG`, `GOOGLE_APPLICATION_CREDENTIALS` (a Render Secret File), and the `SYNC_*`/`QUOTA_*` tuning.
-- **M2:** `ADMIN_EMAILS`, `ADMIN_TZ`, `DATA_DIR`, `MAINTENANCE_FORCE`.
-- **M3/M4:** `DATABASE_URL` and the backup settings.
+**M1 (accounts and sync, [build-contracts.md §8](docs/build-contracts.md)).** Every variable has a safe default outside production. In production the server **refuses to start** without `SECRET_KEY` (≥ 32 bytes), `FIREBASE_PROJECT_ID` and `FIREBASE_WEB_CONFIG`, and refuses `AUTH_MODE=fake`, `STORE=memory` and `FIRESTORE_EMULATOR_HOST`.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `AUTH_MODE` | `firebase` in production, `fake` otherwise | `fake` (sign in with `"fake:" + base64url(JSON {uid, email, emailVerified?, provider?})`) is refused in production |
+| `STORE` | `firestore` in production, `memory` otherwise | `memory` is refused in production; `postgres` arrives in M3 |
+| `SECRET_KEY` | dev/test: a fixed constant plus a warning | Production: required, ≥ 32 bytes (Render generates it). Signs `publicId` and fake sessions; changing it changes every `publicId` |
+| `SESSION_DAYS` | `14` | Session cookie lifetime (`__Host-sh_session` on https, `sh_session` on http) |
+| `FIREBASE_PROJECT_ID` | – | Required when `AUTH_MODE=firebase` or `STORE=firestore` |
+| `FIREBASE_WEB_CONFIG` | – | One-line JSON `{"apiKey","authDomain","projectId","appId"}`, served by `/api/config` |
+| `GOOGLE_APPLICATION_CREDENTIALS` / `FIREBASE_SERVICE_ACCOUNT_B64` | – | Service-account key: a file path (Render Secret File `/etc/secrets/firebase-sa.json`) or base64 JSON |
+| `FIRESTORE_EMULATOR_HOST` | – | Tests and CI only (`127.0.0.1:8080`) |
+| `TRUSTED_PROXY_HOPS` | `1` in production, `0` otherwise | Which `X-Forwarded-For` entry is the client IP for rate limits (Render appends one) |
+| `SYNC_TIERS` | `0.5:120:0:60,0.8:300:60:120,1.0:900:60:300` | `frac:flushS:hiddenMinS:refreshS`; at `f ≥ 1.0` sync pauses until the Pacific-midnight reset |
+| `QUOTA_ENFORCE` | `1` | `0` disables tiers and the budget |
+| `QUOTA_TZ`, `QUOTA_READS`, `QUOTA_WRITES`, `QUOTA_DELETES`, `QUOTA_RESERVE` | `America/Los_Angeles`, `50000`, `20000`, `20000`, `0.05` | Spark's daily free tier. Budget `B = QUOTA_WRITES × (1 − QUOTA_RESERVE)`, `f = writesToday / B` |
+| `MAX_PART_GZ`, `MAX_DOC_GZ`, `MAX_BODY`, `MAX_BODY_DECOMPRESSED` | `131072`, `393216`, `2097152`, `8388608` | Size limits in bytes |
+| `CLOCK_SKEW_MS` | `900000` | A part stamped further in the future is refused (`422 clock_skew`) |
+| `USER_WRITES_PER_DAY` | `300` | Accepted hub-doc writes per user per Pacific day, then `429 sync_paused` |
+| `MAINTENANCE_FORCE` | unset | `read_only` or `full` |
+
+**Later milestones:** M2 adds `ADMIN_EMAILS`, `ADMIN_TZ` and `DATA_DIR`; M3/M4 add `DATABASE_URL` and the backup settings ([architecture-spec.md §4.12](docs/architecture-spec.md), commented in [render.yaml](render.yaml)).
 
 ## Deploy on Render
 
@@ -166,7 +202,7 @@ The site runs as **one free Docker web service in Singapore**. CI deploys it thr
 | Docker Build Context Directory | `.` |
 | Health Check Path | `/healthz` |
 | Auto-Deploy | Off |
-| Environment | `APP_ENV=production`, `PUBLIC_ORIGIN=https://<your-service>.onrender.com`, `LOG_LEVEL=INFO` |
+| Environment | `APP_ENV=production`, `PUBLIC_ORIGIN=https://<your-service>.onrender.com`, `LOG_LEVEL=INFO`, plus the M1 variables below |
 
 **Then:**
 1. Set `PUBLIC_ORIGIN` to the hostname Render actually assigned (the Blueprint asks for it at creation and never overwrites it). The name `study-hubs` may be taken, which gives `study-hubs-xxxx.onrender.com`.
@@ -184,12 +220,67 @@ The site runs as **one free Docker web service in Singapore**. CI deploys it thr
 | Job | What it runs |
 |---|---|
 | `test` | Bridge build and vitest, client build (budgets) and vitest, collector tests, `collect --strict`, e2e type-check, ruff and pytest |
-| `e2e` | Builds everything as `make build` does, runs the Playwright suite against uvicorn, builds the Docker image, runs `check-image.sh`, then smoke-tests the container in production mode |
-| `deploy` | Main only, needs both jobs, skipped without the secret. It first checks that the commit is still the head of `main`; if not, the newer commit's run deploys. Then it calls the deploy hook and polls `PUBLIC_ORIGIN/api/version` until `commit` equals the tested SHA (10 min timeout), and finally checks `/healthz` and `/catalog.json` |
+| `e2e` | Builds everything as `make build` does, runs the whole Playwright suite (M0 + M1) against uvicorn via `dev-e2e.sh`, builds the Docker image, runs `check-image.sh`, then smoke-tests the container in production mode (with a demo Firebase config: `/api/config` says `firebase`, `/api/test/*` is absent, `@smoke` passes) |
+| `contract` | Starts the Firestore emulator (Temurin 21, `firebase-tools@15.31.0`) and runs the store contract suite on it |
+| `deploy` | Main only, needs all three jobs, skipped without the secret. It first checks that the commit is still the head of `main`; if not, the newer commit's run deploys. Then it calls the deploy hook and polls `PUBLIC_ORIGIN/api/version` until `commit` equals the tested SHA (10 min timeout), and finally checks `/healthz` and `/catalog.json` |
 
 Commits that only touch notes match none of the workflow's paths, so they test and deploy nothing. Run **Actions → site → Run workflow** to redeploy by hand.
 
-### 3. Keep it awake (UptimeRobot)
+### 3. M1: accounts and sync
+
+<a id="m1-accounts-and-sync"></a>
+Accounts use **Firebase Authentication** on the free **Spark** plan and progress lives in **Firestore**. Browsers never talk to Firestore: the server does, with a service account, and the Security Rules deny every client request. Do these steps once, in this order.
+
+**Firebase project**
+1. https://console.firebase.google.com → **Add project** (for example `study-hubs`). Google Analytics is not needed. Note the **project id** (`study-hubs-xxxxx`). Stay on **Spark** (no billing account).
+2. **Authentication → Get started → Sign-in method:** enable **Google** (set the public-facing name "Study Hubs" and a support email) and **Email/Password** (leave "Email link" off).
+3. **Do not upgrade to Identity Platform** when the console offers it. The upgrade cannot be undone and moves auth to a different (billed) quota.
+4. **Authentication → Settings → Authorized domains:** add the Render host (`study-hubs-xxxx.onrender.com`, exactly as in `PUBLIC_ORIGIN`) and any custom domain. Keep `localhost` and `<project>.firebaseapp.com`.
+5. **Firestore Database → Create database:** **Standard** edition, database ID **`(default)`**, location **`asia-southeast1` (Singapore)**, next to the Render service. Start in **production mode**. The location cannot be changed later.
+6. Deploy the rules (deny all) and the index exemptions from this repo:
+   ```bash
+   cd site/firebase
+   npx firebase-tools@15.31.0 login
+   npx firebase-tools@15.31.0 deploy --only firestore:rules,firestore:indexes --project <project-id>
+   ```
+   (Or copy `.firebaserc.example` to `.firebaserc`, which git ignores, and drop `--project`.) Check **Firestore → Rules** shows `allow read, write: if false` and **Indexes → Single field** lists the exemptions.
+
+**Service account (server credentials)**
+7. https://console.cloud.google.com → pick the project → **IAM & Admin → Service Accounts → Create service account** named `study-hubs-server`. Grant exactly **Cloud Datastore User** (`roles/datastore.user`) and **Firebase Authentication Admin** (`roles/firebaseauth.admin`). Do not use the default `firebase-adminsdk` account (it has far wider roles).
+8. On the new account: **Keys → Add key → Create new key → JSON**. In Render: **study-hubs → Environment → Secret Files → Add**, filename **`firebase-sa.json`**, paste the file's contents, save. Render mounts it at `/etc/secrets/firebase-sa.json`, which `GOOGLE_APPLICATION_CREDENTIALS` points to.
+9. **Delete the downloaded key file** from your computer (and from Downloads/trash). Never commit it or paste it into notes; a lost key is revoked in the same Keys tab.
+
+**Web app and API key**
+10. Firebase console → **Project settings → General → Your apps → Add app → Web** (no Hosting). From the shown `firebaseConfig`, build one line of JSON with only four fields and set it as **`FIREBASE_WEB_CONFIG`** in Render:
+    `{"apiKey":"AIza…","authDomain":"<project-id>.firebaseapp.com","projectId":"<project-id>","appId":"1:…:web:…"}`
+11. Google Cloud console → **APIs & Services → Credentials** → the **Browser key (auto created by Firebase)** → **Application restrictions: Websites (HTTP referrers)**: `https://<render-host>/*`, `https://<project-id>.firebaseapp.com/*` and any custom domain. Under **API restrictions** allow only **Identity Toolkit API** and **Token Service API**. Save. (The key is public by design; the restriction stops other sites from using your auth quota.)
+12. **OAuth consent screen** (Google Auth Platform → Branding): app name **Study Hubs**, a support email, home page `https://<render-host>/`, privacy policy **`https://<render-host>/privacy`**, and the site's domain under Authorized domains. Leave it **In production** with only the default scopes (email, profile, openid), so no verification is needed.
+
+**Render environment** (the Blueprint creates the keys; fill the `sync: false` ones):
+
+| Variable | Value |
+|---|---|
+| `STORE` / `AUTH_MODE` | `firestore` / `firebase` |
+| `SECRET_KEY` | generated by Render (keep it: changing it changes every `publicId`) |
+| `FIREBASE_PROJECT_ID` | `<project-id>` |
+| `FIREBASE_WEB_CONFIG` | the JSON line from step 10 |
+| `GOOGLE_APPLICATION_CREDENTIALS` | `/etc/secrets/firebase-sa.json` (Secret File from step 8) |
+| `TRUSTED_PROXY_HOPS` | `1` |
+
+Then deploy (Manual Deploy, or push to `main` and let CI do it).
+
+**Verify after deploy**
+1. `curl -s https://<host>/api/config` shows `"authMode":"firebase"` and your `projectId`; `curl -s https://<host>/api/me` shows `{"signedIn":false}`.
+2. `curl -s -o /dev/null -w '%{http_code}\n' -H 'X-StudyHubs: 1' https://<host>/api/test/store` prints `404` (test routes are never mounted in production).
+3. Render logs show `auth=firebase store=firestore` at startup and no `Firestore unavailable` or credentials warnings.
+4. Open `/signin` → **Continue with Google** → you land back signed in; the header shows your initial and `/account` shows your email.
+5. Open a hub, answer a question, then switch tabs (a hidden tab flushes at once). The pill says **Synced to your account**, and Firestore → Data shows `users/<uid>` and `progress/<uid>~<hubId>`.
+6. In another browser (or a private window), sign in with the same account and open the same hub: the progress is there.
+7. Sign up with email/password: the verification email arrives, the link opens `/verify`, and **I've verified** signs you in. Password reset mails arrive from `/reset`.
+8. `/signout` → the hub's progress is gone from this browser; sign in again → it comes back.
+9. Firestore → Usage stays tiny (about one write per hub per flush), and `usage/<YYYY-MM-DD>` counts reads and writes. Firestore → Rules → **Rules Playground**: an unauthenticated `get` on `/progress/x` is denied.
+
+### 4. Keep it awake (UptimeRobot)
 
 Render's free instances sleep after about 15 idle minutes, and the first visit then waits for a cold start. A free UptimeRobot monitor prevents this:
 
