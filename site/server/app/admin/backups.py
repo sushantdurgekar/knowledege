@@ -184,12 +184,14 @@ def stream(runtime: Any, ticket: Ticket) -> Iterator[bytes]:
     entered: list[Maintenance] = []
     try:
         if ticket.require_read_only and runtime.maintenance_mode == "off":
+            replaced: list[Maintenance] = []
 
             def enter(current: SiteSettings) -> SiteSettings:
-                entered.append(current.maintenance)
+                replaced[:] = [current.maintenance]  # update() may retry: keep the last read
                 return replace(current, maintenance=Maintenance("read_only", BACKUP_MESSAGE, None))
 
             site.update(enter)
+            entered.append(replaced[0])  # only once read-only is really set
         else:
             site.refresh()
         consistent = runtime.maintenance_mode in ("read_only", "full")

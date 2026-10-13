@@ -303,9 +303,11 @@ def _cancel(runtime: Runtime, job: dict[str, Any], holder: str) -> dict[str, Any
         if not store.claim_job(job_id, holder, {"scheduled"}, to_state="cancelled"):
             return None
     elif state == "running":
+        # End the window now: back to the previous mode first, so a failure leaves the job
+        # running (the admin retries, or the scheduler restores it at the window's end).
+        runtime.scheduler.restore(job)
         if not store.claim_job(job_id, holder, {"running"}, to_state="cancelled"):
             return None
-        runtime.scheduler.restore(job)  # end the window now: back to the previous mode
     else:
         return None
     stored = store.get_job(job_id) or job

@@ -4,6 +4,7 @@ exclusivity between two instances."""
 
 from __future__ import annotations
 
+import threading
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -15,7 +16,7 @@ from app.clock import FixedClock
 from app.config import Settings
 from app.jobs.scheduler import Scheduler, tonight
 from app.quota.pacific import iso_utc
-from app.store.base import new_job_id
+from app.store.base import Conflict, Unavailable, new_job_id
 from app.store.memory import MemoryStore
 
 START = datetime(2026, 10, 13, 18, 30, tzinfo=UTC)  # 00:00 IST on 14 Oct
@@ -262,3 +263,151 @@ def test_site_settings_cache_refreshes_at_most_every_60_s() -> None:
     # Its own write is visible at once, without a read.
     w.site.update(lambda s: replace(s, notice="Hi"))
     assert w.site.current().notice == "Hi"
+
+
+# -- a store failure after a claim, a cancel racing the start, two live instances -------------------
+
+OFF = {"mode": "off", "message": None, "until": None}
+
+
+def test_a_failed_mode_change_after_the_claim_is_retried() -> None:
+    w = World()
+    job = w.job()
+    w.at(START)
+    w.store.fail_next("put_setting", Unavailable("blip"))
+    assert w.scheduler.tick() == []
+    assert w.state(job) == "running"  # claimed by this instance ...
+    assert w.stored_mode() == "off"  # ... but the mode did not change
+    w.at(START + timedelta(seconds=20))
+    assert w.scheduler.tick() == [f"started {job['id']}"]
+    assert w.stored_mode() == "read_only"
+    stored = w.store.get_job(job["id"])
+    assert stored is not None
+    assert stored["prev"] == OFF
+    w.at(START + timedelta(minutes=30))
+    assert w.scheduler.tick() == [f"finished {job['id']}"]
+    assert w.stored_mode() == "off"
+
+
+def test_a_failed_job_write_after_the_mode_change_keeps_the_previous_mode() -> None:
+    w = World()
+    w.site.set_maintenance(Maintenance("read_only", "Long migration", None))
+    job = w.job(mode="full")
+    w.at(START)
+    w.store.fail_next("put_job", Unavailable("blip"))
+    assert w.scheduler.tick() == []
+    assert w.stored_mode() == "full"
+    w.at(START + timedelta(seconds=20))
+    assert w.scheduler.tick() == [f"started {job['id']}"]  # the mode is not applied twice
+    stored = w.store.get_job(job["id"])
+    assert stored is not None
+    assert stored["prev"] == {"mode": "read_only", "message": "Long migration", "until": None}
+    w.at(START + timedelta(minutes=30))
+    w.scheduler.tick()
+    assert w.site.current().maintenance == Maintenance("read_only", "Long migration", None)
+
+
+@pytest.mark.parametrize("restart", [False, True])
+def test_a_failed_end_is_retried_so_the_site_leaves_maintenance(restart: bool) -> None:
+    w = World()
+    job = w.job()
+    w.at(START)
+    w.scheduler.tick()
+    w.at(START + timedelta(minutes=30))
+    w.store.fail_next("put_setting", Unavailable("blip"))
+    assert w.scheduler.tick() == []
+    assert w.stored_mode() == "read_only"
+    assert w.state(job) == "running"  # not marked done while the mode is still set
+    if restart:  # the process dies and a new one boots
+        w = World(w.store)
+    w.at(START + timedelta(minutes=31))
+    assert w.scheduler.tick() == [f"finished {job['id']}"]
+    assert w.stored_mode() == "off"
+    assert w.state(job) == "succeeded"
+
+
+def test_a_cancel_during_the_start_is_kept_and_undone() -> None:
+    w = World()
+    job = w.job()
+    w.at(START)
+    put_setting = w.store.put_setting
+
+    def racing(*args: Any, **kwargs: Any) -> int:
+        w.store.put_setting = put_setting  # type: ignore[method-assign]
+        version = put_setting(*args, **kwargs)
+        # An admin cancels right after the mode changed, before the job records it.
+        assert w.store.claim_job(job["id"], "admin:x", {"running"}, to_state="cancelled")
+        return version
+
+    w.store.put_setting = racing  # type: ignore[method-assign]
+    assert w.scheduler.tick() == []
+    assert w.state(job) == "cancelled"  # not overwritten back to running
+    assert w.stored_mode() == "off"  # and the window it started is undone
+
+
+def test_settings_update_retries_a_concurrent_write() -> None:
+    w = World()
+    other = SiteSettingsCache(w.store, w.settings, monotonic=w.mono)
+    w.site.update(lambda s: replace(s, notice="v1"))
+    get_setting = w.store.get_setting
+
+    def racing(key: str) -> Any:
+        w.store.get_setting = get_setting  # type: ignore[method-assign]
+        found = get_setting(key)
+        other.update(lambda s: replace(s, notice="other instance"))  # lands between read and write
+        return found
+
+    w.store.get_setting = racing  # type: ignore[method-assign]
+    updated = w.site.set_maintenance(Maintenance("read_only", None, None))
+    assert updated.maintenance.mode == "read_only"
+    assert updated.notice == "other instance"  # applied on top of the newer settings
+    with pytest.raises(Conflict):  # an explicit version (the admin's PUT) still conflicts
+        w.site.set_maintenance(Maintenance("off", None, None), expect_version=1)
+
+
+def test_an_unchanged_settings_update_writes_nothing() -> None:
+    w = World()
+    w.site.set_maintenance(Maintenance("read_only", None, None))
+    writes = w.store.ops.snapshot().writes
+    w.site.update(lambda s: s)
+    assert w.store.ops.snapshot().writes == writes
+
+
+def test_two_live_instances_tick_at_once_and_apply_each_step_once() -> None:
+    store = MemoryStore()
+    store.latency_ms = 2  # widen every race window
+    a, b = World(store), World(store)
+    jobs = [a.job(start=START + timedelta(minutes=i), minutes=5) for i in (0, 10, 20)]
+    events: list[str] = []
+    for moment in (
+        START,
+        START + timedelta(minutes=5),
+        START + timedelta(minutes=10),
+        START + timedelta(minutes=15),
+        START + timedelta(minutes=20),
+        START + timedelta(minutes=25),
+    ):
+        a.at(moment)
+        b.at(moment)
+        barrier = threading.Barrier(2)
+
+        def run(world: World, barrier: threading.Barrier = barrier) -> None:
+            world.mono.t += 400  # both caches are stale: each instance re-reads the jobs
+            barrier.wait()
+            events.extend(world.scheduler.tick())
+
+        threads = [threading.Thread(target=run, args=(world,)) for world in (a, b)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    for job in jobs:
+        assert sorted(e for e in events if e.endswith(job["id"])) == [
+            f"finished {job['id']}",
+            f"started {job['id']}",
+        ]
+        stored = store.get_job(job["id"])
+        assert stored is not None
+        assert stored["state"] == "succeeded"
+        assert stored["prev"] == OFF  # never the job's own mode (a second apply would record it)
+    assert a.stored_mode() == "off"

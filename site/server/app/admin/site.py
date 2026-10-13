@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 SETTINGS_KEY = "settings"
 REFRESH_S = 60.0
 ERROR_RETRY_S = 15.0
+UPDATE_ATTEMPTS = 3  # read-modify-write tries when another instance writes in between
 MODES = ("off", "read_only", "full")
 MAX_MESSAGE = 500
 MAX_NOTICE = 1000
@@ -180,22 +181,39 @@ class SiteSettingsCache:
         self, change: Callable[[SiteSettings], SiteSettings], *, expect_version: int | None = None
     ) -> SiteSettings:
         """Read-modify-write `meta/settings`. `expect_version` (when given) must match the
-        stored version, else `Conflict`; the cache holds the result at once."""
+        stored version, else `Conflict`; the cache holds the result at once.
+
+        Without `expect_version` (the scheduler, a backup) a write that races another
+        instance's is retried on the newer settings, so `change` may run more than once.
+        A `change` that returns its argument unchanged writes nothing.
+        """
         with self._write_lock:
-            found = self._store.get_setting(SETTINGS_KEY)
-            current = (
-                SiteSettings.from_doc(found[0], found[1], self._settings.admin_tz)
-                if found is not None
-                else SiteSettings(tz=self._settings.admin_tz)
-            )
-            if expect_version is not None and expect_version != current.version:
-                self._set(current)
-                raise Conflict(f"settings version is {current.version}, expected {expect_version}")
-            changed = change(current)
-            version = self._store.put_setting(SETTINGS_KEY, changed.to_doc(), expect_version=current.version)
-            value = replace(changed, version=version)
-            self._set(value)
-            return value
+            for attempt in range(UPDATE_ATTEMPTS):
+                found = self._store.get_setting(SETTINGS_KEY)
+                current = (
+                    SiteSettings.from_doc(found[0], found[1], self._settings.admin_tz)
+                    if found is not None
+                    else SiteSettings(tz=self._settings.admin_tz)
+                )
+                if expect_version is not None and expect_version != current.version:
+                    self._set(current)
+                    raise Conflict(f"settings version is {current.version}, expected {expect_version}")
+                changed = change(current)
+                if changed is current:
+                    self._set(current)
+                    return current
+                try:
+                    version = self._store.put_setting(
+                        SETTINGS_KEY, changed.to_doc(), expect_version=current.version
+                    )
+                except Conflict:
+                    if expect_version is not None or attempt == UPDATE_ATTEMPTS - 1:
+                        raise
+                    continue
+                value = replace(changed, version=version)
+                self._set(value)
+                return value
+        raise AssertionError("unreachable")  # pragma: no cover
 
     def set_maintenance(self, maintenance: Maintenance, *, expect_version: int | None = None) -> SiteSettings:
         return self.update(lambda s: replace(s, maintenance=maintenance), expect_version=expect_version)

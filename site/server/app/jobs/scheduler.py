@@ -10,6 +10,11 @@
   between (then the admin's choice stands).
 - Every state change is an atomic `claim_job` transition, so with several instances
   (or a restart racing a tick) exactly one of them applies it.
+- A store failure never strands a window: the instance that claimed a job retries the
+  mode change (and the job's record of the previous mode) on its next ticks, and a
+  window's end restores the previous mode *before* the job is marked `succeeded`, so a
+  failed restore is simply tried again (by any instance, also after a restart). A job
+  cancelled while its mode was being set keeps `cancelled` and the change is undone.
 - Survives restarts: the first tick after boot re-reads the jobs, and a `running`
   job whose end has passed is finished then.
 
@@ -85,6 +90,8 @@ class Scheduler:
         self._tick_lock = threading.Lock()  # one tick at a time
         self._jobs: list[dict[str, Any]] = []
         self._next_read = float("-inf")
+        # job id -> the mode a start replaced, until the job records it (survives a failed write)
+        self._replaced: dict[str, Maintenance] = {}
         self.holder = f"{socket.gethostname()}-{os.getpid()}-{secrets.token_hex(3)}"
         self.last_tick: datetime | None = None
         self.last_error: str | None = None
@@ -106,6 +113,7 @@ class Scheduler:
         with self._lock:
             self._jobs = []
             self._next_read = float("-inf")
+            self._replaced.clear()
             self.last_error = None
 
     def active(self) -> list[dict[str, Any]]:
@@ -142,12 +150,17 @@ class Scheduler:
                 except StoreError as exc:
                     self.last_error = str(exc)
                     logger.warning("Scheduler: job %s not advanced (retry next tick): %s", job.get("id"), exc)
+                    changed = True  # re-read the jobs: a claim may have gone through
                     continue
                 if event:
                     events.append(event)
                     changed = True
             if changed:
-                self.refresh()
+                try:
+                    self.refresh()
+                except StoreError as exc:
+                    self.last_error = str(exc)
+                    self.invalidate()  # the next tick tries again
             return events
 
     def _step(self, job: dict[str, Any], now: datetime) -> str | None:
@@ -172,20 +185,43 @@ class Scheduler:
                 return None
             if not self._store.claim_job(job_id, self.holder, {"scheduled"}):
                 return None
-            previous = self._apply(job, end)
-            stored = self._store.get_job(job_id) or dict(job)
-            stored.update(prev=previous.stored_json(), startedAt=iso_utc(now))
-            self._store.put_job(stored)
-            logger.info("Scheduler: maintenance %s started (job %s, until %s)", job.get("mode"), job_id, end)
-            return f"started {job_id}"
+            return self._start(job, now, end)
         if state == "running" and now >= end:
-            if not self._store.claim_job(job_id, self.holder, {"running"}, to_state="succeeded"):
-                return None
-            self.restore(job)
-            self._finish(job_id, now)
-            logger.info("Scheduler: maintenance job %s finished, previous mode restored", job_id)
-            return f"finished {job_id}"
+            return self._end(job_id, now)
+        if state == "running" and job.get("holder") == self.holder and not job.get("startedAt"):
+            return self._start(job, now, end)  # our claim went through, the rest failed: retry
         return None
+
+    def _start(self, job: dict[str, Any], now: datetime, end: datetime) -> str | None:
+        """Set the job's mode once, then record the mode it replaced in the job."""
+        job_id = str(job.get("id"))
+        previous = self._replaced.get(job_id)
+        if previous is None:
+            previous = self._apply(job, end)
+            self._replaced[job_id] = previous
+        stored = self._store.get_job(job_id)
+        if stored is None or stored.get("state") != "running":
+            # Cancelled while the mode was being set: keep the cancel and undo the change.
+            self._undo(job, previous)
+            self._replaced.pop(job_id, None)
+            return None
+        stored.update(prev=previous.stored_json(), startedAt=iso_utc(now))
+        self._store.put_job(stored)
+        self._replaced.pop(job_id, None)
+        logger.info("Scheduler: maintenance %s started (job %s, until %s)", job.get("mode"), job_id, end)
+        return f"started {job_id}"
+
+    def _end(self, job_id: str, now: datetime) -> str | None:
+        """Restore the previous mode first, then mark the job done: a failed restore is retried."""
+        stored = self._store.get_job(job_id)
+        if stored is None or stored.get("state") != "running":
+            return None  # another instance (or an admin) ended it
+        self.restore(stored)
+        if not self._store.claim_job(job_id, self.holder, {"running"}, to_state="succeeded"):
+            return None
+        self._finish(job_id, now)
+        logger.info("Scheduler: maintenance job %s finished, previous mode restored", job_id)
+        return f"finished {job_id}"
 
     def _apply(self, job: dict[str, Any], end: datetime) -> Maintenance:
         """Set the job's mode; return the mode it replaces."""
@@ -202,12 +238,17 @@ class Scheduler:
         return previous[-1]
 
     def restore(self, job: dict[str, Any]) -> None:
-        """Put back the mode the job replaced, unless an admin has changed it since."""
-        stored = self._store.get_job(str(job.get("id"))) or job
-        prev = Maintenance.from_json(stored.get("prev"))
+        """Put back the mode the job replaced, unless an admin has changed it since.
 
+        Safe to repeat: once the job's mode is gone, nothing is written.
+        """
+        stored = job if "prev" in job else (self._store.get_job(str(job.get("id"))) or job)
+        prev = self._replaced.get(str(job.get("id"))) or Maintenance.from_json(stored.get("prev"))
+        self._undo(stored, prev)
+
+    def _undo(self, job: dict[str, Any], prev: Maintenance) -> None:
         def change(current: SiteSettings) -> SiteSettings:
-            if current.maintenance.mode != stored.get("mode"):
+            if current.maintenance.mode != job.get("mode"):
                 return current  # someone chose another mode meanwhile: keep it
             return replace(current, maintenance=prev)
 

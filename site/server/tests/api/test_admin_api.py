@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from app.auth.identity import Identity
 from app.clock import FixedClock
 from app.config import SITE_DIR
+from app.store.base import Conflict, Unavailable
 from tests.api.conftest import API, NOW_MS, main, runtime, sign_in, store, sync
 
 ADMIN = "boss@example.com"
@@ -128,6 +129,48 @@ def test_destructive_actions_need_recent_sign_in_and_confirmation(admin: TestCli
         assert response.json()["code"] == "reauth_required"
     # read-only maintenance is not destructive: no confirmation, any sign-in age
     assert put(admin, "/api/admin/maintenance", {"mode": "read_only"}).status_code == 200
+
+
+def test_scheduling_full_and_cancelling_need_a_recent_sign_in(admin: TestClient) -> None:
+    full = {
+        "kind": "maintenance",
+        "mode": "full",
+        "startAt": "2026-10-20T01:00:00Z",
+        "durationMin": 15,
+        "confirm": "FULL",
+    }
+    read_only = post(admin, "/api/admin/jobs", {**full, "mode": "read_only"})
+    assert read_only.status_code == 201
+    job_id = read_only.json()["job"]["id"]
+    session(admin, auth_age_s=24 * 3600 + 1)
+    for url, body in (("/api/admin/jobs", full), (f"/api/admin/jobs/{job_id}/cancel", {"confirm": "CANCEL"})):
+        response = post(admin, url, body)
+        assert response.status_code == 403, url
+        assert response.json()["code"] == "reauth_required"
+    assert admin.get(f"/api/admin/jobs/{job_id}").json()["job"]["state"] == "scheduled"
+    session(admin, auth_age_s=24 * 3600 - 60)  # just inside the window
+    assert post(admin, "/api/admin/jobs", full).status_code == 201
+    assert post(admin, f"/api/admin/jobs/{job_id}/cancel", {"confirm": "CANCEL"}).status_code == 200
+
+
+def test_cancel_restores_the_mode_before_the_job_is_marked(admin: TestClient) -> None:
+    rt = runtime(admin)
+    body = {"kind": "maintenance", "mode": "read_only", "startAt": "tonight", "durationMin": 30}
+    job = post(admin, "/api/admin/jobs", body).json()["job"]
+    rt.clock.set(int(datetime.fromisoformat(job["startAt"]).timestamp() * 1000))  # type: ignore[attr-defined]
+    session(admin)
+    assert admin.post("/api/test/tick", headers={"X-StudyHubs": "1"}).json()["events"] == [
+        f"started {job['id']}"
+    ]
+    store(admin).fail_next("put_setting", Unavailable("blip"))
+    failed = post(admin, f"/api/admin/jobs/{job['id']}/cancel", {"confirm": "CANCEL"})
+    assert failed.status_code == 503
+    # Nothing half-done: the window still runs and can be cancelled again.
+    assert admin.get(f"/api/admin/jobs/{job['id']}").json()["job"]["state"] == "running"
+    assert admin.get("/api/admin/maintenance").json()["mode"] == "read_only"
+    retried = post(admin, f"/api/admin/jobs/{job['id']}/cancel", {"confirm": "CANCEL"})
+    assert retried.json()["job"]["state"] == "cancelled"
+    assert admin.get("/api/admin/maintenance").json()["mode"] == "off"
 
 
 # -- §19 stats -------------------------------------------------------------------------------------
@@ -457,6 +500,33 @@ def test_backup_in_read_only_already_is_consistent(admin: TestClient, tmp_path: 
     path.write_bytes(data)
     assert verify(path)["consistent"] is True
     assert admin.get("/api/admin/maintenance").json()["message"] == "Planned"  # untouched
+
+
+def test_backup_read_only_survives_a_racing_settings_write(admin: TestClient, tmp_path: Path) -> None:
+    """Another instance writes meta/settings while the backup enters read-only: the write is
+    retried, the file is consistent, and the mode the backup replaced comes back after it."""
+    seed_learners(admin, 2)
+    put(admin, "/api/admin/settings", {"notice": "Before"})
+    store(admin).fail_next("put_setting", Conflict("another instance wrote first"))
+    _, data = download(admin, {"requireReadOnly": True, "confirm": "BACKUP"})
+    path = tmp_path / "x.backup"
+    path.write_bytes(data)
+    assert verify(path)["consistent"] is True
+    assert admin.get("/api/admin/maintenance").json()["mode"] == "off"
+
+
+def test_backup_that_cannot_enter_read_only_leaves_the_mode_alone(admin: TestClient) -> None:
+    seed_learners(admin, 1)
+    ticket = post(admin, "/api/admin/backups", {"requireReadOnly": True, "confirm": "BACKUP"}).json()[
+        "ticket"
+    ]
+    store(admin).fail_next("put_setting", Unavailable("blip"))
+    with pytest.raises(Unavailable):
+        admin.get(f"/api/admin/backups/{ticket}")
+    # An admin sets read-only for other reasons; the failed backup must not undo it later.
+    put(admin, "/api/admin/maintenance", {"mode": "read_only", "message": "Admin's own"})
+    assert runtime(admin).backups.running is False
+    assert admin.get("/api/admin/maintenance").json()["message"] == "Admin's own"
 
 
 def test_now_is_inside_the_valid_range() -> None:
