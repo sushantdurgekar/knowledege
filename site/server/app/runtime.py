@@ -26,6 +26,8 @@ from app.jobs.scheduler import Scheduler
 from app.progress.service import ProgressService
 from app.quota.guard import Guard
 from app.quota.meter import Meter
+from app.restore.runner import RestoreService
+from app.restore.uploads import Uploads
 from app.store.base import Store
 from app.store.factory import make_store
 
@@ -92,6 +94,7 @@ class Runtime:
     # Set by create_app (M2): the maintenance-window scheduler and the backup tickets.
     scheduler: Any = None
     backups: Any = None
+    restore: Any = None  # M3: RestoreService (uploads, validation, restore jobs)
 
     @cached_property
     def progress(self) -> ProgressService:
@@ -132,6 +135,20 @@ def build_runtime(
     )
     runtime.scheduler = Scheduler(store, site, clock, grace_min=settings.job_grace_min, quiet=meter.quiet)
     runtime.backups = Backups(clock)
+    uploads = Uploads(settings.data_dir, max_bytes=settings.max_backup_bytes)
+    uploads.recover()
+    runtime.restore = RestoreService(
+        store,
+        site,
+        settings,
+        clock,
+        uploads,
+        holder=runtime.scheduler.holder,
+        writes_today=lambda: meter.today()["writes"],
+        reads_today=lambda: meter.today()["reads"],
+        batch_delay_s=settings.restore_batch_delay_ms / 1000,
+    )
+    runtime.scheduler.restores = runtime.restore
     return runtime
 
 

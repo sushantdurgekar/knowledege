@@ -208,6 +208,8 @@ class Settings:
     # M3: the Postgres store
     database_url: str | None = field(default=None, repr=False)
     pg_pool_max: int = 5
+    # APP_ENV=test only: a pause after each restore batch (the crash-and-resume test).
+    restore_batch_delay_ms: int = 0
 
     def __post_init__(self) -> None:
         if self.app_env not in APP_ENVS:
@@ -351,6 +353,10 @@ class Settings:
             raise ConfigError("MAX_BACKUP_BYTES must be at least 1 MiB")
         if self.host_egress_month < 1:
             raise ConfigError("HOST_EGRESS_MONTH must be positive")
+        if self.restore_batch_delay_ms and not self.is_test:
+            raise ConfigError("RESTORE_BATCH_DELAY_MS is a test setting (APP_ENV=test only)")
+        if not 0 <= self.restore_batch_delay_ms <= 60_000:
+            raise ConfigError("RESTORE_BATCH_DELAY_MS must be 0-60000")
 
     def is_admin_email(self, email: str | None) -> bool:
         """ADMIN_EMAILS membership, case-insensitive (empty list = no admins)."""
@@ -483,6 +489,7 @@ class Settings:
             "MAX_BACKUP_BYTES": "max_backup_bytes",
             "HOST_EGRESS_MONTH": "host_egress_month",
             "PG_POOL_MAX": "pg_pool_max",
+            "RESTORE_BATCH_DELAY_MS": "restore_batch_delay_ms",
         }
         for name, attr in integers.items():
             if (number := get_int(name)) is not None:

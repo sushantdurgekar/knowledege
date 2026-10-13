@@ -1,4 +1,9 @@
-"""Maintenance windows on a schedule (build-contracts.md section 19; restore jobs are M3).
+"""Maintenance windows and restore jobs on a schedule (build-contracts.md sections 19, 24).
+
+Restore jobs (`kind: "restore"`) are handed to `RestoreService.step` (app/restore/runner.py),
+which claims them at `runAt`, resumes `paused_quota` jobs after the quota reset and
+reclaims a `running` job whose heartbeat went stale; everything below is about
+maintenance windows.
 
 - An asyncio task ticks every 20 s. Jobs are cached and re-read every 5 minutes (at
   most 288 reads a day, plus one per active job) and right after an admin edit.
@@ -95,6 +100,7 @@ class Scheduler:
         self.holder = f"{socket.gethostname()}-{os.getpid()}-{secrets.token_hex(3)}"
         self.last_tick: datetime | None = None
         self.last_error: str | None = None
+        self.restores: Any = None  # RestoreService (set by build_runtime)
 
     # -- cache ----------------------------------------------------------------------------
 
@@ -126,12 +132,29 @@ class Scheduler:
         """The soonest scheduled window starting within 10 minutes (no store read)."""
         now = self._clock.now()
         for job in self.active():
+            if job.get("state") != "scheduled":
+                continue
+            if job.get("kind") == "restore":  # a restore runs in full maintenance
+                start = parse_iso(job.get("runAt"))
+                if start is not None and start - NOTICE_BEFORE <= now < start:
+                    return {"mode": "full", "startAt": job.get("runAt"), "message": None}
+                continue
             span = window(job)
-            if job.get("state") != "scheduled" or span is None:
+            if span is None:
                 continue
             if span[0] - NOTICE_BEFORE <= now < span[0]:
                 return {"mode": job.get("mode"), "startAt": job.get("startAt"), "message": job.get("message")}
         return None
+
+    def kick(self) -> None:
+        """Run a tick soon in a worker thread (a restore asked to start "now")."""
+        threading.Thread(target=self._kick, name="scheduler-kick", daemon=True).start()
+
+    def _kick(self) -> None:
+        try:
+            self.tick()
+        except Exception:
+            logger.exception("Scheduler kick failed")
 
     # -- one tick -------------------------------------------------------------------------------
 
@@ -145,6 +168,12 @@ class Scheduler:
             events: list[str] = []
             changed = False
             for job in self.active():
+                if (
+                    job.get("kind") == "restore"
+                    and self.restores is not None
+                    and self.restores.running(job.get("id"))
+                ):
+                    continue  # its runner thread owns it
                 try:
                     event = self._step(job, now)
                 except StoreError as exc:
@@ -164,6 +193,11 @@ class Scheduler:
             return events
 
     def _step(self, job: dict[str, Any], now: datetime) -> str | None:
+        if job.get("kind") == "restore":
+            if self.restores is None:
+                return None
+            event: str | None = self.restores.step(job, now, self._grace)
+            return event
         span = window(job)
         job_id = str(job.get("id"))
         if span is None:

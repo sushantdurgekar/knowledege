@@ -8,7 +8,7 @@ everyone else gets 404 `not_found` (see `auth.py`); non-GET routes are CSRF-prot
     GET  /settings                  {tz, notice, version}
     PUT  /settings                  {tz?, notice?, version?}
     POST /jobs                      {kind:"maintenance", mode, startAt: ISO|"tonight", tz?,
-                                    durationMin, message?}
+                                    durationMin, message?} or {kind:"restore", ...} (restore.py)
     GET  /jobs, GET /jobs/{id}
     POST /jobs/{id}/cancel          {confirm:"CANCEL"}
     GET  /backups/estimate, POST /backups, GET /backups/log, GET /backups/{ticket}
@@ -31,6 +31,7 @@ from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 
 from app.admin import backups as backup_api
+from app.admin import restore as restore_api
 from app.admin import stats as stats_api
 from app.admin.auth import (
     CONFIRM_BACKUP,
@@ -47,6 +48,7 @@ from app.errors import ApiError
 from app.jobs.scheduler import parse_iso, tonight
 from app.progress.validate import loads, read_body
 from app.quota.pacific import iso_utc
+from app.restore.runner import public_job
 from app.runtime import Runtime, get_runtime
 from app.store.base import Conflict, QuotaExhausted, StoreError, new_job_id, valid_job_id
 
@@ -236,8 +238,22 @@ def _start_at(value: Any, tz: str, now: datetime) -> datetime:
 async def create_job(request: Request, admin: Admin) -> JSONResponse:
     runtime = get_runtime(request)
     data = await _body(request)
+    if data.get("kind") == "restore":
+        tz = _zone(data.get("tz") or runtime.site.current().tz)
+        job = await _call(restore_api.create_restore_job, runtime, data, _identity(admin), tz)
+        await _call(runtime.scheduler.refresh)
+        if job["runAt"] <= iso_utc(runtime.clock.now()):
+            runtime.scheduler.kick()  # "now": start without waiting for the next tick
+        logger.info(
+            "Restore (%s) of upload %s scheduled at %s (job %s)",
+            job["mode"],
+            job["uploadId"],
+            job["runAt"],
+            job["id"],
+        )
+        return JSONResponse({"job": public_job(job)}, status_code=201, headers=NO_STORE)
     if data.get("kind") != "maintenance":
-        raise ApiError(422, "invalid", 'kind must be "maintenance" (restore jobs arrive in M3)')
+        raise ApiError(422, "invalid", 'kind must be "maintenance" or "restore"')
     mode = data.get("mode")
     if mode not in ("read_only", "full"):
         raise ApiError(422, "invalid", "mode must be read_only or full")
@@ -278,7 +294,7 @@ async def create_job(request: Request, admin: Admin) -> JSONResponse:
 async def list_jobs(request: Request, admin: Admin) -> JSONResponse:
     runtime = get_runtime(request)
     jobs = await _call(runtime.store.list_jobs, None, 50)
-    return JSONResponse({"jobs": jobs}, headers=NO_STORE)
+    return JSONResponse({"jobs": [public_job(j) for j in jobs]}, headers=NO_STORE)
 
 
 async def _job(runtime: Runtime, job_id: str) -> dict[str, Any]:
@@ -292,13 +308,15 @@ async def _job(runtime: Runtime, job_id: str) -> dict[str, Any]:
 
 @router.get("/jobs/{job_id}")
 async def get_job(request: Request, job_id: str, admin: Admin) -> JSONResponse:
-    return JSONResponse({"job": await _job(get_runtime(request), job_id)}, headers=NO_STORE)
+    return JSONResponse({"job": public_job(await _job(get_runtime(request), job_id))}, headers=NO_STORE)
 
 
 def _cancel(runtime: Runtime, job: dict[str, Any], holder: str) -> dict[str, Any] | None:
     store = runtime.store
     job_id = str(job["id"])
     state = job.get("state")
+    if job.get("kind") == "restore" and state != "scheduled":
+        return None  # a restore can be cancelled only before it starts
     if state == "scheduled":
         if not store.claim_job(job_id, holder, {"scheduled"}, to_state="cancelled"):
             return None
@@ -327,7 +345,7 @@ async def cancel_job(request: Request, job_id: str, admin: Admin) -> JSONRespons
     cancelled = await _call(_cancel, runtime, job, f"admin:{admin.public_id}")
     if cancelled is None:
         raise ApiError(409, "conflict", f"The job is {job.get('state')} and can no longer be cancelled")
-    return JSONResponse({"job": cancelled}, headers=NO_STORE)
+    return JSONResponse({"job": public_job(cancelled)}, headers=NO_STORE)
 
 
 # -- backups -------------------------------------------------------------------------------------

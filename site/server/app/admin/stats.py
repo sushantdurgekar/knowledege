@@ -17,6 +17,7 @@ from typing import Any
 
 from app.admin.backups import read_meta
 from app.quota.pacific import iso_utc, local_date, next_reset, zone
+from app.restore.runner import public_job
 
 FIRESTORE_STORAGE_LIMIT = 1_073_741_824  # Spark: 1 GiB stored
 FIRESTORE_EGRESS_LIMIT = 10_737_418_240  # Spark: 10 GiB a month
@@ -94,7 +95,9 @@ def build_stats(runtime: Any) -> dict[str, Any]:
     earlier = MONTH.earlier_days(store, local_date(now, settings.quota_tz).date())
     fs_egress = earlier.get("fsEgress", 0) + today.get("fsEgress", 0)
     app_egress = earlier.get("appEgress", 0) + today.get("appEgress", 0)
-    missed = store.list_jobs({"missed"}, limit=5)
+    flagged = store.list_jobs({"missed", "needs_attention"}, limit=10)
+    missed = [j for j in flagged if j.get("state") == "missed"][:5]
+    attention = [public_job(j) for j in flagged if j.get("state") == "needs_attention"][:5]
     policy = guard.policy()
     tier = guard.tier_number()
     storage = meta["storage"] or {}
@@ -132,8 +135,11 @@ def build_stats(runtime: Any) -> dict[str, Any]:
         "breakers": {kind: _iso_or_none(guard.breaker_until(kind)) for kind in ("writes", "reads")},
         "maintenance": {**runtime.maintenance(), "forced": runtime.site.forced},
         "upcoming": runtime.upcoming(),
-        "jobs": runtime.scheduler.active()[:10] if runtime.scheduler is not None else [],
+        "jobs": [public_job(j) for j in runtime.scheduler.active()[:10]]
+        if runtime.scheduler is not None
+        else [],
         "missedJobs": missed,
+        "attentionJobs": attention,
         "lastBackup": meta["log"][-1] if meta["log"] else None,
         "tier": policy.tier,
         "policy": policy.to_json(),

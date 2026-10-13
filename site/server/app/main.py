@@ -29,6 +29,7 @@ from starlette.types import ASGIApp
 
 from app import __version__, api_routes, hubs_routes, static_routes
 from app.account import routes as account_routes
+from app.admin import restore as admin_restore
 from app.admin import routes as admin_routes
 from app.admin.site import SettingsRefreshMiddleware
 from app.api_gzip import ApiGZipMiddleware
@@ -181,6 +182,7 @@ def create_app(
 
         app.include_router(testing_routes.router)
     app.include_router(account_routes.router)
+    app.include_router(admin_restore.router)  # before admin_routes: its catch-all is last
     app.include_router(admin_routes.router)
     app.include_router(hubs_routes.router)
     app.include_router(static_routes.router)
