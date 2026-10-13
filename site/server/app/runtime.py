@@ -149,6 +149,7 @@ def build_runtime(
         batch_delay_s=settings.restore_batch_delay_ms / 1000,
     )
     runtime.scheduler.restores = runtime.restore
+    runtime.restore.on_change = runtime.scheduler.invalidate
     return runtime
 
 

@@ -126,7 +126,7 @@ class Scheduler:
         """Cached scheduled and running jobs, soonest first (no store read)."""
         with self._lock:
             jobs = list(self._jobs)
-        return sorted(jobs, key=lambda j: (str(j.get("startAt")), str(j.get("id"))))
+        return sorted(jobs, key=lambda j: (str(j.get("startAt") or j.get("runAt")), str(j.get("id"))))
 
     def upcoming(self) -> dict[str, Any] | None:
         """The soonest scheduled window starting within 10 minutes (no store read)."""

@@ -141,6 +141,7 @@ class RestoreService:
         self.batch_delay_s = batch_delay_s
         self.fs_rate = fs_rate
         self._lock = threading.Lock()
+        self.on_change: Callable[[], None] = lambda: None  # the scheduler's cache invalidation
         self._threads: dict[str, threading.Thread] = {}
         self._validations: dict[str, threading.Thread] = {}
         self._beat: dict[str, float] = {}
@@ -272,7 +273,16 @@ class RestoreService:
             return None
         if state == "running":
             if job.get("holder") == self.holder:
-                self._start(job_id)  # ours, but no thread (it stopped early): carry on
+                # Ours but no thread: the cache may predate a pause or the end; re-read it.
+                current = store.get_job(job_id)
+                if (
+                    current is None
+                    or current.get("state") != "running"
+                    or current.get("holder") != self.holder
+                ):
+                    self.on_change()
+                    return None
+                self._start(job_id)  # it stopped early: carry on
                 return f"resumed {job_id}"
             beat = parse_iso(job.get("heartbeat")) or parse_iso(job.get("claimedAt"))
             if beat is not None and now - beat <= STALE_AFTER:
@@ -326,6 +336,7 @@ class RestoreService:
         finally:
             with self._lock:
                 self._beat.pop(job_id, None)
+            self.on_change()  # the scheduler re-reads the job on its next tick
 
     def _job(self, job_id: str) -> dict[str, Any]:
         job = self._retry(self.store.get_job, job_id)
@@ -459,6 +470,23 @@ class RestoreService:
             return FS_BATCH_RECORDS, BATCH_BYTES
         return BATCH_RECORDS, BATCH_BYTES
 
+    def _budget_left(self) -> int | None:
+        """Firestore writes left today under the budget (None: no budget applies)."""
+        if self.store.kind != "firestore" or not self.settings.quota_enforce:
+            return None
+        return int(self.settings.write_budget) - self._writes_today()
+
+    def _cap(self, job_id: str) -> int:
+        """Records in the next batch: at most what today's write budget still allows."""
+        max_records, _ = self._limits()
+        left = self._budget_left()
+        if left is None:
+            return max_records
+        if left < 2:  # one record and the checkpoint
+            self._pause(job_id, f"today's write budget is used up ({max(0, left)} writes left)")
+            raise _Paused()
+        return min(max_records, left - 1)
+
     def _apply(self, job: dict[str, Any], ready: Path, checkpoint: dict[str, Any]) -> dict[str, Any]:
         job_id = str(job["id"])
         mode = str(job.get("mode") or "merge")
@@ -472,7 +500,8 @@ class RestoreService:
         }
         if "site" in checkpoint:
             cp["site"] = checkpoint["site"]
-        max_records, max_bytes = self._limits()
+        _, max_bytes = self._limits()
+        max_records = self._cap(job_id)
         stones: set[str] = set()
         target_tomb: dict[str, bool] = {}
         pending: list[tuple[int, dict[str, Any]]] = []
@@ -491,6 +520,7 @@ class RestoreService:
             if len(pending) >= max_records or size >= max_bytes:
                 cp = self._flush(job_id, mode, cp, pending, stones, target_tomb, started)
                 pending, size = [], 0
+                max_records = self._cap(job_id)
         if pending:
             cp = self._flush(job_id, mode, cp, pending, stones, target_tomb, started)
         return cp
@@ -574,8 +604,8 @@ class RestoreService:
 
     def _throttle(self, job_id: str, ops: int, started: float) -> None:
         """Firestore: pace writes (50 ops/s, +50% every 5 min) and stop at the day's budget."""
-        left = int(self.settings.write_budget) - self._writes_today()
-        if ops > left:
+        left = self._budget_left()
+        if left is not None and ops > left:
             self._pause(job_id, f"today's write budget is used up ({left} writes left)")
             raise _Paused()
         steps = int((self._mono() - started) // FS_RATE_EVERY_S)

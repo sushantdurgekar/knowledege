@@ -2,9 +2,10 @@
 
 FastAPI backend for the Study Hubs site. It serves the hub files from the collector
 output, the React shell from `public/`, and the JSON API: accounts (Firebase Auth
-session cookies) and progress sync (Firestore). Interfaces are fixed in
+session cookies) and progress sync (Firestore, or Postgres from M3), the admin API with
+backups (M2) and restore (M3). Interfaces are fixed in
 [`../docs/build-contracts.md`](../docs/build-contracts.md): section 5 for routes and
-headers, sections 8–12 and 15 for M1.
+headers, sections 8–12 and 15 for M1, 17–22 for M2, 23–26 for M3.
 
 ## Develop
 
@@ -40,6 +41,24 @@ the adapter's own read/write counter it counts the documents each gRPC call bill
 (`CountingApi`), so the cost claims (GET unchanged 1 read, changed 2, a 3-part sync
 1 read + 1 write) are checked on the wire.
 
+### Contract tests on Postgres
+
+The Postgres half of `tests/contract/` (the store contract, the APIs and restore on
+Postgres, and S18: a real server killed with `-9` mid-restore, restarted and resumed)
+runs when `DATABASE_URL_TEST` names a throwaway database; it is skipped otherwise, and
+fails instead with `REQUIRE_PG=1`. `site/scripts/dev_pg.sh` starts one (Postgres 16:
+`initdb` + `pg_ctl` in a temp dir, port 54329, local trust auth, fsync off):
+
+```bash
+sh site/scripts/dev_pg.sh                                  # prints the URL
+export DATABASE_URL_TEST=$(sh site/scripts/dev_pg.sh url)
+cd site/server && REQUIRE_PG=1 .venv/bin/pytest tests/contract
+sh site/scripts/dev_pg.sh stop                             # stops it, deletes the data dir
+```
+
+Each `fresh` test gets a schema of its own (dropped afterwards) and S18 a database of
+its own. Run the server on it with `STORE=postgres DATABASE_URL=$DATABASE_URL_TEST`.
+
 ## Layout
 
 | Path | What |
@@ -54,16 +73,18 @@ the adapter's own read/write counter it counts the documents each gRPC call bill
 | `app/api_routes.py` | `/healthz`, `/api/version` |
 | `app/auth/` | `routes.py` (`/api/config`, `/api/me`, `/api/auth/session`, `/api/auth/logout`), `firebase.py`, `fake.py`, `session.py` (cookies, publicId), `deps.py` (who is asking), `csrf.py`, `ratelimit.py` |
 | `app/progress/` | `routes.py` (`/api/progress/{hubId}`, `/api/sync`), `seed.py` (`/api/seed/{id}.js`), `validate.py`, `decide.py` (newest wins), `service.py` |
-| `app/store/` | `base.py` (protocol, errors, records), `memory.py`, `firestore.py`, `factory.py` |
+| `app/store/` | `base.py` (protocol, errors, records, restore batch helpers), `memory.py`, `firestore.py`, `postgres.py` (M3: pool, migrations under `pg_advisory_lock(842001)`), `sql/0001_init.sql`, `factory.py` |
 | `app/quota/` | `pacific.py` (quota days), `meter.py`, `guard.py` (tiers, budget, breaker, per-user cap), `policy.py`, `egress.py` |
 | `app/account/routes.py` | M2: `/api/me/progress`, `/api/me/export`, `DELETE /api/me` (cascade, tombstone, Auth user, cookies) |
 | `app/admin/` | M2: `auth.py` (admin predicate, 404 for others, destructive-action rules), `routes.py` (`/api/admin/*`), `site.py` (`meta/settings`: maintenance, tz, notice; 60 s refresh), `stats.py`, `backups.py` (estimate, tickets, streaming run, `meta/backups` log) |
-| `app/jobs/scheduler.py` | M2: maintenance windows; asyncio tick every 20 s, jobs cached 5 min, `claim_job` transitions |
-| `app/backup/` | M2: `.backup` v1 `format.py`, `writer.py` (document-id pages → gzip NDJSON → optional frames), `crypto.py` (AES-256-GCM-STREAM-1, scrypt) |
+| `app/jobs/scheduler.py` | M2: maintenance windows; asyncio tick every 20 s, jobs cached 5 min, `claim_job` transitions; M3: hands restore jobs to `RestoreService.step` |
+| `app/backup/` | M2: `.backup` v1 `format.py`, `writer.py` (document-id pages → gzip NDJSON → optional frames), `crypto.py` (AES-256-GCM-STREAM-1, scrypt); M3: `reader.py` (the streaming validator) |
+| `app/restore/` | M3: `uploads.py` (staging in `DATA_DIR/restore/<id>/`), `plan.py` (what a backup would do to the target), `runner.py` (validation thread, the restore job: checkpointed batches, quota pause, replace swap, heartbeat/reclaim, verify) |
+| `app/admin/restore.py` | M3: `/api/admin/restore/uploads*` and restore jobs for `POST /api/admin/jobs` |
 | `app/testing/routes.py` | `/api/test/*` (M2 adds `POST /api/test/tick`), mounted only when `APP_ENV=test` |
 | `app/security.py`, `app/api_gzip.py` | global headers; gzip for `/api` only |
 | `app/errors.py` | the one JSON error shape `{code, message, retryAfter?, retryAt?}` |
-| `tests/unit`, `tests/api`, `tests/contract`, `tests/test_*.py` | unit, API, store contract (+ M2 APIs and backups on each store), M0 suites |
+| `tests/unit`, `tests/api`, `tests/contract`, `tests/test_*.py` | unit, API, store contract (+ M2 APIs, backups and M3 restore on each store, S18 crash/resume), M0 suites |
 
 ## Environment
 
@@ -111,6 +132,27 @@ listed in `ADMIN_EMAILS`; everyone else gets 404 from `/api/admin/*`.
 | `JOB_GRACE_MIN` | `60` (a window that late is `missed`) |
 | `MAX_BACKUP_BYTES` | `2147483648` |
 | `HOST_EGRESS_MONTH` | `5000000000` (the host meter on the admin overview) |
+
+M3 (build-contracts sections 23–24):
+
+| Variable | Default |
+|---|---|
+| `STORE=postgres` + `DATABASE_URL` | `postgresql://user:pass@host:5432/db`; the schema is applied at startup (first use) |
+| `PG_POOL_MAX` | `5` |
+| `QUOTA_ENFORCE`, `SYNC_TIERS` with `STORE=postgres` | `0` and `1:30:0:30` (one tier, a 30 s flush); explicit values win |
+| `RESTORE_BATCH_DELAY_MS` | `0`; `APP_ENV=test` only (slows a restore down for the crash test) |
+
+**Restore** (admin: Restore tab, or the API in `app/admin/restore.py`): upload the
+`.backup` in 4 MiB chunks, validate it (decrypts with the passphrase, checks every frame,
+line, count and the end sha256, then reports the plan against this store; nothing is
+written), then run a `merge` (newest wins; Firestore too) or a `replace` (Postgres only)
+job now, tonight or after the next Firestore quota reset. The job runs in `full`
+maintenance and puts the previous mode back when it succeeds. Uploads live in
+`DATA_DIR`, which is **not persistent on Render free**: upload, validate and run the
+restore in one sitting there (or use a host where `DATA_DIR` is a volume, e.g. `/data`
+on AWS). A job left `running` by a dead instance is reclaimed 2 minutes after its last
+heartbeat and resumes from its checkpoint; a failed verification leaves the site in
+`full` maintenance with the job in `needs_attention` (shown on the overview).
 
 Backups are checked offline with `python site/scripts/backup_tool.py inspect|verify|decrypt <file>`
 (standard library + `cryptography`; the passphrase comes from `--passphrase-file`,

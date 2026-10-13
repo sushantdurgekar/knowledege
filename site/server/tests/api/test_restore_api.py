@@ -414,3 +414,60 @@ def test_running_restore_cannot_be_cancelled_and_reclaims_after_a_stale_heartbea
     assert done["holder"] == rt.scheduler.holder
     assert state_of(target) == state_of(source)
     assert rt.maintenance_mode == "off"
+
+
+def test_quota_exhausted_pauses_until_after_the_reset(
+    make_client: Any, tmp_path: Path, source: MemoryStore
+) -> None:
+    from datetime import datetime
+
+    from app.store.base import QuotaExhausted
+
+    path = write_backup(source, tmp_path / "s.backup")
+    target = MemoryStore()
+    client = admin_client(make_client, tmp_path, store=target)
+    rt = runtime(client)
+    upload_id = upload(client, path)
+    validate(client, upload_id)
+    reset = datetime(2026, 10, 13, 7, tzinfo=datetime.now().astimezone().tzinfo)
+    target.fail_next("restore_batch", QuotaExhausted("writes", reset))
+    job = start_job(client, upload_id).json()["job"]
+    paused = wait_job(client, job["id"], states={"paused_quota"})
+    assert paused["resumeAt"] == "2026-10-13T07:05:00Z"  # the next Pacific midnight + 5 min
+    assert "quota" in paused["pauseReason"]
+    assert rt.maintenance_mode == "full"
+    assert rt.scheduler.tick() == []  # not before resumeAt
+    clock = rt.clock
+    assert isinstance(clock, FixedClock)
+    clock.set(int(datetime.fromisoformat("2026-10-13T07:05:00+00:00").timestamp() * 1000))
+    assert rt.scheduler.tick() == [f"resumed {job['id']}"]
+    done = wait_job(client, job["id"])
+    assert done["state"] == "succeeded", done
+    assert state_of(target) == state_of(source)
+    assert rt.maintenance_mode == "off"
+
+
+def test_plan_on_a_firestore_target_estimates_writes(tmp_path: Path, source: MemoryStore) -> None:
+    from app.backup import reader
+    from app.restore.plan import build_plan
+
+    class FirestoreLike(MemoryStore):
+        kind = "firestore"
+
+    path = write_backup(source, tmp_path / "s.backup")
+    _, verified = reader.validate_file(
+        path, tmp_path / "ready.ndjson.gz", passphrase=None, max_part_gz=131_072
+    )
+    target = FirestoreLike()
+    target.put_parts("u0001", "ai103", {"main": part("ai103", "main", T + 999)}, NOW_MS)
+    ready = tmp_path / "ready.ndjson.gz"
+    plan = build_plan(
+        target, ready, verified.counts, reads_left=50_000, writes_left=40, writes_per_day=19_000
+    )
+    assert plan["compared"] is True
+    # 12 users + 12 ai103 docs + 4 legacy docs + 0 tombstones + 1 checkpoint
+    assert (plan["estWrites"], plan["daysNeeded"], plan["fitsToday"]) == (29, 1, True)
+    short = build_plan(target, ready, verified.counts, reads_left=10, writes_left=10, writes_per_day=20)
+    assert short["compared"] is False  # the lookups would cost more than 80% of the reads left
+    assert "users" not in short
+    assert (short["estWrites"], short["daysNeeded"], short["fitsToday"]) == (29, 2, False)
