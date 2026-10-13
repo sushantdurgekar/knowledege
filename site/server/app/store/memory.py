@@ -29,20 +29,27 @@ from app.store.base import (
     COUNT_KINDS,
     PARTS,
     AccountDeleted,
+    BatchResult,
+    Conflict,
     HubSummary,
-    LaterMethods,
+    JobLost,
     OpCounter,
     PartIn,
     PartInfo,
     PartOut,
     PartResult,
+    RestoreItem,
     Tombstone,
     UserRecord,
+    check_batch,
     check_setting_version,
+    empty_counts,
     merged_done,
+    newest_parts,
     progress_doc_id,
     progress_range,
     tombstone_hash,
+    with_counts,
 )
 
 LOGIN_TOUCH_INTERVAL = timedelta(hours=24)
@@ -66,7 +73,7 @@ class _ProgressDoc:
     t: int = 0  # ms of the last write
 
 
-class MemoryStore(LaterMethods):
+class MemoryStore:
     kind = "memory"
 
     def __init__(self, *, app_env: str | None = None) -> None:
@@ -81,6 +88,8 @@ class MemoryStore(LaterMethods):
         self._settings: dict[str, tuple[dict[str, Any], int]] = {}
         self._tombstones: dict[str, datetime] = {}
         self._jobs: dict[str, dict[str, Any]] = {}
+        # job id -> rows staged by a `replace` restore: {"user": [...], "progress": [...]}
+        self._imports: dict[str, dict[str, list[Any]]] = {}
         self._faults: list[list[Any]] = []  # [op, exc, remaining]
 
     # -- fault hooks ---------------------------------------------------------------
@@ -109,6 +118,7 @@ class MemoryStore(LaterMethods):
             self._settings.clear()
             self._tombstones.clear()
             self._jobs.clear()
+            self._imports.clear()
             self._faults.clear()
             self.latency_ms = 0
         self.ops.reset()
@@ -406,6 +416,157 @@ class MemoryStore(LaterMethods):
             jobs = [deepcopy(self._jobs[k]) for k in ids]
         self.ops.add(reads=max(1, len(jobs)))
         return jobs
+
+    def update_job(self, id: str, fields: dict[str, Any], *, expect: dict[str, Any]) -> bool:
+        """Merge `fields` into the job if every `expect` field has that value (atomic)."""
+        self._enter("update_job")
+        with self._lock:
+            self.ops.add(reads=1)
+            job = self._jobs.get(id)
+            if job is None or any(job.get(k) != v for k, v in expect.items()):
+                return False
+            job.update(deepcopy(fields))
+            self.ops.add(writes=1)
+            return True
+
+    # -- M3: restore -----------------------------------------------------------------------------
+
+    def restore_lookup(
+        self, uids: list[str], docs: list[tuple[str, str]]
+    ) -> tuple[set[str], dict[tuple[str, str], dict[str, int]]]:
+        self._enter("restore_lookup")
+        with self._lock:
+            existing = {uid for uid in uids if uid in self._users}
+            stamps: dict[tuple[str, str], dict[str, int]] = {}
+            for uid, hub in docs:
+                doc = self._progress.get(progress_doc_id(uid, hub))
+                if doc is not None:
+                    stamps[(uid, hub)] = {part: stored.upd for part, stored in doc.parts.items()}
+        self.ops.add(reads=len(uids) + len(docs))
+        return existing, stamps
+
+    def _merge_parts(
+        self, uid: str, hub: str, parts: dict[str, PartIn], now_ms: int
+    ) -> dict[str, PartResult]:
+        """Newest-wins for one hub (the lock is held by the caller)."""
+        doc_id = progress_doc_id(uid, hub)
+        doc = self._progress.get(doc_id)
+        stored = {p: s.upd for p, s in doc.parts.items()} if doc else {}
+        results: dict[str, PartResult] = {}
+        accepted: set[str] = set()
+        for part, incoming in parts.items():
+            status = decide(stored.get(part), incoming.upd)
+            results[part] = PartResult(status, incoming.upd if status == "accepted" else stored[part])
+            if status == "accepted":
+                accepted.add(part)
+        if accepted:
+            if doc is None:
+                doc = self._progress[doc_id] = _ProgressDoc(uid=uid, hub=hub)
+            for part in accepted:
+                p = parts[part]
+                doc.parts[part] = _StoredPart(p.upd, p.gz, p.raw_len)
+            done = merged_done(parts, accepted)
+            if done is not None:
+                doc.done = done
+            doc.t = now_ms
+        return results
+
+    def restore_batch(
+        self,
+        recs: list[RestoreItem],
+        *,
+        mode: str,
+        job_id: str,
+        checkpoint: dict[str, Any],
+        holder: str,
+    ) -> BatchResult:
+        """Apply one batch and store its checkpoint under one lock (exactly once)."""
+        if mode not in ("merge", "replace"):
+            raise ValueError(f"unknown restore mode {mode!r}")
+        self._enter("restore_batch")  # an injected fault applies nothing
+        now_ms = int(time.time() * 1000)
+        written, kept = empty_counts(), empty_counts()
+        with self._lock:
+            stored = self._jobs.get(job_id)
+            self.ops.add(reads=1)
+            if not check_batch(stored, checkpoint, holder):
+                return BatchResult(False, deepcopy((stored or {}).get("checkpoint") or {}))
+            assert stored is not None  # noqa: S101 - check_batch raised otherwise
+            for item in recs:
+                if item.t == "tombstone" and item.tombstone is not None:
+                    if item.tombstone.h in self._tombstones:
+                        kept["tombstone"] += 1
+                    else:
+                        self._tombstones[item.tombstone.h] = item.tombstone.at
+                        written["tombstone"] += 1
+            users = [item.user for item in recs if item.t == "user" and item.user is not None]
+            if mode == "replace":
+                staged = self._imports.setdefault(job_id, {"user": [], "progress": []})
+                staged["user"].extend(users)
+                rows = [(i.uid, i.hub, i.part, i.data) for i in recs if i.t == "progress" and i.data]
+                staged["progress"].extend(rows)
+                written["user"] += len(users)
+                written["progress"] += len(rows)
+            else:
+                for user in users:
+                    if user.uid in self._users:
+                        kept["user"] += 1
+                    else:
+                        self._users[user.uid] = user
+                        written["user"] += 1
+                groups, dropped = newest_parts(recs)
+                kept["progress"] += dropped
+                for (uid, hub), parts in groups.items():
+                    for result in self._merge_parts(uid, hub, parts, now_ms).values():
+                        (written if result.status == "accepted" else kept)["progress"] += 1
+            final = with_counts(checkpoint, written, kept)
+            stored["checkpoint"] = deepcopy(final)
+        self.ops.add(writes=sum(written.values()) + 1)
+        return BatchResult(True, final, written, kept)
+
+    def swap_replace(
+        self, job_id: str, *, holder: str, expected: dict[str, int], checkpoint: dict[str, Any]
+    ) -> BatchResult:
+        """Replace every user and hub document with the staged rows (one lock)."""
+        self._enter("swap_replace")
+        with self._lock:
+            stored = self._jobs.get(job_id)
+            if stored is None or stored.get("state") != "running" or stored.get("holder") != holder:
+                raise JobLost("the restore job is no longer held by this runner")
+            if (stored.get("checkpoint") or {}).get("phase") in ("swapped", "verified"):
+                return BatchResult(False, deepcopy(stored["checkpoint"]))
+            staged = self._imports.get(job_id, {"user": [], "progress": []})
+            have = {"user": len(staged["user"]), "progress": len(staged["progress"])}
+            want = {"user": int(expected.get("user", 0)), "progress": int(expected.get("progress", 0))}
+            if have != want:
+                raise Conflict(f"staged rows {have} do not match the expected {want}")
+            users: dict[str, UserRecord] = {}
+            for user in staged["user"]:
+                users[user.uid] = user
+            progress: dict[str, _ProgressDoc] = {}
+            dones: dict[str, int] = {}
+            for uid, hub, part, data in staged["progress"]:
+                doc_id = progress_doc_id(uid, hub)
+                doc = progress.setdefault(doc_id, _ProgressDoc(uid=uid, hub=hub))
+                current = doc.parts.get(part)
+                if current is None or data.upd > current.upd:
+                    doc.parts[part] = _StoredPart(data.upd, data.gz, data.raw_len)
+                if data.done is not None:
+                    dones[doc_id] = max(dones.get(doc_id, data.done), data.done)
+            for doc_id, done in dones.items():
+                progress[doc_id].done = done
+            self._users = users
+            self._progress = progress
+            self._imports.pop(job_id, None)
+            final = deepcopy(checkpoint)
+            stored["checkpoint"] = deepcopy(final)
+        self.ops.add(writes=have["user"] + have["progress"] + 1)
+        return BatchResult(True, final)
+
+    def wipe_for_replace(self, job_id: str) -> None:
+        self._enter("wipe_for_replace")
+        with self._lock:
+            self._imports.pop(job_id, None)
 
     # -- test support --------------------------------------------------------------------
 

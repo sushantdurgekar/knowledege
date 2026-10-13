@@ -34,6 +34,9 @@ select = [
 # assert is the point of a test; tmp paths are pytest's; fixed fake secrets and seeded
 # random filler data are test inputs, not security decisions.
 "tests/**" = ["S101", "S105", "S106", "S108", "S311"]
+# The Postgres store splices only module constants (column lists) into SQL; every value
+# is a bound parameter.
+"app/store/postgres.py" = ["S608"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

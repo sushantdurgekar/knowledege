@@ -38,7 +38,7 @@ AppEnv = Literal["development", "test", "production"]
 APP_ENVS: tuple[AppEnv, ...] = ("development", "test", "production")
 LOG_LEVELS = ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG")
 AUTH_MODES = ("firebase", "fake")
-STORES = ("firestore", "memory")  # "postgres" arrives in M3
+STORES = ("firestore", "memory", "postgres")
 MAINTENANCE_MODES = ("read_only", "full")
 
 # Development/test only. Production refuses to start without its own SECRET_KEY.
@@ -47,6 +47,8 @@ MIN_SECRET_BYTES = 32
 # Firebase session cookies live 5 minutes to 2 weeks.
 MAX_SESSION_DAYS = 14
 DEFAULT_SYNC_TIERS = "0.5:120:0:60,0.8:300:60:120,1.0:900:60:300"
+# STORE=postgres: no daily write quota, so one tier with a 30 s flush (build-contracts.md section 23).
+POSTGRES_SYNC_TIERS = "1:30:0:30"
 WEB_CONFIG_KEYS = ("apiKey", "authDomain", "projectId", "appId")
 
 
@@ -181,7 +183,8 @@ class Settings:
     firestore_emulator_host: str | None = None
     trusted_proxy_hops: int | None = None
     # M1: sync tuning and quota
-    sync_tiers: tuple[SyncTier, ...] = field(default_factory=lambda: parse_sync_tiers(DEFAULT_SYNC_TIERS))
+    # None = the default for STORE (DEFAULT_SYNC_TIERS, or POSTGRES_SYNC_TIERS for postgres).
+    sync_tiers: tuple[SyncTier, ...] | None = None
     quota_enforce: bool | None = None
     quota_tz: str = "America/Los_Angeles"
     quota_reads: int = 50_000
@@ -202,6 +205,9 @@ class Settings:
     job_grace_min: int = 60
     max_backup_bytes: int = 2_147_483_648
     host_egress_month: int = 5_000_000_000
+    # M3: the Postgres store
+    database_url: str | None = field(default=None, repr=False)
+    pg_pool_max: int = 5
 
     def __post_init__(self) -> None:
         if self.app_env not in APP_ENVS:
@@ -227,8 +233,6 @@ class Settings:
         if auth_mode not in AUTH_MODES:
             raise ConfigError(f"AUTH_MODE must be one of {', '.join(AUTH_MODES)}, got {self.auth_mode!r}")
         store = (self.store or ("firestore" if prod else "memory")).lower()
-        if store == "postgres":
-            raise ConfigError("STORE=postgres is not available yet (it arrives in M3)")
         if store not in STORES:
             raise ConfigError(f"STORE must be one of {', '.join(STORES)}, got {self.store!r}")
         set_(self, "auth_mode", auth_mode)
@@ -284,10 +288,24 @@ class Settings:
             raise ConfigError(f"TRUSTED_PROXY_HOPS must be 0-10, got {hops}")
         set_(self, "trusted_proxy_hops", hops)
 
-        if not self.sync_tiers:
+        postgres = store == "postgres"
+        if postgres:
+            url = (self.database_url or "").strip()
+            if not url.startswith(("postgresql://", "postgres://")):
+                raise ConfigError("STORE=postgres needs DATABASE_URL (postgresql://...)")
+            set_(self, "database_url", url)
+        if not 1 <= self.pg_pool_max <= 100:
+            raise ConfigError(f"PG_POOL_MAX must be 1-100, got {self.pg_pool_max}")
+        tiers = self.sync_tiers
+        if tiers is None:
+            tiers = parse_sync_tiers(POSTGRES_SYNC_TIERS if postgres else DEFAULT_SYNC_TIERS)
+        if not tiers:
             raise ConfigError("SYNC_TIERS needs at least one tier")
-        set_(self, "sync_tiers", tuple(self.sync_tiers))
-        set_(self, "quota_enforce", True if self.quota_enforce is None else bool(self.quota_enforce))
+        set_(self, "sync_tiers", tuple(tiers))
+        enforce = self.quota_enforce
+        if enforce is None:
+            enforce = not postgres  # no Firestore quota behind a Postgres store
+        set_(self, "quota_enforce", bool(enforce))
         try:
             ZoneInfo(self.quota_tz)
         except (ZoneInfoNotFoundError, ValueError):
@@ -429,6 +447,7 @@ class Settings:
             "QUOTA_TZ": "quota_tz",
             "MAINTENANCE_FORCE": "maintenance_force",
             "ADMIN_TZ": "admin_tz",
+            "DATABASE_URL": "database_url",
         }
         for name, attr in strings.items():
             if (value := get(name)) is not None:
@@ -463,6 +482,7 @@ class Settings:
             "JOB_GRACE_MIN": "job_grace_min",
             "MAX_BACKUP_BYTES": "max_backup_bytes",
             "HOST_EGRESS_MONTH": "host_egress_month",
+            "PG_POOL_MAX": "pg_pool_max",
         }
         for name, attr in integers.items():
             if (number := get_int(name)) is not None:

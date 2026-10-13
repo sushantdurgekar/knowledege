@@ -58,24 +58,31 @@ from app.store.base import (
     COUNT_KINDS,
     PARTS,
     AccountDeleted,
+    BatchResult,
+    Conflict,
     HubSummary,
-    LaterMethods,
     OpCounter,
     PartIn,
     PartInfo,
     PartOut,
     PartResult,
     QuotaExhausted,
+    RestoreItem,
     StoreError,
     Tombstone,
     TooLarge,
     Unavailable,
+    Unsupported,
     UserRecord,
+    check_batch,
     check_setting_version,
+    empty_counts,
     merged_done,
+    newest_parts,
     progress_doc_id,
     progress_range,
     tombstone_hash,
+    with_counts,
 )
 
 logger = logging.getLogger(__name__)
@@ -95,6 +102,7 @@ PAYLOAD_FIELDS = [f"p_{p}" for p in PARTS]
 SIZE_FIELDS = [f"n_{p}" for p in PARTS]
 DOC_ID = FieldPath.document_id()
 BATCH_DELETES = 400
+GET_ALL_CHUNK = 300
 USER_FIELDS = ["email", "emailVerified", "name", "photo", "provider", "createdAt", "lastLoginAt"]
 # Rough serialized size of a document read through the stamp mask (egress estimate).
 STAMPS_BYTES = 16 * len(PARTS) + 32
@@ -159,7 +167,7 @@ def _chain(exc: BaseException) -> Iterator[BaseException]:
         current = current.__cause__ or current.__context__
 
 
-class FirestoreStore(LaterMethods):
+class FirestoreStore:
     kind = "firestore"
 
     def __init__(
@@ -665,6 +673,166 @@ class FirestoreStore(LaterMethods):
         if states:
             out.sort(key=lambda job: job["id"])
         return out
+
+    def update_job(self, id: str, fields: dict[str, Any], *, expect: dict[str, Any]) -> bool:
+        """Merge `fields` into the job if every `expect` field has that value (a transaction)."""
+        ref = self.db.collection("jobs").document(id)
+        outcome: dict[str, Any] = {}
+
+        def run(tx: Transaction) -> bool:
+            outcome["phase"] = "reads"
+            snap = ref.get(transaction=tx, retry=RETRY, timeout=TIMEOUT)
+            self.ops.add(reads=1)
+            current = (snap.to_dict() or {}) if snap.exists else None
+            if current is None or any(current.get(k) != v for k, v in expect.items()):
+                outcome["write"] = False
+                return False
+            tx.set(ref, dict(fields), merge=True)
+            outcome["write"] = True
+            outcome["phase"] = "writes"
+            return True
+
+        tx = _BoundedTransaction(self.db, max_attempts=TX_ATTEMPTS)
+        try:
+            done = transactional(run)(tx)
+        except StoreError:
+            raise
+        except Exception as exc:
+            raise self._translate(exc, outcome.get("phase", "reads")) from exc
+        if outcome.get("write"):
+            self.ops.add(writes=1)
+        return bool(done)
+
+    # -- M3: restore -------------------------------------------------------------------------
+
+    def _get_all(self, refs: list[Any], fields: list[str]) -> list[Any]:
+        snaps: list[Any] = []
+        for start in range(0, len(refs), GET_ALL_CHUNK):
+            chunk = refs[start : start + GET_ALL_CHUNK]
+            with self._mapped("reads"):
+                snaps.extend(self.db.get_all(chunk, field_paths=fields, retry=RETRY, timeout=TIMEOUT))
+            self.ops.add(reads=len(chunk))
+        return snaps
+
+    def restore_lookup(
+        self, uids: list[str], docs: list[tuple[str, str]]
+    ) -> tuple[set[str], dict[tuple[str, str], dict[str, int]]]:
+        """Existing users and stored stamps: 1 read per uid and per hub document."""
+        users = self._get_all([self.db.collection("users").document(u) for u in uids], ["createdAt"])
+        existing = {snap.id for snap in users if snap.exists}
+        refs = [self._progress_ref(uid, hub) for uid, hub in docs]
+        stamps: dict[tuple[str, str], dict[str, int]] = {}
+        for snap in self._get_all(refs, STAMP_FIELDS):
+            if snap.exists:
+                uid, _, hub = snap.id.partition("~")
+                stamps[(uid, hub)] = _stamps(snap.to_dict())
+        return existing, stamps
+
+    def restore_batch(
+        self,
+        recs: list[RestoreItem],
+        *,
+        mode: str,
+        job_id: str,
+        checkpoint: dict[str, Any],
+        holder: str,
+    ) -> BatchResult:
+        """One `WriteBatch` (<= 400 docs) holding the records and the job's checkpoint.
+
+        The job write carries a precondition on the job document's update time, so the
+        batch commits only if nobody touched the job since it was read (no zombie runner
+        applies a batch after a reclaim); the batch is atomic, so it applies exactly once.
+        """
+        if mode != "merge":
+            raise Unsupported("replace is not supported on Firestore: use merge")
+        job_ref = self.db.collection("jobs").document(job_id)
+        with self._mapped("reads"):
+            job_snap = job_ref.get(retry=RETRY, timeout=TIMEOUT)
+        self.ops.add(reads=1, fs_egress=512)
+        stored = {**(job_snap.to_dict() or {}), "id": job_id} if job_snap.exists else None
+        if not check_batch(stored, checkpoint, holder):
+            return BatchResult(False, dict((stored or {}).get("checkpoint") or {}))
+        written, kept = empty_counts(), empty_counts()
+        batch = self.db.batch()
+        stones = [i.tombstone for i in recs if i.t == "tombstone" and i.tombstone is not None]
+        refs = [self.db.collection("tombstones").document(t.h) for t in stones]
+        found = {snap.id for snap in self._get_all(refs, ["at"]) if snap.exists}
+        for stone, ref in zip(stones, refs, strict=True):
+            if stone.h in found:
+                kept["tombstone"] += 1
+            else:
+                batch.set(ref, {"at": stone.at})
+                found.add(stone.h)
+                written["tombstone"] += 1
+        users = [i.user for i in recs if i.t == "user" and i.user is not None]
+        refs = [self.db.collection("users").document(u.uid) for u in users]
+        found = {snap.id for snap in self._get_all(refs, ["createdAt"]) if snap.exists}
+        for user, ref in zip(users, refs, strict=True):
+            if user.uid in found:
+                kept["user"] += 1
+                continue
+            batch.set(
+                ref,
+                {
+                    "email": user.email,
+                    "emailVerified": bool(user.email_verified),
+                    "name": user.name,
+                    "photo": user.photo,
+                    "provider": user.provider,
+                    "createdAt": user.created_at,
+                    "lastLoginAt": user.last_login_at,
+                },
+            )
+            found.add(user.uid)
+            written["user"] += 1
+        groups, dropped = newest_parts(recs)
+        kept["progress"] += dropped
+        keys = list(groups)
+        snaps = self._get_all([self._progress_ref(uid, hub) for uid, hub in keys], STAMP_FIELDS)
+        current = {snap.id: _stamps(snap.to_dict()) if snap.exists else {} for snap in snaps}
+        for uid, hub in keys:
+            stamps = current.get(progress_doc_id(uid, hub), {})
+            parts = groups[(uid, hub)]
+            update: dict[str, Any] = {}
+            accepted: set[str] = set()
+            for part, incoming in parts.items():
+                if decide(stamps.get(part), incoming.upd) == "accepted":
+                    accepted.add(part)
+                    update.update(
+                        {f"u_{part}": incoming.upd, f"p_{part}": incoming.gz, f"n_{part}": incoming.raw_len}
+                    )
+                    written["progress"] += 1
+                else:
+                    kept["progress"] += 1
+            if update:
+                done = merged_done(parts, accepted)
+                if done is not None:
+                    update["done"] = done
+                update.update({"uid": uid, "hub": hub, "t": SERVER_TIMESTAMP})
+                batch.set(self._progress_ref(uid, hub), update, merge=True)
+        final = with_counts(checkpoint, written, kept)
+        batch.update(
+            job_ref,
+            {"checkpoint": final},
+            option=self.db.write_option(last_update_time=job_snap.update_time),
+        )
+        writes = len(batch._write_pbs)
+        try:
+            batch.commit(retry=RETRY, timeout=TIMEOUT)
+        except gexc.FailedPrecondition as exc:
+            raise Conflict("the job changed while the batch was prepared") from exc
+        except Exception as exc:
+            raise self._translate(exc, "writes") from exc
+        self.ops.add(writes=writes)
+        return BatchResult(True, final, written, kept)
+
+    def swap_replace(
+        self, job_id: str, *, holder: str, expected: dict[str, int], checkpoint: dict[str, Any]
+    ) -> BatchResult:
+        raise Unsupported("replace is not supported on Firestore: use merge")
+
+    def wipe_for_replace(self, job_id: str) -> None:
+        return None  # nothing is ever staged on Firestore
 
     # -- test support (emulator only) ----------------------------------------------------
     # The test-only routes (`POST /api/test/reset`, `GET /api/test/store`, APP_ENV=test) use

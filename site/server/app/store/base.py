@@ -13,6 +13,7 @@ import re
 import secrets
 import threading
 from collections.abc import Callable, Iterator
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol, runtime_checkable
@@ -205,25 +206,29 @@ class Store(Protocol):
     ) -> bool: ...
     # Jobs in `states` oldest first by id, or (no states) the newest `limit` by `createdAt`.
     def list_jobs(self, states: set[str] | None = None, limit: int = 50) -> list[dict[str, Any]]: ...
-    # Declared for M3 (restore); adapters raise NotImplementedError until then.
+    # Compare-and-set on a job: merge `fields` into it only if every `expect` field
+    # currently has that value (a missing field equals None). Heartbeats, a stale job's
+    # reclaim and a restore's state changes all go through it. False when it did not apply.
+    def update_job(self, id: str, fields: dict[str, Any], *, expect: dict[str, Any]) -> bool: ...
+    # M3: restore (build-contracts.md section 24). `restore_batch` applies one batch and
+    # stores its checkpoint in the same transaction (see `RestoreItem`, `BatchResult`).
+    def restore_lookup(
+        self, uids: list[str], docs: list[tuple[str, str]]
+    ) -> tuple[set[str], dict[tuple[str, str], dict[str, int]]]: ...
     def restore_batch(
-        self, recs: list[Any], *, mode: str, job_id: str, checkpoint: dict[str, Any]
-    ) -> Any: ...
+        self,
+        recs: list[RestoreItem],
+        *,
+        mode: str,
+        job_id: str,
+        checkpoint: dict[str, Any],
+        holder: str,
+    ) -> BatchResult: ...
+    def swap_replace(
+        self, job_id: str, *, holder: str, expected: dict[str, int], checkpoint: dict[str, Any]
+    ) -> BatchResult: ...
     def wipe_for_replace(self, job_id: str) -> None: ...
     def close(self) -> None: ...
-
-
-LATER = "M3"
-
-
-class LaterMethods:
-    """The methods M2 declares but does not implement (restore arrives in M3)."""
-
-    def restore_batch(self, recs: list[Any], *, mode: str, job_id: str, checkpoint: dict[str, Any]) -> Any:
-        raise NotImplementedError(LATER)
-
-    def wipe_for_replace(self, job_id: str) -> None:
-        raise NotImplementedError(LATER)
 
 
 def progress_doc_id(uid: str, hub: str) -> str:
@@ -232,8 +237,17 @@ def progress_doc_id(uid: str, hub: str) -> str:
 
 
 COUNT_KINDS = ("users", "progress", "tombstones")
-JOB_STATES = ("scheduled", "running", "succeeded", "failed", "cancelled", "missed")
-ACTIVE_JOB_STATES = frozenset({"scheduled", "running"})
+JOB_STATES = (
+    "scheduled",
+    "running",
+    "paused_quota",
+    "succeeded",
+    "needs_attention",
+    "failed",
+    "cancelled",
+    "missed",
+)
+ACTIVE_JOB_STATES = frozenset({"scheduled", "running", "paused_quota"})
 TOMBSTONE_CONTEXT = "studyhubs-tombstone-v1:"
 
 
@@ -280,3 +294,93 @@ def check_setting_version(current: int | None, expect_version: int | None) -> in
     if expect_version is not None and (current or 0) != expect_version:
         raise Conflict(f"setting version is {current or 0}, expected {expect_version}")
     return (current or 0) + 1
+
+
+# -- M3: restore ---------------------------------------------------------------------------
+
+RESTORE_KINDS = ("settings", "tombstone", "user", "progress")
+HUB_ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{1,40}")
+
+
+class JobLost(StoreError):  # noqa: N818 - named like the contract's other errors
+    """The job is no longer held by this runner (reclaimed by another, or cancelled)."""
+
+
+class Unsupported(StoreError):  # noqa: N818 - named like the contract's other errors
+    """The store cannot do this (e.g. `replace` on Firestore)."""
+
+
+@dataclass(frozen=True, slots=True)
+class RestoreItem:
+    """One backup record to apply: a `user`, a `progress` part or a `tombstone`.
+
+    `line` is the record's 1-based line in the validated NDJSON. Skipped records
+    (tombstoned uids) never reach the store; the `settings` record is the runner's.
+    """
+
+    t: str
+    line: int
+    uid: str = ""
+    hub: str = ""
+    part: str = ""
+    data: PartIn | None = None
+    user: UserRecord | None = None
+    tombstone: Tombstone | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BatchResult:
+    applied: bool  # False: already applied (the stored checkpoint is at or past this batch)
+    checkpoint: dict[str, Any]  # the job's checkpoint after the call
+    written: dict[str, int] = field(default_factory=dict)
+    kept: dict[str, int] = field(default_factory=dict)
+
+
+def empty_counts() -> dict[str, int]:
+    return dict.fromkeys(RESTORE_KINDS, 0)
+
+
+def check_batch(stored: dict[str, Any] | None, checkpoint: dict[str, Any], holder: str) -> bool:
+    """Shared `restore_batch` precondition. True: apply; False: already applied.
+
+    Raises JobLost when the job is gone, not running or held by someone else, and
+    Conflict when the batch does not start right after the stored checkpoint.
+    """
+    if stored is None or stored.get("state") != "running" or stored.get("holder") != holder:
+        raise JobLost("the restore job is no longer held by this runner")
+    done = int((stored.get("checkpoint") or {}).get("line", 0))
+    if done >= int(checkpoint["line"]):
+        return False
+    if done != int(checkpoint["from"]) - 1:
+        raise Conflict(f"checkpoint is at line {done}, the batch starts at {checkpoint['from']}")
+    return True
+
+
+def with_counts(checkpoint: dict[str, Any], written: dict[str, int], kept: dict[str, int]) -> dict[str, Any]:
+    """The checkpoint to store: the runner's totals plus this batch's store decisions."""
+    out = deepcopy(checkpoint)
+    for name, counts in (("written", written), ("kept", kept)):
+        total = out.setdefault(name, empty_counts())
+        for kind, n in counts.items():
+            total[kind] = total.get(kind, 0) + n
+    return out
+
+
+def newest_parts(items: list[RestoreItem]) -> tuple[dict[tuple[str, str], dict[str, PartIn]], int]:
+    """Progress items grouped by hub document, the newest of any repeated part kept.
+
+    Returns the groups and how many repeated (older or equal) parts were dropped.
+    """
+    groups: dict[tuple[str, str], dict[str, PartIn]] = {}
+    dropped = 0
+    for item in items:
+        if item.t != "progress" or item.data is None:
+            continue
+        parts = groups.setdefault((item.uid, item.hub), {})
+        current = parts.get(item.part)
+        if current is not None:
+            dropped += 1
+            if current.upd >= item.data.upd:
+                continue
+        parts[item.part] = item.data
+    return groups, dropped

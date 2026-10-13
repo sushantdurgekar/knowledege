@@ -52,7 +52,7 @@ def test_production_defaults() -> None:
         ({"FIREBASE_WEB_CONFIG": "{}"}, "missing"),
         ({"FIREBASE_WEB_CONFIG": "nope"}, "JSON"),
         ({"FIRESTORE_EMULATOR_HOST": "127.0.0.1:8080"}, "FIRESTORE_EMULATOR_HOST"),
-        ({"STORE": "postgres"}, "M3"),
+        ({"STORE": "postgres"}, "DATABASE_URL"),
         ({"GOOGLE_APPLICATION_CREDENTIALS": "/nonexistent/key.json"}, "readable file"),
         ({"FIREBASE_SERVICE_ACCOUNT_B64": "%%%"}, "base64"),
         (

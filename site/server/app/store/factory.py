@@ -1,7 +1,7 @@
 """Pick the store from STORE (build-contracts.md section 11).
 
-`firestore` is imported lazily: the gRPC stack is heavy and tests on the memory
-store never need it.
+`firestore` and `postgres` are imported lazily: the gRPC stack is heavy, and tests
+on the memory store need neither.
 """
 
 from __future__ import annotations
@@ -30,5 +30,13 @@ def make_store(settings: Settings, clock: Clock) -> Store:
             credentials_file=settings.google_application_credentials,
             credentials_info=info,
             emulator_host=settings.firestore_emulator_host,
+        )
+    if settings.store == "postgres":
+        from app.store.postgres import PostgresStore
+
+        return PostgresStore(
+            str(settings.database_url),
+            pool_max=settings.pg_pool_max,
+            allow_reset=settings.is_test,
         )
     raise ValueError(f"unknown STORE {settings.store!r}")

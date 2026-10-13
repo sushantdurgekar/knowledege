@@ -46,7 +46,7 @@ def seed_progress(adapter: Adapter, n: int) -> dict[tuple[str, str], dict[str, P
         uid, hub = f"u{i // 3:05d}", ("ai103", "dsa-l1", "ai901")[i % 3]
         parts = {"legacy": part(T + i)} if hub == "ai901" else {"main": part(T + i), "cards": part(T + i + 1)}
         docs[(uid, hub)] = parts
-    if adapter.kind == "memory":
+    if adapter.kind != "firestore":
         for (uid, hub), parts in docs.items():
             adapter.store.put_parts(uid, hub, parts, NOW_MS)
         return docs
@@ -65,7 +65,7 @@ def seed_progress(adapter: Adapter, n: int) -> dict[tuple[str, str], dict[str, P
 
 def seed_users_and_tombstones(adapter: Adapter, n: int) -> None:
     store = adapter.store
-    if adapter.kind == "memory":
+    if adapter.kind != "firestore":
         for i in range(n):
             user = UserRecord(f"u{i:05d}", f"u{i}@example.com", last_login_at=AT)
             store.upsert_user(user, touch_login=True)

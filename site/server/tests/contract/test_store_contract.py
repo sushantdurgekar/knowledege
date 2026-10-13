@@ -50,6 +50,19 @@ def raw_doc(adapter: Adapter, uid: str, hub: str) -> dict[str, Any] | None:
         for name, stored in doc.parts.items():
             out[f"u_{name}"], out[f"p_{name}"], out[f"n_{name}"] = stored.upd, stored.gz, stored.raw_len
         return out
+    if adapter.kind == "postgres":
+        with adapter.store._pool.connection() as conn:  # type: ignore[attr-defined]
+            rows = conn.execute(
+                "SELECT part, upd, data, raw_len, done FROM progress WHERE uid = %s AND hub_id = %s",
+                (uid, hub),
+            ).fetchall()
+        if not rows:
+            return None
+        doc: dict[str, Any] = {"uid": uid, "hub": hub, "done": rows[0][4]}
+        assert len({r[4] for r in rows}) == 1  # done is a hub value, equal on every row
+        for name, upd, data, raw_len, _ in rows:
+            doc[f"u_{name}"], doc[f"p_{name}"], doc[f"n_{name}"] = upd, bytes(data), raw_len
+        return doc
     snap = adapter.store.db.collection("progress").document(progress_doc_id(uid, hub)).get()  # type: ignore[attr-defined]
     return snap.to_dict() if snap.exists else None
 
@@ -407,13 +420,6 @@ def test_settings_optimistic_version(adapter: Adapter) -> None:
     assert store.get_setting(key) == ({"tz": "y"}, 3)  # a put replaces the whole value
 
 
-def test_ping_and_later_methods(adapter: Adapter, uid: str) -> None:
-    store = adapter.store
-    store.ping()
-    assert store.kind == adapter.kind
-    for call in (
-        lambda: store.restore_batch([], mode="merge", job_id="j", checkpoint={}),
-        lambda: store.wipe_for_replace("j"),
-    ):
-        with pytest.raises(NotImplementedError, match="M3"):
-            call()
+def test_ping(adapter: Adapter) -> None:
+    adapter.store.ping()
+    assert adapter.store.kind == adapter.kind
