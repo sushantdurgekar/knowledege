@@ -56,10 +56,14 @@ the adapter's own read/write counter it counts the documents each gRPC call bill
 | `app/progress/` | `routes.py` (`/api/progress/{hubId}`, `/api/sync`), `seed.py` (`/api/seed/{id}.js`), `validate.py`, `decide.py` (newest wins), `service.py` |
 | `app/store/` | `base.py` (protocol, errors, records), `memory.py`, `firestore.py`, `factory.py` |
 | `app/quota/` | `pacific.py` (quota days), `meter.py`, `guard.py` (tiers, budget, breaker, per-user cap), `policy.py`, `egress.py` |
-| `app/testing/routes.py` | `/api/test/*`, mounted only when `APP_ENV=test` |
+| `app/account/routes.py` | M2: `/api/me/progress`, `/api/me/export`, `DELETE /api/me` (cascade, tombstone, Auth user, cookies) |
+| `app/admin/` | M2: `auth.py` (admin predicate, 404 for others, destructive-action rules), `routes.py` (`/api/admin/*`), `site.py` (`meta/settings`: maintenance, tz, notice; 60 s refresh), `stats.py`, `backups.py` (estimate, tickets, streaming run, `meta/backups` log) |
+| `app/jobs/scheduler.py` | M2: maintenance windows; asyncio tick every 20 s, jobs cached 5 min, `claim_job` transitions |
+| `app/backup/` | M2: `.backup` v1 `format.py`, `writer.py` (document-id pages → gzip NDJSON → optional frames), `crypto.py` (AES-256-GCM-STREAM-1, scrypt) |
+| `app/testing/routes.py` | `/api/test/*` (M2 adds `POST /api/test/tick`), mounted only when `APP_ENV=test` |
 | `app/security.py`, `app/api_gzip.py` | global headers; gzip for `/api` only |
 | `app/errors.py` | the one JSON error shape `{code, message, retryAfter?, retryAt?}` |
-| `tests/unit`, `tests/api`, `tests/contract`, `tests/test_*.py` | M1 unit, M1 API, store contract, M0 suites |
+| `tests/unit`, `tests/api`, `tests/contract`, `tests/test_*.py` | unit, API, store contract (+ M2 APIs and backups on each store), M0 suites |
 
 ## Environment
 
@@ -94,7 +98,23 @@ bytes), `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_CONFIG` and a service-account key**
 | `QUOTA_ENFORCE`, `QUOTA_TZ`, `QUOTA_READS`, `QUOTA_WRITES`, `QUOTA_DELETES`, `QUOTA_RESERVE` | `1`, `America/Los_Angeles`, `50000`, `20000`, `20000`, `0.05` |
 | `MAX_PART_GZ`, `MAX_DOC_GZ`, `MAX_BODY`, `MAX_BODY_DECOMPRESSED` | `131072`, `393216`, `2097152`, `8388608` |
 | `CLOCK_SKEW_MS`, `USER_WRITES_PER_DAY` | `900000`, `300` |
-| `MAINTENANCE_FORCE` | unset (`read_only` or `full`) |
+| `MAINTENANCE_FORCE` | unset (`read_only` or `full`; overrides the mode set on the admin page) |
+
+M2 (build-contracts section 17). An admin is a Google sign-in with a verified email
+listed in `ADMIN_EMAILS`; everyone else gets 404 from `/api/admin/*`.
+
+| Variable | Default |
+|---|---|
+| `ADMIN_EMAILS` | empty (no admins); comma-separated, case-insensitive |
+| `ADMIN_TZ` | `Asia/Kolkata` (the admin page's default time zone and "tonight") |
+| `DATA_DIR` | `/tmp/studyhubs` (scratch only; backups stream straight to the browser) |
+| `JOB_GRACE_MIN` | `60` (a window that late is `missed`) |
+| `MAX_BACKUP_BYTES` | `2147483648` |
+| `HOST_EGRESS_MONTH` | `5000000000` (the host meter on the admin overview) |
+
+Backups are checked offline with `python site/scripts/backup_tool.py inspect|verify|decrypt <file>`
+(standard library + `cryptography`; the passphrase comes from `--passphrase-file`,
+`BACKUP_PASSPHRASE` or a prompt).
 
 ## Dependencies
 
