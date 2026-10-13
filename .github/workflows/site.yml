@@ -1,8 +1,8 @@
-# Study Hubs website (site/): test -> e2e -> deploy to Render.
+# Study Hubs website (site/): test -> e2e + contract -> deploy to Render.
 #
 # Runs only when the site, a published hub file, the Docker allow-list or this workflow
 # changes, so a notes-only commit to the vault tests and deploys nothing. The deploy job runs
-# on main after both test jobs pass, and only when the RENDER_DEPLOY_HOOK secret is set
+# on main after the test, e2e and contract jobs pass, and only when the RENDER_DEPLOY_HOOK secret is set
 # (Settings -> Secrets and variables -> Actions). Optional repository variable PUBLIC_ORIGIN
 # (default https://study-hubs.onrender.com) is where the deploy job checks the new version.
 #
@@ -42,6 +42,8 @@ concurrency:
 env:
   NODE_VERSION: '22'
   PYTHON_VERSION: '3.12' # the image runs python:3.12-slim
+  JAVA_VERSION: '21' # the Firestore emulator needs Java 21+
+  FIREBASE_TOOLS_VERSION: '15.31.0'
   npm_config_audit: 'false'
   npm_config_fund: 'false'
 
@@ -143,8 +145,10 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
-      # dev-e2e.sh starts uvicorn (APP_ENV=test), waits for /healthz, runs the suite, stops it.
-      - name: Playwright against uvicorn
+      # dev-e2e.sh starts uvicorn (APP_ENV=test AUTH_MODE=fake STORE=memory), waits for
+      # /healthz, runs the whole suite (M0 in parallel, the M1 sync project one test at a
+      # time) and stops the server.
+      - name: Playwright against uvicorn (M0 + M1)
         run: sh site/scripts/dev-e2e.sh
         env:
           CI: 'true'
@@ -156,15 +160,25 @@ jobs:
         run: bash site/scripts/check-image.sh study-hubs:ci
 
       # The image as Render runs it (APP_ENV=production from the Dockerfile), smoke-tested.
+      # Production refuses to start without SECRET_KEY (>= 32 bytes), FIREBASE_PROJECT_ID and
+      # FIREBASE_WEB_CONFIG; a demo- project and a dummy web config are enough for the
+      # anonymous pages (no service account: nothing here signs in or syncs).
       - name: Smoke-test the container
         working-directory: site/e2e
         env:
           CI: 'true'
           BASE_URL: http://127.0.0.1:10001
           E2E_EXPECT_HSTS: '1'
+          SMOKE_SECRET_KEY: ci-smoke-only-secret-key-0123456789abcdef
+          SMOKE_PROJECT_ID: demo-studyhubs-smoke
+          SMOKE_WEB_CONFIG: '{"apiKey":"demo-api-key","authDomain":"demo-studyhubs-smoke.firebaseapp.com","projectId":"demo-studyhubs-smoke","appId":"1:000000000000:web:0000000000000000"}'
         run: |
           docker run -d --name study-hubs -p 127.0.0.1:10001:10000 \
-            -e PUBLIC_ORIGIN="$BASE_URL" study-hubs:ci
+            -e PUBLIC_ORIGIN="$BASE_URL" \
+            -e SECRET_KEY="$SMOKE_SECRET_KEY" \
+            -e FIREBASE_PROJECT_ID="$SMOKE_PROJECT_ID" \
+            -e FIREBASE_WEB_CONFIG="$SMOKE_WEB_CONFIG" \
+            study-hubs:ci
           for i in $(seq 1 30); do
             if curl -fsS "$BASE_URL/healthz" >/dev/null 2>&1; then break; fi
             if [ "$i" = 30 ]; then echo "::error::container did not become healthy"; exit 1; fi
@@ -174,7 +188,15 @@ jobs:
           if [ "$commit" != "$GITHUB_SHA" ]; then
             echo "::error::/api/version reports '$commit', expected $GITHUB_SHA"; exit 1
           fi
-          npx playwright test --grep @smoke
+          # M1 production wiring: real Firebase auth, the web config served, no test routes.
+          curl -fsS "$BASE_URL/api/config" \
+            | jq -e --arg p "$SMOKE_PROJECT_ID" '.authMode == "firebase" and .firebase.projectId == $p' >/dev/null
+          curl -fsS "$BASE_URL/api/me" | jq -e '.signedIn == false' >/dev/null
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -H 'X-StudyHubs: 1' "$BASE_URL/api/test/store")
+          if [ "$status" != 404 ]; then
+            echo "::error::/api/test/store answered $status in production (expected 404)"; exit 1
+          fi
+          npx playwright test --project=chromium --grep @smoke
 
       - name: Container logs
         if: ${{ always() }}
@@ -192,9 +214,70 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+  contract:
+    name: Store contract on the Firestore emulator
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: site/server/requirements-dev.txt
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Server venv
+        working-directory: site/server
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --disable-pip-version-check -r requirements-dev.txt
+
+      # Same command as `make -C site emulator`, in the background; the log is printed below.
+      - name: Start the Firestore emulator
+        working-directory: site/firebase
+        run: |
+          nohup npx --yes "firebase-tools@$FIREBASE_TOOLS_VERSION" emulators:start \
+            --only firestore --project demo-studyhubs > "$RUNNER_TEMP/emulator.log" 2>&1 &
+
+      - name: Wait for the emulator on 127.0.0.1:8080 (3 min)
+        run: |
+          for i in $(seq 1 180); do
+            if curl -sS -o /dev/null http://127.0.0.1:8080/ 2>/dev/null; then
+              echo "emulator up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the Firestore emulator did not open 127.0.0.1:8080"
+          tail -n 50 "$RUNNER_TEMP/emulator.log"
+          exit 1
+
+      # `make -C site test-contract`: one suite on the memory store and on the emulator.
+      - name: Contract tests
+        working-directory: site/server
+        env:
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8080
+        run: .venv/bin/pytest tests/contract
+
+      - name: Emulator log
+        if: ${{ always() }}
+        run: tail -n 100 "$RUNNER_TEMP/emulator.log" || true
+
   deploy:
     name: Deploy to Render
-    needs: [test, e2e]
+    needs: [test, e2e, contract]
     if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15

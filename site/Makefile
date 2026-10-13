@@ -18,9 +18,12 @@ APP_ENV ?= development
 # make collect STRICT=1  -> fail on any rejected hub (CI and the Docker build do this)
 STRICT ?=
 NPM_CI := npm ci --no-audit --no-fund
+# Firestore emulator for the store contract tests (site/firebase/firebase.json: 127.0.0.1:8080)
+FIREBASE_TOOLS ?= 15.31.0
+FIRESTORE_EMULATOR_HOST ?= 127.0.0.1:8080
 
 .PHONY: help install build-bridge build-client collect build test test-bridge test-client \
-        test-scripts test-server lint serve e2e e2e-smoke docker clean
+        test-scripts test-server test-contract emulator lint serve e2e e2e-smoke docker clean
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[1m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -55,6 +58,12 @@ test-scripts: ## Collector / context-check tests (node --test)
 
 test-server: ## Server ruff + pytest
 	cd $(SITE)/server && .venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/pytest
+
+emulator: ## Firestore emulator on 127.0.0.1:8080, foreground (needs Java 21; Ctrl-C stops it)
+	cd $(SITE)/firebase && npx --yes firebase-tools@$(FIREBASE_TOOLS) emulators:start --only firestore --project demo-studyhubs
+
+test-contract: ## Store contract tests on memory + the Firestore emulator (run `make emulator` first)
+	cd $(SITE)/server && FIRESTORE_EMULATOR_HOST=$(FIRESTORE_EMULATOR_HOST) .venv/bin/pytest tests/contract
 
 lint: ## Type-check the e2e suite and lint the server
 	cd $(SITE)/e2e && npm run typecheck

@@ -45,19 +45,32 @@ services:
       # PORT is injected by Render (10000). RENDER_GIT_COMMIT is set by Render
       # and reported by /api/version, which the CI deploy job polls.
 
-      # ── M1 (accounts + Firestore sync): uncomment when that milestone ships ──
-      # - key: STORE
-      #   value: firestore
-      # - key: AUTH_MODE
-      #   value: firebase
-      # - key: SECRET_KEY
-      #   generateValue: true
-      # - key: FIREBASE_PROJECT_ID
-      #   sync: false
-      # - key: FIREBASE_WEB_CONFIG
-      #   sync: false
-      # - key: GOOGLE_APPLICATION_CREDENTIALS     # a Render Secret File
-      #   value: /etc/secrets/firebase-sa.json
+      # ── M1 (accounts + Firestore sync) ───────────────────────────────
+      # Setup checklist: site/README.md, "M1: accounts and sync". The server refuses to
+      # start in production without SECRET_KEY (>= 32 bytes), FIREBASE_PROJECT_ID and
+      # FIREBASE_WEB_CONFIG, and refuses AUTH_MODE=fake or STORE=memory.
+      - key: STORE
+        value: firestore
+      - key: AUTH_MODE
+        value: firebase
+      # Signs publicIds; Render generates a random 256-bit value once. Rotating it
+      # changes every user's publicId (the browser owner tags then mismatch).
+      - key: SECRET_KEY
+        generateValue: true
+      # The Firebase project id, e.g. study-hubs-12345.
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      # The web app config JSON, one line:
+      # {"apiKey":"…","authDomain":"<project>.firebaseapp.com","projectId":"<project>","appId":"…"}
+      - key: FIREBASE_WEB_CONFIG
+        sync: false
+      # The service-account key, uploaded as a Render Secret File named firebase-sa.json
+      # (Environment -> Secret Files); Render mounts it here.
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/firebase-sa.json
+      # Render's edge proxy appends the client address to X-Forwarded-For (rate limits).
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
       # ── M2 (admin, maintenance, backups) ─────────────────────────────
       # - key: ADMIN_EMAILS
       #   sync: false
