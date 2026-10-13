@@ -44,7 +44,7 @@ The hub files are **never edited**. The server adds one `<script>` (the *bridge*
 ```
 site/
   Dockerfile  render.yaml  Makefile  hubs.config.json   build and deploy
-  bridge/     TypeScript -> one IIFE (<= 14 KB gz)       see bridge/README.md
+  bridge/     TypeScript -> one IIFE (<= 16 KB gz)       see bridge/README.md
   client/     React + Vite catalog shell                 see client/README.md
   server/     FastAPI app, pytest                        see server/README.md
   firebase/   Firestore rules + index exemptions, emulator config

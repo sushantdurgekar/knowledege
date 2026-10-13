@@ -101,7 +101,7 @@ The same rule applies to every engine: a `static` hub that has a `</head>` or a 
 **Env (M0):** `APP_ENV` (development|test|production), `PUBLIC_ORIGIN`, `PORT` (10000), `PUBLIC_DIR`, `HUBS_DIR`, `GIT_COMMIT`/`RENDER_GIT_COMMIT`, `LOG_LEVEL`.
 
 ## 6. Bridge (M0 = anonymous mode; module layout ready for M1 sync)
-- One classic IIFE (ES2019), ≤ 14 KB gzipped. Built with esbuild from TypeScript.
+- One classic IIFE (ES2019), ≤ 16 KB gzipped (M0 was ≤ 14 KB; M1 sync raised it). Built with esbuild from TypeScript.
 - It reads `document.currentScript.dataset` (`hubId`, `slug`, `engine`, `legacyKeys`).
 - It defines `window.claude = Object.freeze({use})` synchronously.
 - **Signed-in hint:** the readable cookie `sh_hint`. If it is absent, the visitor is anonymous. In anonymous mode the bridge makes **zero** network requests.
@@ -274,7 +274,7 @@ These sections are binding for M1. Where they are silent, follow [architecture-s
   - **Documents:**
     - `users/{uid}`
     - `progress/{uid}~{hubId}`, with top-level fields `uid, hub, u_<part>` (int), `p_<part>` (bytes: gzip compact JSON), `n_<part>` (raw length), `done` (int), `t` (server timestamp)
-    - `usage/{YYYY-MM-DD}` (Pacific day) and `usage/m-{YYYY-MM}`, holding `reads, writes, deletes, fsEgress, appEgress` via `Increment`
+    - `usage/{YYYY-MM-DD}` (Pacific day), holding `reads, writes, deletes, fsEgress, appEgress` via `Increment`. Monthly totals (egress) are summed from the daily docs, so there is no separate monthly doc (it would double the meter writes)
     - `meta/settings`
   - **Client:**
     - Every call passes `timeout=10` and a short `Retry` that **never retries `ResourceExhausted`**.
