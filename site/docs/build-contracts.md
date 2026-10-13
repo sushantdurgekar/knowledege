@@ -522,3 +522,87 @@ Restore (upload, validate, apply) is **M3**; M2 only writes backups.
   - a scheduled window with a near `startAt` fires (test clock)
   - backup download → `backup_tool.py verify` passes
   - account export and delete (cookies cleared, local wiped, `/api/test/store` empty for that uid)
+
+---
+
+# M3: Postgres store and restore
+
+Binding for M3. Where these sections are silent, follow [architecture-spec.md](architecture-spec.md): §4.8 for the Postgres DDL and operations, §4.10 for restore. AWS compose and the runbook are M4.
+
+## 23. Postgres store
+- **Configuration:**
+  - `STORE=postgres` + `DATABASE_URL` (postgresql://…), `PG_POOL_MAX=5`.
+  - Driver: `psycopg[binary,pool]` 3, pinned and hash-locked.
+  - With `STORE=postgres` the defaults become `QUOTA_ENFORCE=0` and `SYNC_TIERS=1:30:0:30` (a 30 s flush).
+- **Schema:**
+  - `app/store/sql/0001_init.sql` follows spec §4.8 (users, progress with `bytea` gzip data, tombstones, settings, jobs, usage, plus the unlogged import tables).
+  - It is applied at startup under `pg_advisory_lock(842001)` and tracked in `schema_migrations`.
+- **Behaviour:** the full `Store` protocol with the same semantics as memory/Firestore.
+  - `put_parts` runs as one transaction:
+    1. `SELECT … FOR UPDATE` of the hub's stamps.
+    2. Run `decide`.
+    3. Upsert, guarded by `WHERE progress.upd < EXCLUDED.upd`.
+    4. Check the tombstone only when the hub has no rows.
+  - `claim_job` is a conditional `UPDATE … RETURNING`.
+- **Local and CI testing:**
+  - `site/scripts/dev_pg.sh` runs `initdb` + `pg_ctl` in a temp dir on port 54329, and prints the URL.
+  - The contract suite is parametrized over memory, postgres (skipped unless `DATABASE_URL_TEST` is set; required when `REQUIRE_PG=1`) and the Firestore emulator.
+  - CI adds a `postgres:16` service to the contract job.
+
+## 24. Restore API (admin; CSRF; destructive rules from §17 where noted)
+- **`POST /api/admin/restore/uploads {name, size, lastModified}`** → `{uploadId, chunkSize:4194304, received:[]}`.
+  - Staging lives in `DATA_DIR/restore/<uploadId>/`.
+  - Uploads are capped at `MAX_BACKUP_BYTES`, with one upload active at a time.
+- **`PUT /api/admin/restore/uploads/{id}/chunks/{n}`:** raw body ≤ 4 MiB with `X-Chunk-SHA256`. Idempotent; writes the chunk at its offset.
+- **`GET /api/admin/restore/uploads/{id}`** → `{state:"uploading|assembled|validating|validated|invalid", received, size, report?}`.
+- **`POST /api/admin/restore/uploads/{id}/validate {passphrase?}`** → 202; poll the GET. Validation is read-only against the target and covers:
+  - magic/version, the exact v1 encryption parameters and every frame tag
+  - gunzip, then each line's schema
+  - counts and the `end` sha256
+  - then writes a decrypted `ready.ndjson.gz` and **drops the passphrase**
+  - a plan against the target: users new/existing; progress parts newer/older/identical; tombstoned uids skipped. Firestore targets also get `estWrites`, `daysNeeded` (20k writes/day) and `fitsToday`.
+
+  A wrong passphrase, tampering or truncation → `invalid`, before any write.
+- **`DELETE /api/admin/restore/uploads/{id}`:** wipes staging.
+- **`POST /api/admin/jobs {kind:"restore", uploadId, mode:"merge"|"replace", runAt:"now"|"tonight"|"after_quota_reset"|ISO, tz, exitMaintenanceOnSuccess:true, confirm}`:**
+  - Destructive rules apply. `confirm` is `"RESTORE"` for merge and `"REPLACE <users> USERS"` for replace.
+  - `replace` on Firestore is refused (409 `unsupported`); use merge.
+- **Restore job:**
+  1. Claim the job atomically.
+  2. Enter `full` maintenance, remembering the previous mode.
+  3. Stream from `checkpoint.line + 1` in batches (≤ 500 records or 4 MiB):
+     - **Postgres:** one transaction holds the users + progress upserts (newest-wins via `decide`) and the jobs checkpoint update, so each batch applies exactly once.
+     - **Firestore:** a `WriteBatch` of ≤ 400 docs / 8 MiB, with the checkpoint doc in the **same** batch; throttled from 50 ops/s, +50% every 5 min. Quota → `paused_quota`, resuming at the Pacific reset + 5 min.
+  4. Skip tombstoned uids, both those in the backup and those in the target.
+  5. `replace` (Postgres): COPY into the import tables, then one swap transaction checks the counts and runs `TRUNCATE progress, users CASCADE` + `INSERT … SELECT`.
+  6. Heartbeat every 20 s. At boot, a `running` job whose heartbeat is more than 2 min old is reclaimed and resumed.
+  7. Verify: counts written + kept-newer + skipped = the `end` counts; then re-read a 1% sample (≤ 200 parts) and compare hashes.
+  8. Success: delete staging, then restore the previous mode if `exitMaintenanceOnSuccess`. Failure: stay in `full`, the job goes to `needs_attention`, and the admin sees a banner.
+- **Job states:** `scheduled → running → (paused_quota → running)* → succeeded | needs_attention | failed | cancelled | missed`.
+- **Render free note:** `DATA_DIR` is ephemeral there. The README must say to upload, validate and run the restore in one sitting (or on AWS, where `/data` is a volume).
+
+## 25. Client (M3)
+Admin **Restore** tab, a wizard:
+1. **Pick a file:** read the first 64 KiB in the browser to show the header (source, created, encrypted, estimated counts).
+2. **Upload:** 4 MiB chunks with SHA-256 from `crypto.subtle`, a progress bar, and resume after a reload (keyed by name + size + lastModified in `studyhubs.ui.restore`).
+3. **Validate:** a passphrase field if the file is encrypted; then the plan report.
+4. **Choose:**
+   - mode: merge (default), or replace (Postgres only)
+   - time: Now / Tonight 00:00 (in `ADMIN_TZ`) / After the next Firestore quota reset (Firestore only)
+5. **Confirm:** type the phrase the page shows.
+6. **Watch the job:** progress `{done,total}`, state and report; cancel while it is still scheduled.
+
+Budget: the admin chunk stays ≤ 40 KB gz.
+
+## 26. Tests (M3)
+- **Contract suite on Postgres:** every existing case, plus `restore_batch` atomic with its checkpoint, and idempotent.
+- **Server:**
+  - upload chunk idempotency, resume and sha mismatch
+  - validate rejects the full tamper matrix + a wrong passphrase before any write
+  - plan counts
+  - merge vs replace results
+  - tombstone skips
+  - quota pause/resume (Firestore emulator, small injected quota)
+  - **S17:** a backup taken from a memory-store instance restores into a Postgres instance with a clean report and an identical decoded state
+  - **S18:** kill the worker process (`-9`) mid-apply, restart, and resume to an identical final state
+- **E2E (`m3-restore.spec.ts`, serial):** the admin restore wizard end to end against a Postgres-backed server: upload a backup produced by the app, validate, run "Now", succeed, and confirm a synced hub shows the restored progress.
