@@ -4,6 +4,7 @@ settings, jobs, and backups end to end through `backup_tool.py verify`."""
 
 from __future__ import annotations
 
+import gzip
 import json
 import subprocess
 import sys
@@ -479,6 +480,81 @@ def test_backup_ticket_rules(admin: TestClient, make_client: Any, clock: FixedCl
     assert refused.status_code == 409
     assert refused.json()["code"] == "quota"
     assert admin.get("/api/admin/backups/estimate").json()["fits"] is False
+
+
+def test_backup_ticket_is_single_use_and_hidden_from_non_admins(admin: TestClient) -> None:
+    seed_learners(admin, 1)
+    ticket = post(admin, "/api/admin/backups", {"requireReadOnly": False, "confirm": "BACKUP"}).json()[
+        "ticket"
+    ]
+    session(admin, "pleb", email="pleb@example.com")  # a learner who got hold of the link
+    assert admin.get(f"/api/admin/backups/{ticket}").json() == HIDDEN
+    session(admin, "boss", provider="password")  # the admin's address, not a Google sign-in
+    assert admin.get(f"/api/admin/backups/{ticket}").json() == HIDDEN
+    session(admin)
+    first = admin.get(f"/api/admin/backups/{ticket}")  # still valid: they never reached it
+    assert first.status_code == 200
+    assert first.content.startswith(b"SHBK")
+    second = admin.get(f"/api/admin/backups/{ticket}")
+    assert second.status_code == 404
+    assert second.json()["code"] == "not_found"
+    assert len(admin.get("/api/admin/backups/log").json()) == 1
+
+
+SECRET = "unit-secret-key-0123456789abcdef-never-in-a-backup"
+
+
+@pytest.mark.parametrize("passphrase", [None, "a long passphrase 1234"])
+def test_backup_holds_no_secrets_settings_jobs_cookies_or_tokens(
+    make_client: Any, clock: FixedClock, tmp_path: Path, passphrase: str | None
+) -> None:
+    client: TestClient = make_client(clock=clock, admin_emails=(ADMIN,), secret_key=SECRET)
+    seed_learners(client, 2)
+    learner_cookie = client.cookies.get("sh_session")
+    session(client)
+    admin_cookie = client.cookies.get("sh_session")
+    put(client, "/api/admin/settings", {"notice": "Kept"})
+    put(client, "/api/admin/maintenance", {"mode": "read_only", "message": "Planned upgrade"})
+    job = post(
+        client,
+        "/api/admin/jobs",
+        {"kind": "maintenance", "mode": "read_only", "startAt": "tonight", "durationMin": 5},
+    ).json()["job"]
+    body = {"requireReadOnly": True, "confirm": "BACKUP", "passphrase": passphrase}
+    created, data = download(client, body)
+    path = tmp_path / "x.backup"
+    path.write_bytes(data)
+    plain_path = tmp_path / "x.ndjson.gz"
+    env = {"PATH": "", **({"BACKUP_PASSPHRASE": passphrase} if passphrase else {})}
+    run = subprocess.run(  # noqa: S603 - our own script
+        [sys.executable, str(TOOL), "decrypt", str(path), "-o", str(plain_path)],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    header_len = int.from_bytes(data[6:10], "big")
+    readable = data[: 10 + header_len] + gzip.decompress(plain_path.read_bytes())
+    records = [json.loads(line) for line in readable[10 + header_len :].splitlines()]
+    assert records[0] == {"t": "settings", "key": "site", "value": {"tz": "Asia/Kolkata", "notice": "Kept"}}
+    for needle in (
+        SECRET,
+        learner_cookie,
+        admin_cookie,
+        created["ticket"],
+        job["id"],
+        "Planned upgrade",
+        "read_only",
+        "maintenance",
+        "holder",
+        "fake:",
+        "idToken",
+        *([passphrase] if passphrase else []),
+    ):
+        assert needle
+        assert needle.encode() not in readable, needle
+    assert {r["t"] for r in records} == {"settings", "user", "progress", "end"}
 
 
 def test_backup_restores_mode_when_the_client_leaves(admin: TestClient) -> None:
