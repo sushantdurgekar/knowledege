@@ -48,7 +48,7 @@ from app.jobs.scheduler import parse_iso, tonight
 from app.progress.validate import loads, read_body
 from app.quota.pacific import iso_utc
 from app.runtime import Runtime, get_runtime
-from app.store.base import Conflict, QuotaExhausted, StoreError, new_job_id
+from app.store.base import Conflict, QuotaExhausted, StoreError, new_job_id, valid_job_id
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +282,7 @@ async def list_jobs(request: Request, admin: Admin) -> JSONResponse:
 
 
 async def _job(runtime: Runtime, job_id: str) -> dict[str, Any]:
-    if not job_id or len(job_id) > 64 or "/" in job_id:
+    if not valid_job_id(job_id):  # never sent to the store (Firestore refuses odd ids)
         raise ApiError(404, "not_found", "No such job")
     job = await _call(runtime.store.get_job, job_id)
     if job is None:

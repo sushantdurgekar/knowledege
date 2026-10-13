@@ -3,6 +3,7 @@
  *   - the admin overview renders for an admin (a Google account in ADMIN_EMAILS) and every
  *     /api/admin route 404s for anyone else
  *   - read_only maintenance: the hub shows "Sync paused" and saves locally; off: it drains
+ *   - full maintenance: an open hub pauses, a reload runs locally, off syncs every change
  *   - a scheduled window with a near startAt fires and ends (test clock + scheduler tick)
  *   - a backup downloaded through the ticket passes `backup_tool.py verify` (plain and encrypted)
  */
@@ -12,6 +13,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { openQuizModule, settle } from './support/hub';
 import { ADMIN, ADMIN_TZ, GOOGLE, saveDownload, signInAdmin, signInAs, tick, verifyBackup, wallClock } from './support/m2';
 import {
+  API_HEADERS,
   PILL,
   V2_HUB,
   answerNext,
@@ -131,6 +133,43 @@ test('read_only maintenance: the hub shows "Sync paused" and saves locally; off 
   expect(await storedUpd(request, userA.uid, hub, 'main'), 'the outbox drained').toBe(upd);
   await expect(pill(page)).toHaveText(PILL.cloud);
   await expect.poll(() => notices(page)).not.toContain('maintenance');
+  await adminContext.close();
+});
+
+test('full maintenance: an open hub pauses, a reload stays local, nothing is lost; off syncs it all', async ({ browser, page, request }) => {
+  const first = await learnerSynced(page);
+
+  const adminContext = await browser.newContext();
+  await signInAdmin(adminContext);
+  const setMode = async (data: Record<string, unknown>): Promise<void> => {
+    const r = await adminContext.request.put('/api/admin/maintenance', { headers: API_HEADERS, data });
+    expect(r.status(), `PUT /api/admin/maintenance ${JSON.stringify(data)}: ${await r.text()}`).toBe(200);
+  };
+  await setMode({ mode: 'full', message: 'Moving the database', confirm: 'FULL' });
+
+  // The open page: its writes pause and stay in this browser.
+  const during = await answerNext(page, hub);
+  await settle(page, 1600);
+  await flushNow(page);
+  await expect(pill(page)).toHaveText(PILL.error);
+  await expect.poll(() => notices(page)).toContain('maintenance');
+  expect(await storedUpd(request, userA.uid, hub, 'main'), 'nothing written in full').toBe(first);
+
+  // A reload during full: the hub runs from this browser alone, with everything kept.
+  await page.reload();
+  await expect(pill(page)).toHaveText(PILL.local);
+  expect((await localStamps(page, hub)).main, 'the paused change survived the reload').toBe(during);
+  await openQuizModule(page, hub);
+  const offline = await answerNext(page, hub);
+  await settle(page, 1600);
+  expect(offline).toBeGreaterThan(during);
+
+  await setMode({ mode: 'off' });
+  await page.reload();
+  await expectSignedInHub(page);
+  await flushNow(page);
+  await expect.poll(() => storedUpd(request, userA.uid, hub, 'main'), { message: 'every local change reached the account' }).toBe(offline);
+  await expect(pill(page)).toHaveText(PILL.cloud);
   await adminContext.close();
 });
 

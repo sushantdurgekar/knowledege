@@ -85,6 +85,10 @@ def test_m2_flow(fresh: Adapter, make_client: Any, tmp_path: Path) -> None:
     assert client.post("/api/test/tick", headers=TEST).json()["events"] == [f"finished {job['id']}"]
     assert client.get("/api/admin/maintenance").json()["mode"] == "off"
     assert client.get(f"/api/admin/jobs/{job['id']}").json()["job"]["state"] == "succeeded"
+    for odd in ("__x__", "%2E%2E", "j" * 64):  # ids Firestore refuses: a plain 404, no store error
+        assert client.get(f"/api/admin/jobs/{odd}").status_code == 404, odd
+        cancel = client.post(f"/api/admin/jobs/{odd}/cancel", json={"confirm": "CANCEL"}, headers=API)
+        assert cancel.status_code == 404, odd
 
     # A consistent backup through the ticket, verified offline, then logged (the admin
     # session above was installed directly, so only the two learners have user docs).

@@ -356,6 +356,9 @@ def test_jobs_lifecycle(admin: TestClient) -> None:
     again = post(admin, f"/api/admin/jobs/{job['id']}/cancel", {"confirm": "CANCEL"})
     assert again.status_code == 409
     assert admin.get("/api/admin/jobs/nope").status_code == 404
+    store(admin).fail_next("get_job", Unavailable("a store call would fail"), count=10)
+    for odd in ("__x__", "%2E%2E", "j1-x", f"{job['id']}x"):  # not a job id: never sent to the store
+        assert admin.get(f"/api/admin/jobs/{odd}").json()["code"] == "not_found", odd
 
 
 def test_job_validation_and_full_needs_confirmation(admin: TestClient) -> None:

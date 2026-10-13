@@ -9,6 +9,7 @@ a missing document, a commit is 1 write per document) and reports them through
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 import threading
 from collections.abc import Callable, Iterator
@@ -244,6 +245,14 @@ def progress_range(uid: str) -> tuple[str, str]:
 def new_job_id(now_ms: int) -> str:
     """Time-ordered job ids (`j<ms>-<hex>`): the newest jobs sort last by document id."""
     return f"j{now_ms:013d}-{secrets.token_hex(4)}"
+
+
+JOB_ID_RE = re.compile(r"j\d{13}-[0-9a-f]{8}")
+
+
+def valid_job_id(value: object) -> bool:
+    """Only ids `new_job_id` makes (anything else, e.g. `__x__`, Firestore refuses outright)."""
+    return isinstance(value, str) and JOB_ID_RE.fullmatch(value) is not None
 
 
 def merged_done(parts: dict[str, PartIn], accepted: set[str]) -> int | None:
