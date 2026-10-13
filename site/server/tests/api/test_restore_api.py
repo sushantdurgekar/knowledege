@@ -855,3 +855,85 @@ def test_the_drain_lasts_a_settings_refresh_outside_tests(make_client: Any, tmp_
     assert runtime(make_client(data_dir=tmp_path / "t")).restore.drain_s == 0.0  # APP_ENV=test
     dev = make_client(app_env="development", data_dir=tmp_path / "d")
     assert runtime(dev).restore.drain_s == REFRESH_S + 5
+
+
+@pytest.mark.parametrize("full_on", [False, True])
+def test_a_reclaimed_restore_drains_again_when_it_turns_full_on(
+    make_client: Any, tmp_path: Path, source: MemoryStore, full_on: bool
+) -> None:
+    """An instance recorded `prev` and died before `full` was switched on: users kept
+    writing. The instance that reclaims the job turns `full` on itself, so it waits the
+    drain before its first read of the target, like a fresh start. A job reclaimed while
+    `full` is still on (a crash mid-apply) carries on without that wait."""
+    path = write_backup(source, tmp_path / "s.backup")
+    target = MemoryStore()
+    client = admin_client(make_client, tmp_path, store=target)
+    rt = runtime(client)
+    upload_id = upload(client, path)
+    validate(client, upload_id)
+    job = start_job(client, upload_id, runAt="tonight").json()["job"]
+    assert target.claim_job(job["id"], "dead-instance", {"scheduled"})
+    target.update_job(job["id"], {"heartbeat": "2026-10-01T00:00:00Z", "prev": {"mode": "off"}}, expect={})
+    if full_on:  # it died mid-apply: `full` is still on
+        from dataclasses import replace
+
+        from app.admin.site import Maintenance
+
+        rt.site.update(lambda c: replace(c, maintenance=Maintenance("full", "Restoring", None)))
+    events: list[str] = []
+    rt.restore.drain_s = 0.02
+    rt.restore._sleep = lambda seconds: events.append("sleep")
+    original_lookup = target.is_tombstoned
+
+    def lookup(*args: Any, **kwargs: Any) -> Any:
+        events.append("read")  # the runner's first read of the target
+        return original_lookup(*args, **kwargs)
+
+    target.is_tombstoned = lookup  # type: ignore[method-assign]
+    rt.scheduler.refresh()
+    assert rt.scheduler.tick() == [f"reclaimed {job['id']}"]
+    done = wait_job(client, job["id"])
+    assert done["state"] == "succeeded", done
+    assert "read" in events
+    if full_on:
+        assert "drainUntil" not in done
+        assert "sleep" not in events[: events.index("read")]
+    else:
+        assert "drainUntil" in done
+        assert events.index("sleep") < events.index("read")
+    assert state_of(target) == state_of(source)
+
+
+@pytest.mark.parametrize("change", ["revalidating", "other_file"])
+def test_a_job_applies_only_the_file_it_was_confirmed_for(
+    make_client: Any, tmp_path: Path, source: MemoryStore, change: str
+) -> None:
+    """The routes refuse to touch an upload a job uses, but a chunk or validation request
+    racing the job's creation could still re-stage the upload. The job records the
+    validated file's lines hash and refuses, before any write, to run on anything else."""
+    path = write_backup(source, tmp_path / "s.backup")
+    target = MemoryStore()
+    client = admin_client(make_client, tmp_path, store=target)
+    rt = runtime(client)
+    upload_id = upload(client, path)
+    validate(client, upload_id)
+    job = start_job(client, upload_id, runAt="tonight").json()["job"]
+    uploads = rt.restore.uploads
+    staged = uploads._load(upload_id)
+    if change == "revalidating":  # a racing validation renamed its ready file, not yet finished
+        staged.state = "validating"
+    else:  # a racing chunk and validation staged a different (valid) backup
+        assert staged.report is not None
+        staged.report = {**staged.report, "linesSha256": "0" * 64}
+    uploads._save(staged)
+    assert uploads.ready_path(upload_id).is_file()
+    assert target.claim_job(job["id"], "dead-instance", {"scheduled"})
+    target.update_job(job["id"], {"heartbeat": "2026-10-01T00:00:00Z"}, expect={})
+    rt.scheduler.refresh()
+    assert rt.scheduler.tick() == [f"reclaimed {job['id']}"]
+    done = wait_job(client, job["id"])
+    assert done["state"] == "failed", done
+    assert "the upload changed" in done["error"]
+    assert target.count_users() == 0
+    assert target.count_docs("progress") == 0
+    assert rt.maintenance_mode == "off"

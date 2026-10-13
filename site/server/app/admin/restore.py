@@ -241,6 +241,7 @@ def create_restore_job(runtime: Runtime, data: dict[str, Any], identity: Any, tz
         "exitMaintenanceOnSuccess": exit_after,
         "total": int(report.get("records") or 0),
         "endCounts": report.get("counts"),
+        "linesSha256": report.get("linesSha256"),  # the runner restores this validated file only
         "checkpoint": {"line": 0},
         "createdAt": run_at_ms_iso(now),
         "createdBy": getattr(identity, "email", None),

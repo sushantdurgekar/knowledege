@@ -57,7 +57,7 @@ from app.config import Settings
 from app.progress.validate import compact_json, done_count, encode_gz
 from app.quota.pacific import iso_utc, next_reset
 from app.restore.plan import build_plan
-from app.restore.uploads import Uploads
+from app.restore.uploads import UploadError, Uploads
 from app.store.base import (
     RESTORE_KINDS,
     Conflict,
@@ -405,6 +405,13 @@ class RestoreService:
                 state="failed" if not checkpoint.get("line") else "needs_attention",
             )
             return
+        if phase != "verified" and not self._same_upload(job, upload_id):
+            self._fail(
+                job_id,
+                "the upload changed after this job was confirmed: validate it and start a new restore",
+                state="failed" if not checkpoint.get("line") else "needs_attention",
+            )
+            return
         self._enter_full(job)
         if phase != "verified":
             if phase == "apply":
@@ -429,6 +436,19 @@ class RestoreService:
         self._set(job_id, {"state": "succeeded", "finishedAt": iso_utc(now), "updatedAt": iso_utc(now)})
         logger.info("Restore job %s succeeded", job_id)
 
+    def _same_upload(self, job: dict[str, Any], upload_id: str) -> bool:
+        """The staged file is still the one validated and confirmed for this job (an upload
+        changed or re-validated meanwhile is never applied in its place)."""
+        want = job.get("linesSha256")
+        if not want:
+            return True  # a job created before the field existed: the ready file is checked
+        try:
+            upload = self.uploads.get(upload_id)
+        except UploadError:
+            return False
+        report = upload.report or {}
+        return upload.state == "validated" and report.get("linesSha256") == want
+
     # -- maintenance -----------------------------------------------------------------------------------
 
     def _enter_full(self, job: dict[str, Any]) -> None:
@@ -441,13 +461,21 @@ class RestoreService:
             self._set(job_id, {"prev": prev.stored_json(), "startedAt": iso_utc(self.clock.now())})
             job["prev"] = prev.stored_json()
 
+        switched = False
+
         def change(current: SiteSettings) -> SiteSettings:
-            if current.maintenance.mode == "full":
+            nonlocal switched
+            switched = current.maintenance.mode != "full"
+            if not switched:
                 return current
             return replace(current, maintenance=Maintenance("full", MESSAGE, None))
 
         self._retry(self.site.update, change)
-        if fresh and self.drain_s > 0:
+        # Drain whenever this run is what turned `full` on: a fresh start, but also a job
+        # resumed or reclaimed after `full` was lost (a crash between recording `prev` and
+        # the switch, an admin turning it off during a quota pause). Users may have written
+        # until now, so the target is read only once those requests have ended.
+        if (fresh or switched) and self.drain_s > 0:
             self._drain(job_id)
 
     def _drain(self, job_id: str) -> None:
