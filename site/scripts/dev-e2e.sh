@@ -3,12 +3,17 @@
 #
 #   sh site/scripts/dev-e2e.sh [playwright args...]      e.g.  --grep @smoke   or   tests/ai.spec.ts
 #
-# Starts `uvicorn app.main:app` (APP_ENV=test) on $PORT unless something already
-# answers $BASE_URL/healthz, waits for /healthz, runs `npx playwright test "$@"`,
-# then stops the server it started. Build first (sh site/scripts/dev-build.sh).
+# Starts `uvicorn app.main:app` on $PORT unless something already answers
+# $BASE_URL/healthz, waits for /healthz, runs `npx playwright test "$@"`, then stops the
+# server it started. Build first (sh site/scripts/dev-build.sh).
 #
-# Env: PORT (10000), BASE_URL (http://127.0.0.1:$PORT), APP_ENV (test),
-#      HEALTH_TIMEOUT seconds (30). The server log goes to site/e2e/server.log.
+# The server runs as the M1 suite needs it (build-contracts.md sections 8 and 15):
+# APP_ENV=test (mounts /api/test/*), AUTH_MODE=fake (sign in with "fake:" tokens),
+# STORE=memory (wiped by POST /api/test/reset) and a fixed test SECRET_KEY. A server you
+# started yourself must run the same way, or the sync-*.spec.ts files fail.
+#
+# Env: PORT (10000), BASE_URL (http://127.0.0.1:$PORT), HEALTH_TIMEOUT seconds (30).
+#      The server log goes to site/e2e/server.log.
 set -eu
 
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -16,6 +21,8 @@ SITE="$ROOT/site"
 PORT=${PORT:-10000}
 BASE_URL=${BASE_URL:-http://127.0.0.1:$PORT}
 HEALTH_TIMEOUT=${HEALTH_TIMEOUT:-30}
+# Test-only signing key (>= 32 bytes; never used outside APP_ENV=test).
+E2E_SECRET_KEY="e2e-only-secret-key-0123456789abcdef-not-for-production"
 LOG="$SITE/e2e/server.log"
 export BASE_URL
 
@@ -47,7 +54,8 @@ else
   echo "dev-e2e: starting uvicorn on 127.0.0.1:$PORT (log: $LOG)"
   (
     cd "$SITE/server"
-    APP_ENV=${APP_ENV:-test} PUBLIC_ORIGIN="$BASE_URL" \
+    APP_ENV=test AUTH_MODE=fake STORE=memory PUBLIC_ORIGIN="http://127.0.0.1:$PORT" \
+      SECRET_KEY="$E2E_SECRET_KEY" \
       exec "$UVICORN" app.main:app --host 127.0.0.1 --port "$PORT" --workers 1
   ) >"$LOG" 2>&1 &
   SERVER_PID=$!

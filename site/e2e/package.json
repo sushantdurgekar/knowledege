@@ -2,7 +2,7 @@
   "name": "study-hubs-e2e",
   "version": "0.1.0",
   "private": true,
-  "description": "Playwright end-to-end acceptance tests for the Study Hubs site (M0: static site, anonymous mode). Runs against a live server at BASE_URL.",
+  "description": "Playwright end-to-end acceptance tests for the Study Hubs site (M0: static site, anonymous mode; M1: accounts and sync with fake auth). Runs against a live server at BASE_URL.",
   "license": "UNLICENSED",
   "type": "module",
   "engines": {
