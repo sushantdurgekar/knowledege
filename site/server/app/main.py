@@ -7,9 +7,10 @@ Routes are tried in order (API, hubs, static files); a request that matches no
 route at all goes to `static_routes.fallback_app` (SPA shell, JSON 404 under /api).
 
 Middleware, outermost first: security headers, app egress meter, session-cookie
-clearing, /api gzip. The M1 services (store, auth, quota) live in one `Runtime`;
-the lifespan loads the quota meter in the background, persists it every 10 minutes
-and once more on shutdown.
+clearing, site-settings refresh (M2), /api gzip. The services (store, auth, quota,
+site settings, scheduler) live in one `Runtime`; the lifespan loads the quota meter
+in the background, persists it every 10 minutes and once more on shutdown, and runs
+the job scheduler (a boot tick of at most 3 s, then every 20 s).
 """
 
 from __future__ import annotations
@@ -27,6 +28,9 @@ from fastapi import FastAPI
 from starlette.types import ASGIApp
 
 from app import __version__, api_routes, hubs_routes, static_routes
+from app.account import routes as account_routes
+from app.admin import routes as admin_routes
+from app.admin.site import SettingsRefreshMiddleware
 from app.api_gzip import ApiGZipMiddleware
 from app.auth import routes as auth_routes
 from app.auth.identity import Authenticator
@@ -72,8 +76,23 @@ async def _persist_meter_forever(runtime: Runtime, interval_s: float) -> None:
             logger.exception("Quota meter persist failed")
 
 
-async def _shutdown_runtime(runtime: Runtime, task: asyncio.Task[None] | None) -> None:
-    if task is not None:
+BOOT_TICK_TIMEOUT_S = 3.0
+
+
+async def _start_scheduler(runtime: Runtime) -> asyncio.Task[None] | None:
+    """The boot tick (re-read jobs, finish windows that ended while down), then the loop."""
+    scheduler = runtime.scheduler
+    if scheduler is None:
+        return None
+    with anyio.move_on_after(BOOT_TICK_TIMEOUT_S):  # a slow backend must not hold startup
+        await scheduler.tick_async()
+    return asyncio.create_task(scheduler.run_forever())
+
+
+async def _shutdown_runtime(runtime: Runtime, *tasks: asyncio.Task[None] | None) -> None:
+    for task in tasks:
+        if task is None:
+            continue
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
@@ -113,11 +132,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Load in a daemon thread: a slow or unreachable backend must not delay startup.
         threading.Thread(target=runtime.meter.load, name="quota-meter-load", daemon=True).start()
         task = asyncio.create_task(_persist_meter_forever(runtime, PERSIST_INTERVAL_S))
+    scheduler_task = await _start_scheduler(runtime) if runtime is not None else None
     try:
         yield
     finally:
         if runtime is not None:
-            await _shutdown_runtime(runtime, task)
+            await _shutdown_runtime(runtime, scheduler_task, task)
 
 
 def create_app(
@@ -148,6 +168,7 @@ def create_app(
     install_error_handlers(app)
     # add_middleware puts each new one outside the previous ones.
     app.add_middleware(ApiGZipMiddleware)
+    app.add_middleware(SettingsRefreshMiddleware, cache=runtime.site)
     app.add_middleware(SessionCookieMiddleware, settings=settings)
     app.add_middleware(AppEgressMiddleware, meter=runtime.meter)
 
@@ -159,7 +180,8 @@ def create_app(
         from app.testing import routes as testing_routes
 
         app.include_router(testing_routes.router)
-    # M2+: account and admin routers are included here.
+    app.include_router(account_routes.router)
+    app.include_router(admin_routes.router)
     app.include_router(hubs_routes.router)
     app.include_router(static_routes.router)
     # No catch-all route: a path match with the wrong method must still get a 405.

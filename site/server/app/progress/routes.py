@@ -119,6 +119,9 @@ async def get_progress(request: Request, hub_id: str, known: str | None = None) 
         "policy": runtime.guard.policy(uid).to_json(),
         "maintenance": runtime.maintenance(),
     }
+    upcoming = runtime.upcoming()
+    if upcoming is not None:  # a maintenance window starts within 10 minutes
+        body["upcoming"] = upcoming
     return JSONResponse(body, headers=NO_STORE)
 
 
@@ -160,4 +163,8 @@ async def sync(request: Request) -> JSONResponse:
 
     batches = await run_in_threadpool(prepare)
     results = await run_in_threadpool(runtime.progress.sync, uid, batches, now_ms)
-    return JSONResponse({"results": results, "policy": runtime.guard.policy(uid).to_json()}, headers=NO_STORE)
+    body: dict[str, Any] = {"results": results, "policy": runtime.guard.policy(uid).to_json()}
+    upcoming = runtime.upcoming()
+    if upcoming is not None:
+        body["upcoming"] = upcoming
+    return JSONResponse(body, headers=NO_STORE)

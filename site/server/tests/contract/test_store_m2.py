@@ -271,6 +271,11 @@ def test_claim_job_is_exclusive(adapter: Adapter) -> None:
     assert stored["claimedAt"].endswith("Z")
     assert store.claim_job(j["id"], "late", {"scheduled"}) is False
     assert store.claim_job("j-missing", "x", {"scheduled"}) is False
+    assert store.claim_job(j["id"], "ender", {"running"}, to_state="succeeded") is True
+    assert store.claim_job(j["id"], "ender-2", {"running"}, to_state="succeeded") is False  # once
+    done = store.get_job(j["id"])
+    assert done is not None
+    assert (done["state"], done["holder"]) == ("succeeded", "ender")
 
 
 def test_jobs_list_billing(fresh: Adapter) -> None:

@@ -6,6 +6,7 @@ when APP_ENV=test; a unit test asserts it is absent otherwise.
     POST /api/test/quota   {writes?, reads?}
     POST /api/test/reset
     GET  /api/test/store
+    POST /api/test/tick    (M2) run one scheduler tick now -> {events, maintenance, upcoming}
 
 `reset` and `store` work on the memory store and on the Firestore emulator (so the M1
 e2e specs also run with STORE=firestore); any other store answers 501.
@@ -108,6 +109,12 @@ def reset_runtime(runtime: Runtime) -> None:
     runtime.faults.clear()
     runtime.auth.clear_cache()
     runtime.clock.offset_ms = 0
+    runtime.site.reset()
+    runtime.deleted_uids.clear()
+    if runtime.scheduler is not None:
+        runtime.scheduler.reset()
+    if runtime.backups is not None:
+        runtime.backups.reset()
 
 
 def _not_supported(exc: StoreError) -> ApiError:
@@ -135,3 +142,16 @@ async def store(request: Request) -> JSONResponse:
         raise _not_supported(exc) from None
     body["meter"] = {name: runtime.meter.today()[name] for name in USAGE_COUNTERS}
     return JSONResponse(body)
+
+
+@router.post("/tick")
+async def tick(request: Request) -> JSONResponse:
+    """Run the job scheduler now (e2e: a window with a near startAt, after POST /clock)."""
+    runtime = get_runtime(request)
+    try:
+        events = await run_in_threadpool(runtime.scheduler.tick)
+    except StoreError as exc:
+        raise _not_supported(exc) from None
+    return JSONResponse(
+        {"events": events, "maintenance": runtime.maintenance(), "upcoming": runtime.upcoming()}
+    )

@@ -375,15 +375,15 @@ class MemoryStore(LaterMethods):
             self._jobs[str(job["id"])] = deepcopy(job)
         self.ops.add(writes=1)
 
-    def claim_job(self, id: str, holder: str, from_states: set[str]) -> bool:
-        """Atomically move a job from one of `from_states` to running, held by `holder`."""
+    def claim_job(self, id: str, holder: str, from_states: set[str], *, to_state: str = "running") -> bool:
+        """Atomically move a job from one of `from_states` to `to_state`, held by `holder`."""
         self._enter("claim_job")
         with self._lock:
             self.ops.add(reads=1)
             job = self._jobs.get(id)
             if job is None or job.get("state") not in from_states:
                 return False
-            job.update(state="running", holder=holder, claimedAt=_iso(datetime.now(UTC)))
+            job.update(_transition(to_state, holder))
             self.ops.add(writes=1)
             return True
 
@@ -439,6 +439,14 @@ class MemoryStore(LaterMethods):
             usage = {key: dict(value) for key, value in sorted(self._usage.items())}
             tombstones = [{"h": h, "at": _iso(at)} for h, at in sorted(self._tombstones.items())]
         return {"users": users, "progress": progress, "usage": usage, "tombstones": tombstones}
+
+
+def _transition(to_state: str, holder: str) -> dict[str, Any]:
+    now = _iso(datetime.now(UTC))
+    fields: dict[str, Any] = {"state": to_state, "holder": holder, "updatedAt": now}
+    if to_state == "running":
+        fields["claimedAt"] = now
+    return fields
 
 
 def _after(table: dict[str, Any], cursor: str | None) -> Iterable[str]:

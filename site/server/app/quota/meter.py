@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 
 from app.clock import Clock
@@ -90,6 +92,21 @@ class Meter:
                 _add(bucket.setdefault(day, {}), delta)
                 if not own:
                     self._external_activity = True
+
+    @contextmanager
+    def quiet(self) -> Iterator[None]:
+        """Count this thread's operations, but do not let them alone cause a persist write.
+
+        For housekeeping that runs on a timer whether or not anyone uses the site (the
+        job scheduler's 5-minute re-read): like the meter's own writes, these deltas
+        are carried forward with the next real activity, so an idle site writes nothing.
+        """
+        previous = getattr(self._persisting, "active", False)
+        self._persisting.active = True
+        try:
+            yield
+        finally:
+            self._persisting.active = previous
 
     def add_app_egress(self, nbytes: int) -> None:
         if nbytes > 0:

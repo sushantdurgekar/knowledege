@@ -57,6 +57,9 @@ class FakeAuthenticator:
         self._secret = secret
         self._clock = clock
         self._session_s = session_days * 86400
+        # Fake "revocation" for the admin re-check (tests revoke a uid; delete_user does too).
+        self.revoked: set[str] = set()
+        self.deleted: list[str] = []
 
     def verify_id_token(self, id_token: str) -> Identity:
         if not isinstance(id_token, str) or not id_token.startswith(PREFIX) or len(id_token) > MAX_TOKEN:
@@ -133,8 +136,20 @@ class FakeAuthenticator:
             expires_at=exp,
         )
 
+    def verify_session_strict(self, cookie: str) -> Identity:
+        identity = self.verify_session(cookie)
+        if identity.uid in self.revoked:
+            raise AuthError("fake session revoked", code="revoked")
+        return identity
+
+    def delete_user(self, uid: str) -> None:
+        """No Auth user to delete in fake mode; remembered for tests, and its sessions revoked."""
+        self.deleted.append(uid)
+        self.revoked.add(uid)
+
     def forget(self, cookie: str) -> None:
         return None
 
     def clear_cache(self) -> None:
-        return None
+        self.revoked.clear()
+        self.deleted.clear()

@@ -14,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
 
 from app import __version__
+from app.admin.auth import is_admin
 from app.auth import ratelimit
 from app.auth.csrf import csrf_protect
 from app.auth.deps import get_viewer
@@ -53,15 +54,19 @@ async def config(request: Request) -> JSONResponse:
 
 @router.get("/api/me")
 async def me(request: Request) -> JSONResponse:
-    """Who is signed in (0 store reads: everything comes from the verified session)."""
+    """Who is signed in (0 store reads: everything comes from the verified session, the
+    cached site settings and the scheduler's cached jobs)."""
     viewer = await get_viewer(request)
     if viewer.identity is None or viewer.public_id is None:
         return JSONResponse({"signedIn": False}, headers=NO_STORE)
     runtime = get_runtime(request)
+    user = viewer.identity.profile(viewer.public_id)
+    user["admin"] = is_admin(runtime.settings, viewer.identity)  # display only: admin routes re-check
     body = {
         "signedIn": True,
-        "user": viewer.identity.profile(viewer.public_id),
+        "user": user,
         "maintenance": runtime.maintenance(),
+        "upcoming": runtime.upcoming(),
         "policy": runtime.guard.policy(viewer.identity.uid).to_json(),
     }
     return JSONResponse(body, headers=NO_STORE)

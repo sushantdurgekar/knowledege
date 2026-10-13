@@ -610,7 +610,7 @@ class FirestoreStore(LaterMethods):
             ref.set(dict(job), retry=RETRY, timeout=TIMEOUT)
         self.ops.add(writes=1)
 
-    def claim_job(self, id: str, holder: str, from_states: set[str]) -> bool:
+    def claim_job(self, id: str, holder: str, from_states: set[str], *, to_state: str = "running") -> bool:
         ref = self.db.collection("jobs").document(id)
         outcome: dict[str, Any] = {}
 
@@ -622,7 +622,11 @@ class FirestoreStore(LaterMethods):
             if state not in from_states:
                 outcome["write"] = False
                 return False
-            tx.update(ref, {"state": "running", "holder": holder, "claimedAt": _iso(datetime.now(UTC))})
+            now = _iso(datetime.now(UTC))
+            fields = {"state": to_state, "holder": holder, "updatedAt": now}
+            if to_state == "running":
+                fields["claimedAt"] = now
+            tx.update(ref, fields)
             outcome["write"] = True
             outcome["phase"] = "writes"
             return True

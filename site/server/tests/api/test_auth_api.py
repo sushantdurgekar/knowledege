@@ -60,8 +60,10 @@ def test_me_signed_in(api: TestClient) -> None:
         "photo": None,
         "provider": "google.com",
         "emailVerified": True,
+        "admin": False,
     }
     assert body["maintenance"] == {"mode": "off", "message": None, "until": None}
+    assert body["upcoming"] is None
     assert body["policy"] == {
         "tier": 1,
         "flushMs": 120_000,
