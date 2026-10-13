@@ -420,9 +420,12 @@ async def admin_fallback(request: Request, rest: str, admin: Admin) -> JSONRespo
     allowed: set[str] = set()
     for route in request.app.router.routes:
         path = getattr(route, "path", "")
-        if path.startswith("/api/admin/") and path != "/api/admin/{rest:path}":
-            if route.path_regex.match(request.url.path):  # type: ignore[attr-defined]
-                allowed |= set(getattr(route, "methods", ()) or ())
+        if (
+            path.startswith("/api/admin/")
+            and path != "/api/admin/{rest:path}"
+            and route.path_regex.match(request.url.path)  # type: ignore[attr-defined]
+        ):
+            allowed |= set(getattr(route, "methods", ()) or ())
     if allowed:
         allow = ", ".join(sorted(allowed))
         raise ApiError(405, "method_not_allowed", "Method Not Allowed", headers={"Allow": allow})

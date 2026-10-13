@@ -137,6 +137,8 @@ async def create_session(request: Request) -> JSONResponse:
     except AuthUnavailable:
         raise ApiError(503, "unavailable", "Sign-in is unavailable right now", retry_after=30) from None
 
+    # A fresh ID token means the account exists again (fake mode reuses uids after DELETE /api/me).
+    runtime.deleted_uids.discard(identity.uid)
     pid = public_id(settings.secret, identity.uid)
     response = JSONResponse({"user": identity.profile(pid)}, headers=NO_STORE)
     set_session_cookies(response, settings, session, pid)
