@@ -85,8 +85,10 @@ describe('routes', () => {
     ['/privacy', 'What this site stores'],
   ])('renders the page at %s', async (path, heading) => {
     renderAt(path);
-    // Lazy route chunks can take more than the default 1 s to load when the whole suite runs.
-    expect(await screen.findByRole('heading', { level: 1, name: heading }, { timeout: 5000 })).toBeInTheDocument();
+    // Re-query on every try: some pages (/verify) show the heading while loading, then render a
+    // new heading element once the config arrives, so a heading found once can be detached by
+    // the time it is checked. Lazy route chunks can also take more than 1 s on a busy runner.
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: heading })).toBeInTheDocument(), { timeout: 5000 });
   });
 
   it('carries only a safe ?next= over to the sign-up link', async () => {
