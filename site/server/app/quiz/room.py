@@ -916,10 +916,10 @@ class Room:
     def cards(self) -> list[dict[str, Any]]:
         """Flashcards: each slide as a reading card, each question with its answer."""
         out: list[dict[str, Any]] = []
-        for q in self.quiz.questions:
+        for i, q in enumerate(self.quiz.questions):
             if q.type == "poll":
                 continue
-            card: dict[str, Any] = {"type": q.type, "front": q.text, "back": answer_text(q)}
+            card: dict[str, Any] = {"index": i, "type": q.type, "front": q.text, "back": answer_text(q)}
             if q.type in ("single", "multi", "truefalse"):
                 card["options"] = q.options
             if q.explain:

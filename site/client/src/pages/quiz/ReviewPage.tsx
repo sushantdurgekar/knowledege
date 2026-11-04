@@ -4,7 +4,9 @@ import { BusyLine } from '../../components/forms';
 import { useMe } from '../../context/me';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { TYPE_LABELS } from '../../lib/quiz';
-import { commit, dueCards, loadState, pull, schedule, type QuizState } from '../../lib/quiz-history';
+import { commit, dueCards, loadState, markStudied, pull, schedule, type QuizState } from '../../lib/quiz-history';
+import { deckToVault } from '../../lib/vault-export';
+import { VaultExport } from './VaultExport';
 
 const GRADES = [
   { grade: 1, label: 'Again', note: 'forgot' },
@@ -39,7 +41,7 @@ export function ReviewPage() {
 
   const grade = (g: number) => {
     if (!card) return;
-    const next = { ...state, deck: { ...state.deck, [card.id]: schedule(card, g) } };
+    const next = markStudied({ ...state, deck: { ...state.deck, [card.id]: schedule(card, g) } });
     setState(next);
     commit(next, signedIn);
     setFlipped(false);
@@ -54,7 +56,8 @@ export function ReviewPage() {
       <h1 id="page-title">Review deck</h1>
       <p className="lede">
         Questions from the quizzes you played come back just before you would forget them (spaced repetition).{' '}
-        {signedIn ? 'Synced to your account.' : 'Saved in this browser; sign in to keep it on every device.'}
+        {signedIn ? 'Synced to your account.' : 'Saved in this browser; sign in to keep it on every device.'}{' '}
+        <Link to="/quiz/progress">See your progress</Link>.
       </p>
 
       <div className="review__stats">
@@ -121,6 +124,16 @@ export function ReviewPage() {
             )}
           </p>
         </div>
+      )}
+
+      {total > 0 && (
+        <section className="review__vault" aria-labelledby="vault-title">
+          <h2 id="vault-title">Keep these cards in your Knowledge vault</h2>
+          <p className="muted small">
+            Download the whole deck, with its review schedule, for the pro-instructor deck (practice/srs/cards.jsonl).
+          </p>
+          <VaultExport name="my-review-deck" load={() => deckToVault(Object.values(state.deck))} />
+        </section>
       )}
 
       {state.history.length > 0 && (

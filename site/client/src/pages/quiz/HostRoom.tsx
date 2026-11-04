@@ -6,6 +6,7 @@ import { download } from '../../lib/quiz-doc';
 import {
   apiMessage,
   boardLink,
+  fetchHostCards,
   hostAction,
   presenterLink,
   hostSecret,
@@ -19,6 +20,8 @@ import {
 import { Leaderboard, LETTERS, QuestionImage, SlideBody, Solution } from './Answering';
 import { QrCode } from './QrCode';
 import { TeamBoard, teamOf } from './Teams';
+import { roomToVault, vaultDeck } from '../../lib/vault-export';
+import { VaultExport } from './VaultExport';
 
 /** `/quiz/host/:pin`: the host's control room, meant for a projector. */
 export function HostRoom() {
@@ -560,6 +563,20 @@ function Final({ view, busy, act }: { view: RoomView; busy: boolean; act: Act })
         </button>
       </p>
       <p className="muted small">Players can review the answers as flashcards until you close the room.</p>
+      <div className="quiz-final__vault">
+        <h3>Revise it later</h3>
+        <p className="muted small">
+          Every question as a review card for your Knowledge vault; the ones most of the room missed are tagged missed-by-room.
+        </p>
+        <VaultExport
+          name={vaultDeck(view.title)}
+          label="Export the questions to my vault"
+          load={async () => {
+            const r = await fetchHostCards(view.pin, hostSecret(view.pin) ?? '');
+            return roomToVault(r.title, r.cards, new Map(r.insights.map((i) => [i.index, i])));
+          }}
+        />
+      </div>
     </div>
   );
 }

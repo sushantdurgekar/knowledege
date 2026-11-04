@@ -543,3 +543,101 @@
 .editor__image { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 14px; }
 .editor__image .quiz-image { margin: 0; }
 .editor__image .quiz-image img { max-height: 160px; }
+
+/* -- AI drafts ------------------------------------------------------------------------------ */
+.ai-draft__btn { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, var(--surface)), color-mix(in srgb, #0b8478 12%, var(--surface))); }
+.ai-draft__row { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-start; }
+.ai-draft__kinds { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.ai-draft__kinds legend { margin-bottom: 6px; font-weight: 700; }
+.ai-draft__modules .bank__modules { max-height: 220px; }
+
+/* -- Knowledge vault export ------------------------------------------------------------------ */
+.vault-export { display: grid; gap: 8px; justify-items: start; }
+.vault-export__done { width: 100%; }
+.vault-export__cmd { max-width: 100%; margin: 6px 0; padding: 10px 12px; overflow-x: auto; border-radius: 12px; background: var(--surface-2); font-size: .85rem; white-space: pre-wrap; word-break: break-all; }
+.review__vault, .quiz-final__vault { margin-top: 22px; padding: 16px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+.review__vault h2, .quiz-final__vault h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.quiz-final__vault { text-align: left; }
+
+/* -- My progress (dataviz: one hue, hairline grid, text in text tokens) ------------------------ */
+.progress {
+  --viz-1: #6c4cf5;            /* validated: L band + 3:1 on the light surface */
+  --viz-wash: rgb(108 76 245 / 0.1);
+  --viz-grid: var(--line);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .progress { --viz-1: #8f78ff; --viz-wash: rgb(143 120 255 / 0.12); }
+}
+:root[data-theme="dark"] .progress { --viz-1: #8f78ff; --viz-wash: rgb(143 120 255 / 0.12); }
+
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 12px; margin: 18px 0; }
+.stat { margin: 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow-1); }
+.stat dt { color: var(--muted); font-size: .85rem; font-weight: 600; }
+.stat dd { margin: 0; }
+.stat__value { font-size: 1.9rem; font-weight: 700; line-height: 1.2; color: var(--fg); }
+.stat__delta, .stat__note { color: var(--muted); font-size: .82rem; }
+.stat__delta.is-up span { color: var(--good); }
+.stat__delta.is-down span { color: var(--bad); }
+
+.progress__card { margin: 16px 0; padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); min-width: 0; }
+.progress__card h2 { margin: 0 0 2px; font-size: 1.1rem; }
+.progress__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 0 16px; }
+.progress__table { margin-top: 8px; }
+.progress__table summary { cursor: pointer; color: var(--muted); font-size: .88rem; }
+.progress__hardest { display: grid; gap: 8px; margin: 10px 0 14px; padding-left: 1.2em; }
+.progress__hardest li { display: grid; gap: 2px; }
+
+.viz { position: relative; margin-top: 10px; width: 100%; }
+.viz svg { display: block; overflow: visible; touch-action: pan-y; }
+.viz svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 8px; }
+.viz__grid { stroke: var(--viz-grid); stroke-width: 1; shape-rendering: crispEdges; }
+.viz__tick { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.viz__label { fill: var(--fg); font-size: 13px; font-weight: 700; }
+.viz__line { fill: none; stroke: var(--viz-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.viz__area { fill: var(--viz-wash); }
+.viz__dot { fill: var(--viz-1); stroke: var(--surface); stroke-width: 2; }
+.viz__cross { stroke: var(--muted); stroke-width: 1; shape-rendering: crispEdges; }
+.viz__col { fill: var(--viz-1); transition: opacity .12s; }
+.viz svg:hover .viz__col:not(.is-active), .viz svg:focus-visible .viz__col:not(.is-active) { opacity: .55; }
+.viz__tip {
+  position: absolute; z-index: 2; transform: translate(-50%, -100%); pointer-events: none;
+  display: grid; gap: 2px; min-width: 120px; max-width: 220px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--fg);
+  box-shadow: 0 8px 24px -8px rgb(20 12 60 / .35); font-size: .85rem;
+}
+.viz__tip strong { font-size: 1rem; }
+.viz__tip-sub { color: var(--muted); font-size: .8rem; }
+
+.viz-bars { display: grid; gap: 12px; margin: 12px 0 0; padding: 0; list-style: none; }
+.viz-bars__row { display: grid; gap: 3px; }
+.viz-bars__name { font-weight: 600; overflow-wrap: anywhere; }
+.viz-bars__line { display: flex; align-items: center; gap: 8px; }
+.viz-bars__bar { height: 14px; border-radius: 0 4px 4px 0; background: var(--viz-1); }
+.viz-bars__value { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.calib { width: 100%; margin-top: 10px; border-collapse: separate; border-spacing: 6px; table-layout: fixed; }
+.calib thead td { background: none; width: 64px; }
+.calib th { color: var(--muted); font-size: .85rem; text-align: left; }
+.calib td { padding: 10px 12px; border-radius: 12px; background: var(--surface-2); vertical-align: top; }
+.calib td strong { font-size: 1.3rem; }
+.calib__warn { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--bad) 55%, transparent); }
+.calib__flag { display: block; margin-top: 4px; font-size: .78rem; color: var(--fg); }
+
+/* -- presenter: countdown animation and sound switch ----------------------------------------- */
+@property --p { syntax: '<percentage>'; inherits: false; initial-value: 100%; }
+.present__timer { transition: --p 1s linear; }
+.present__timer.is-low { animation: ring-pulse 1s ease-out infinite; }
+.present__timer.is-low > span { animation: tick-pop 0.45s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes tick-pop { from { transform: scale(1.45); } to { transform: scale(1); } }
+@keyframes ring-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bad) 45%, transparent); }
+  100% { box-shadow: 0 0 0 18px transparent; }
+}
+.present__q { animation: q-in 0.45s ease both; }
+@keyframes q-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.present__btn[aria-pressed="false"] { color: var(--muted); }
+.present__hint { color: var(--muted); font-size: 0.85rem; }
+@media (prefers-reduced-motion: reduce) {
+  .present__timer { transition: none; }
+  .present__timer.is-low, .present__timer.is-low > span, .present__q { animation: none; }
+}

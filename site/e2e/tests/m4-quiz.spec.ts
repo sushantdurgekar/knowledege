@@ -2,7 +2,8 @@
  * Live quiz studio (admin) and rooms (players): build, host live with the run sheet, drag and
  * drop answers, end early, flashcards, and a self-paced room. Players need no account.
  */
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import fs from 'node:fs/promises';
+import { expect, test, type Browser, type Download, type Page } from '@playwright/test';
 import { signInAdmin } from './support/m2';
 
 async function join(browser: Browser, pin: string, name: string): Promise<Page> {
@@ -12,6 +13,11 @@ async function join(browser: Browser, pin: string, name: string): Promise<Page> 
   await page.getByRole('button', { name: 'Join' }).click();
   await expect(page.getByText('You’re in!')).toBeVisible();
   return page;
+}
+
+/** The JSON a download saved. */
+async function downloadedJson(download: Download): Promise<Record<string, unknown>[]> {
+  return JSON.parse(await fs.readFile((await download.path())!, 'utf8')) as Record<string, unknown>[];
 }
 
 /** Drag chips with the mouse (pointer events) until they read `wanted` top to bottom. */
@@ -161,6 +167,16 @@ test('advanced quiz: confidence, hints, teach-back, calibration, replay and the 
 
   await host.getByRole('button', { name: 'End quiz now' }).click();
   await expect(host.getByRole('heading', { name: 'Insights' })).toBeVisible();
+  // The host takes every question to the Knowledge vault; the one the room missed is tagged.
+  const [hostExport] = await Promise.all([
+    host.waitForEvent('download'),
+    host.getByRole('button', { name: 'Export the questions to my vault' }).click(),
+  ]);
+  expect(hostExport.suggestedFilename()).toBe('quiz-networking-basics-advanced-vault-cards.json');
+  const roomCards = await downloadedJson(hostExport);
+  expect(roomCards.every((c) => c.deck === 'quiz-networking-basics-advanced' && c.track === 'technical')).toBe(true);
+  expect(roomCards.find((c) => String(c.front).startsWith('Which port does HTTPS'))!.tags).toContain('missed-by-room');
+  await expect(host.getByText(/srs\.py --deck-file practice\/srs\/cards\.jsonl add --json-file/)).toBeVisible();
   await expect(ann.getByText('Sure but wrong')).toBeVisible();
   await expect(ann.getByRole('link', { name: /due for review now/ })).toBeVisible();
 
@@ -176,6 +192,24 @@ test('advanced quiz: confidence, hints, teach-back, calibration, replay and the 
   await ann.getByRole('button', { name: /^Good/ }).click();
   await expect(ann.getByText(/reviewed this session/)).toContainText('1');
   await expect(ann.locator('.review__history')).toContainText('Networking basics (advanced)');
+
+  // Her own deck goes to the vault with its review schedule.
+  const [mine] = await Promise.all([ann.waitForEvent('download'), ann.getByRole('button', { name: 'Export to my Knowledge vault' }).click()]);
+  expect(mine.suggestedFilename()).toBe('my-review-deck-vault-cards.json');
+  const myCards = await downloadedJson(mine);
+  expect(myCards.length).toBeGreaterThan(0);
+  expect(myCards[0]).toMatchObject({ track: 'technical', deck: 'quiz-networking-basics-advanced' });
+  expect(myCards[0]!.due).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+  // Progress across quizzes: one quiz, a one-day streak (played + reviewed today), calibration.
+  await ann.getByRole('link', { name: 'See your progress' }).click();
+  await expect(ann.getByRole('heading', { level: 1, name: 'My progress' })).toBeVisible();
+  await expect(ann.locator('.stat', { hasText: 'Quizzes played' })).toContainText('1');
+  await expect(ann.locator('.stat', { hasText: 'Study streak' })).toContainText('1 day');
+  await expect(ann.getByRole('img', { name: /Accuracy in your last 1 quizzes/ })).toBeVisible();
+  await expect(ann.getByRole('heading', { name: 'How sure were you?' })).toBeVisible();
+  await expect(ann.locator('.calib__warn')).toContainText('1');
+  await expect(ann.getByRole('img', { name: /reviews due over the next 14 days/ })).toBeVisible();
 });
 
 test('admin builds a quiz from a study hub', async ({ browser }) => {
@@ -191,6 +225,8 @@ test('admin builds a quiz from a study hub', async ({ browser }) => {
   await host.getByRole('button', { name: 'Create quiz' }).click();
   await host.waitForURL(/\/quiz\/host\/edit\//);
   await expect(host.locator('.editor__list .sortable__chip').first()).toContainText('Slide');
+  // No ANTHROPIC_API_KEY on the test server: no AI button.
+  await expect(host.getByRole('button', { name: 'Draft with AI' })).toHaveCount(0);
   await host.getByRole('button', { name: 'Check', exact: true }).click();
   await expect(host.getByText(/Ready: \d+ items/)).toBeVisible();
 });
@@ -210,23 +246,47 @@ test('presenter screen follows the host without early answers; the public board 
   const link = await host.locator('.share-row__url').first().innerText();
   expect(link).toMatch(new RegExp(`/quiz/present/${pin}#k=`));
 
-  const presenter = await (await browser.newContext({ viewport: { width: 1600, height: 900 } })).newPage();
+  const presenterContext = await browser.newContext({ viewport: { width: 1600, height: 900 } });
+  // Count the notes the presenter synthesises (Web Audio oscillators).
+  await presenterContext.addInitScript(() => {
+    const w = window as unknown as { notes: number };
+    w.notes = 0;
+    const create = AudioContext.prototype.createOscillator;
+    AudioContext.prototype.createOscillator = function (this: AudioContext) {
+      w.notes += 1;
+      return create.call(this);
+    };
+  });
+  const presenter = await presenterContext.newPage();
+  const notes = () => presenter.evaluate(() => (window as unknown as { notes: number }).notes);
   await presenter.goto(link);
   await expect(presenter.locator('.present__pin')).toHaveText(pin);
   await expect(presenter.getByRole('banner')).toHaveCount(0); // no site header on the projector
+  await expect(presenter.getByText('Click anywhere to allow sound')).toBeVisible();
+  await presenter.locator('.present__stage').click(); // the gesture browsers want before audio
+  await expect(presenter.getByText('Click anywhere to allow sound')).toHaveCount(0);
   const ann = await join(browser, pin, 'Ann');
   await join(browser, pin, 'Bob');
   await expect(presenter.locator('.present__chips li')).toHaveCount(2);
+  await expect.poll(notes).toBeGreaterThan(0); // a pop per join
 
   await host.getByRole('button', { name: /^Start/ }).click();
   await host.getByRole('button', { name: /^Next: item 2/ }).click();
   await expect(presenter.locator('.present__q')).toHaveText('Which port does HTTPS use by default?');
+  await expect(presenter.getByRole('timer')).toHaveAccessibleName(/\d+ seconds left/);
   await expect(presenter.locator('.quiz-solution')).toHaveCount(0); // no answer before the reveal
   await ann.getByRole('button', { name: /443/ }).click();
   await expect(presenter.getByText(/1 of 2 answered/)).toBeVisible();
   await host.getByRole('button', { name: 'Close and show answer' }).click();
   await expect(presenter.locator('.quiz-solution__row.is-right')).toContainText('443');
   await expect(presenter.locator('.quiz-board__row').first()).toContainText('Ann');
+
+  // Mute: remembered after a reload, and nothing more plays.
+  await presenter.getByRole('button', { name: 'Sound on' }).click();
+  await expect(presenter.getByRole('button', { name: 'Sound off' })).toHaveAttribute('aria-pressed', 'false');
+  await presenter.reload();
+  await expect(presenter.getByRole('button', { name: 'Sound off' })).toBeVisible();
+  await expect(presenter.getByText('Click anywhere to allow sound')).toHaveCount(0);
 
   const watcher = await (await browser.newContext()).newPage();
   await watcher.goto('/quiz');

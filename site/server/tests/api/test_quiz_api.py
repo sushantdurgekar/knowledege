@@ -342,6 +342,11 @@ def test_api_builder_json_self_mode_and_cards(admin: TestClient) -> None:
     assert good.json()["stage"] == "reveal"
     goto = admin.post(f"/api/quiz/rooms/{pin}/host/action", json={"action": "goto", "index": 1}, headers=host)
     assert goto.status_code == 409  # self-paced rooms have no host-driven items
+    # The host's export: every card with its index, plus the room's results per item.
+    export = admin.get(f"/api/quiz/rooms/{pin}/host/cards", headers=host).json()
+    assert [(c["index"], c["type"]) for c in export["cards"]] == [(0, "slide"), (1, "order")]
+    assert (export["insights"][0]["index"], export["insights"][0]["answered"]) == (1, 1)
+    assert admin.get(f"/api/quiz/rooms/{pin}/host/cards", headers=me).status_code == 403
 
 
 def test_advanced_confidence_hints_explain_and_insights() -> None:

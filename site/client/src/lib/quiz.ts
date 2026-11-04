@@ -382,6 +382,13 @@ export const fetchReview = (pin: string, token: string) =>
     headers: { 'X-Quiz-Token': token },
   });
 
+/** The host's export of a room: every card (with its item index) and the results per item. */
+export const fetchHostCards = (pin: string, hostKey: string) =>
+  api<{ title: string; cards: (Card & { index: number })[]; insights: Insight[] }>(
+    `/api/quiz/rooms/${encodeURIComponent(pin)}/host/cards`,
+    { headers: { 'X-Quiz-Host': hostKey } },
+  );
+
 // -- saved quizzes (server library) and the hubs' question bank ---------------------------
 export interface LibraryEntry {
   id: string;
@@ -414,6 +421,28 @@ export interface BankHub {
 export const listBank = () => api<{ hubs: BankHub[] }>('/api/quiz/bank');
 export const getBankHub = (id: string) =>
   api<{ id: string; title: string; modules: BankModule[] }>(`/api/quiz/bank/${encodeURIComponent(id)}`);
+
+// -- AI drafts (optional: the server needs ANTHROPIC_API_KEY) -------------------------------
+export type DraftKind = 'single' | 'multi' | 'truefalse' | 'text';
+export interface DraftRequest {
+  notes?: string;
+  hubId?: string;
+  moduleIds?: string[];
+  count: number;
+  kinds: DraftKind[];
+  advanced: boolean;
+  avoid: string[];
+}
+export interface DraftResult {
+  items: unknown[];
+  dropped: number;
+  model: string;
+  usage: { input: number; output: number };
+}
+export const aiStatus = () => api<{ enabled: boolean; model: string }>('/api/quiz/ai');
+export const draftQuestions = (request: DraftRequest) =>
+  // Drafting takes the model up to a couple of minutes: a long timeout for this call only.
+  api<DraftResult>('/api/quiz/ai/draft', { method: 'POST', json: request, timeoutMs: 200_000 });
 
 /** Check a practice answer locally (replay mode), from a reviewed item's solution. */
 export function checkLocally(item: ReviewItem, value: unknown): boolean {

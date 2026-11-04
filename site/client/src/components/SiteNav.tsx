@@ -42,6 +42,7 @@ const LABELS: Record<string, string> = {
   host: 'Studio',
   edit: 'Edit',
   review: 'Review deck',
+  progress: 'My progress',
   board: 'Leaderboard',
   play: 'Play',
   admin: 'Admin',

@@ -16,6 +16,7 @@ Host (X-Quiz-Host: the room's hostKey; no admin re-check per poll):
   GET  /api/quiz/rooms/{pin}/host?since=N      long-poll, full view with solutions and run sheet
   POST /api/quiz/rooms/{pin}/host/action       {action: start|reveal|next|goto|extend|lock|unlock|
                                                 end|close|kick, index?, seconds?, playerId?}
+  GET  /api/quiz/rooms/{pin}/host/cards        every question + answer + results (vault export)
 
 Players (no account needed; X-Quiz-Token from join):
   POST /api/quiz/rooms/{pin}/join              {name} -> {playerId, token}
@@ -243,6 +244,13 @@ async def host_view(request: Request, pin: str) -> JSONResponse:
     if _manager.rooms.get(room.pin) is not room:
         raise ApiError(404, "no_room", "This room was closed")
     return _json(room.view(host=True))
+
+
+@router.get("/rooms/{pin}/host/cards")
+async def host_cards(request: Request, pin: str) -> JSONResponse:
+    """Every question with its answer and the room's results: the host's vault export."""
+    room = _host_room(request, pin)
+    return _json({"title": room.quiz.title, "cards": room.cards(), "insights": room.insights()})
 
 
 @router.post("/rooms/{pin}/host/action", dependencies=CSRF)
