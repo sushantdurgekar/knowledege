@@ -11,6 +11,7 @@ import {
   TYPE_LABELS,
   useCountdown,
   useRoomPoll,
+  type Insight,
   type RoomView,
 } from '../../lib/quiz';
 import { Leaderboard, LETTERS, SlideBody, Solution } from './Answering';
@@ -224,6 +225,9 @@ function LiveStage({ view, seconds, busy, act }: { view: RoomView; seconds: numb
                 </ul>
               </div>
             )}
+            {q.hints && q.hints.length > 0 && (
+              <p className="muted small">Hints players can open: {q.hints.join(' · ')}</p>
+            )}
             <p className="quiz-answered">
               <strong>{view.answeredCount ?? 0}</strong> of {view.playerCount} answered
             </p>
@@ -253,6 +257,16 @@ function LiveStage({ view, seconds, busy, act }: { view: RoomView; seconds: numb
             )}
             <Solution q={q} />
             {q.explain && <p className="quiz-explain">{q.explain}</p>}
+            {q.type === 'explain' && (
+              <ul className="quiz-responses" aria-label="Explanations">
+                {(q.stats?.responses ?? []).map((r, i) => (
+                  <li key={i}>
+                    <strong>{r.name}:</strong> {r.text}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {view.insights && <InsightRow row={view.insights.find((r) => r.index === q.index)} />}
           </>
         )}
       </div>
@@ -319,6 +333,7 @@ function SelfDashboard({ view, act, busy }: { view: RoomView; act: Act; busy: bo
       <div className="self-dash__grid">
         <div>
           <h2>Progress</h2>
+          <div className="table-scroll">
           <table className="self-dash__table">
             <thead>
               <tr>
@@ -341,6 +356,7 @@ function SelfDashboard({ view, act, busy }: { view: RoomView; act: Act; busy: bo
               ))}
             </tbody>
           </table>
+          </div>
         </div>
         <div>
           <h2>Leaderboard</h2>
@@ -364,12 +380,74 @@ function SelfDashboard({ view, act, busy }: { view: RoomView; act: Act; busy: bo
           </ol>
         </div>
       </div>
+      {view.insights && <Insights rows={view.insights} advanced={!!view.advanced} />}
       <p className="actions">
         <button type="button" className="btn btn--primary" disabled={busy} onClick={() => act('end')}>
           Close the quiz and show results
         </button>
       </p>
     </div>
+  );
+}
+
+function InsightRow({ row }: { row?: Insight }) {
+  if (!row || !row.answered) return null;
+  return (
+    <p className="muted small">
+      Average {row.avgSeconds}s
+      {row.topWrong ? ` · most-picked wrong answer: “${row.topWrong.text}” (${row.topWrong.count})` : ''}
+      {row.sureWrong ? ` · ${row.sureWrong} sure but wrong` : ''}
+      {row.hintsUsed ? ` · ${row.hintsUsed} hint(s) used` : ''}
+    </p>
+  );
+}
+
+/** Per question: how many got it, and where players went wrong (hardest first). */
+export function Insights({ rows, advanced }: { rows: Insight[]; advanced: boolean }) {
+  const played = rows.filter((r) => r.answered > 0);
+  if (!played.length) return null;
+  const sorted = [...played].sort((a, b) => a.correct / a.answered - b.correct / b.answered);
+  return (
+    <section className="insights" aria-labelledby="insights-title">
+      <h2 id="insights-title">Insights</h2>
+      <p className="muted small">Hardest first. Use them to pick what to reteach.</p>
+      <div className="table-scroll">
+      <table className="self-dash__table">
+        <thead>
+          <tr>
+            <th scope="col">Question</th>
+            <th scope="col">Correct</th>
+            <th scope="col">Avg time</th>
+            <th scope="col">Most-picked wrong answer</th>
+            {advanced && <th scope="col">Sure but wrong</th>}
+            {advanced && <th scope="col">Hints</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((r) => {
+            const pct = Math.round((100 * r.correct) / r.answered);
+            return (
+              <tr key={r.index}>
+                <td>
+                  <span className="muted small">{r.index + 1}.</span> {r.text}
+                </td>
+                <td>
+                  <span className={`insights__pct${pct < 50 ? ' is-low' : ''}`}>{pct}%</span>{' '}
+                  <span className="muted small">
+                    ({r.correct}/{r.answered})
+                  </span>
+                </td>
+                <td className="mono">{r.avgSeconds ?? '—'}s</td>
+                <td>{r.topWrong ? `${r.topWrong.text} (${r.topWrong.count})` : '—'}</td>
+                {advanced && <td className={r.sureWrong ? 'insights__warn' : ''}>{r.sureWrong}</td>}
+                {advanced && <td>{r.hintsUsed}</td>}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+          </div>
+    </section>
   );
 }
 
@@ -387,6 +465,7 @@ function Final({ view, busy, act }: { view: RoomView; busy: boolean; act: Act })
         ))}
       </ol>
       <Leaderboard rows={view.leaderboard ?? []} />
+      {view.insights && <Insights rows={view.insights} advanced={!!view.advanced} />}
       <p className="actions quiz-center">
         <button type="button" className="btn" onClick={() => download(`quiz-${view.pin}-results.csv`, resultsCsv(view), 'text/csv')}>
           Download results (CSV)

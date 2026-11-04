@@ -4,6 +4,7 @@ import { FormMessage } from '../../components/forms';
 import { useMe } from '../../context/me';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { apiMessage, joinRoom, playerToken, setPlayerToken } from '../../lib/quiz';
+import { dueCards, loadState } from '../../lib/quiz-history';
 
 /** `/quiz`: enter the room PIN and a nickname. Admins also get a link to host. */
 export function JoinPage() {
@@ -46,6 +47,9 @@ export function JoinPage() {
   };
 
   const admin = me.status === 'signed-in' && me.user.admin;
+  const deck = loadState();
+  const due = dueCards(deck).length;
+  const cards = Object.keys(deck.deck).length;
   return (
     <section className="page quiz-join" aria-labelledby="page-title">
       <p className="eyebrow">Live quiz</p>
@@ -82,6 +86,17 @@ export function JoinPage() {
           {busy ? 'Joining…' : 'Join'}
         </button>
       </form>
+      {cards > 0 && (
+        <div className="notice quiz-review-cta">
+          <h2>Your review deck</h2>
+          <p>
+            {due ? `${due} card(s) due now` : 'Nothing due right now'} · {cards} cards from your quizzes.
+          </p>
+          <Link className="btn" to="/quiz/review">
+            {due ? 'Review now' : 'Open the deck'}
+          </Link>
+        </div>
+      )}
       {admin && (
         <div className="notice quiz-host-cta">
           <h2>Hosting?</h2>

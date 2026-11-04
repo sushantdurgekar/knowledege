@@ -58,8 +58,29 @@ def invalid(message: str) -> ApiError:
     return ApiError(422, "invalid", message)
 
 
+# A virtual hub with no page: a signed-in player's live-quiz history and review deck
+# (client lib/quiz-history.ts), synced like a v2 hub's parts (main = history and deck state,
+# cards = card schedule). Riding on progress means account export, delete, backups and the
+# write quota all cover it with no new storage.
+QUIZ_HUB_ID = "live-quiz"
+QUIZ_HUB = Hub(
+    id=QUIZ_HUB_ID,
+    slug="",
+    title="Live quiz history",
+    engine="v2",
+    csp="",
+    download_name="",
+    sha256=None,
+    legacy_keys=(),
+    served=None,  # type: ignore[arg-type]  # never served: no page at /h/
+    original=None,  # type: ignore[arg-type]
+)
+
+
 def syncable_hub(catalog: Catalog | None, hub_id: str) -> Hub:
     """The catalog hub for `hub_id`, or 404 (unknown, or a static hub that never syncs)."""
+    if hub_id == QUIZ_HUB_ID:
+        return QUIZ_HUB
     if catalog is None:
         raise ApiError(503, "unavailable", "The hub catalog is not available", retry_after=60)
     hub = catalog.by_id.get(hub_id)

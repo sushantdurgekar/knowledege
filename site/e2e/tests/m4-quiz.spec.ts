@@ -38,7 +38,7 @@ test('admin builds and hosts a live quiz; players drag, vote and review flashcar
   host.on('dialog', (d) => void d.accept());
 
   await host.goto('/quiz/host');
-  await host.getByRole('button', { name: 'Start from the example' }).click();
+  await host.getByRole('button', { name: 'Quick example' }).click();
   await expect(host.getByText('Items (8)')).toBeVisible();
   await host.getByRole('button', { name: 'Check', exact: true }).click();
   await expect(host.getByText(/Ready: 8 items/)).toBeVisible();
@@ -95,7 +95,8 @@ test('self-paced room with flashcards first', async ({ browser }) => {
   await signInAdmin(hostContext);
   const host = await hostContext.newPage();
   await host.goto('/quiz/host');
-  await host.getByRole('button', { name: 'Start from the example' }).click();
+  await host.getByRole('button', { name: 'Quick example' }).click();
+  await expect(host.getByText('Items (8)')).toBeVisible();
   await host.getByLabel('flashcards before self-paced').check();
   await host.getByRole('button', { name: 'Start self-paced' }).click();
   await host.waitForURL(/\/quiz\/host\/\d{6}$/);
@@ -112,7 +113,7 @@ test('self-paced room with flashcards first', async ({ browser }) => {
   await expect(cy.getByText('Correct!')).toBeVisible();
   await cy.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(cy.getByText('Pick the private IPv4 ranges')).toBeVisible();
-  await expect(host.locator('.self-dash__table')).toContainText('Cy');
+  await expect(host.locator('.self-dash__table').first()).toContainText('Cy');
   await host.getByRole('button', { name: 'Close the quiz and show results' }).click();
   await expect(cy.getByText('All done!').or(cy.getByText(/You finished/)).first()).toBeVisible();
 });
@@ -120,4 +121,72 @@ test('self-paced room with flashcards first', async ({ browser }) => {
 test('non-admins cannot open the studio', async ({ page }) => {
   await page.goto('/quiz/host');
   await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
+});
+
+test('advanced quiz: confidence, hints, teach-back, calibration, replay and the review deck', async ({ browser }) => {
+  const hostContext = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+  await signInAdmin(hostContext);
+  const host = await hostContext.newPage();
+  host.on('dialog', (d) => void d.accept());
+  await host.goto('/quiz/host');
+  await host.getByRole('button', { name: 'Advanced example' }).click();
+  await expect(host.getByText('Items (4)')).toBeVisible();
+  await expect(host.getByLabel('Advanced')).toBeChecked();
+  await expect(host.getByText('Saved', { exact: true })).toBeVisible();
+  await host.getByRole('button', { name: 'Host live' }).click();
+  await host.waitForURL(/\/quiz\/host\/\d{6}$/);
+  const pin = host.url().split('/').pop()!;
+
+  const ann = await join(browser, pin, 'Ann');
+  await host.getByRole('button', { name: /^Start/ }).click();
+  await host.getByRole('button', { name: /^Next: item 2/ }).click();
+  // Confidence first: the answers stay disabled until Ann says how sure she is.
+  await expect(ann.getByRole('button', { name: /443/ })).toBeDisabled();
+  await ann.getByRole('button', { name: 'Show a hint (−25% points)' }).click();
+  await expect(ann.getByText(/The S stands for secure/)).toBeVisible();
+  await ann.getByRole('radio', { name: 'I’m sure' }).click();
+  await ann.getByRole('button', { name: /80/ }).click(); // sure, but wrong
+  await expect(ann.getByText('Not this time')).toBeVisible();
+  await expect(host.getByText(/1 sure but wrong/)).toBeVisible();
+
+  await host.getByRole('button', { name: 'Run next: item 4' }).click(); // teach-back
+  await ann.getByLabel(/Explain it in your own words/).fill('TLS encrypts the bytes TCP delivers');
+  await ann.getByRole('button', { name: 'Send' }).click();
+  await expect(host.locator('.quiz-responses')).toContainText('TLS encrypts the bytes TCP delivers');
+  await expect(ann.getByText(/A model answer:/)).toBeVisible();
+
+  await host.getByRole('button', { name: 'End quiz now' }).click();
+  await expect(host.getByRole('heading', { name: 'Insights' })).toBeVisible();
+  await expect(ann.getByText('Sure but wrong')).toBeVisible();
+  await expect(ann.getByRole('link', { name: /due for review now/ })).toBeVisible();
+
+  await ann.getByRole('button', { name: 'Replay my mistakes' }).click();
+  await ann.getByRole('button', { name: /443/ }).click();
+  await expect(ann.getByText('Got it now!')).toBeVisible();
+  await ann.getByRole('button', { name: 'Next', exact: true }).click();
+  await ann.getByRole('button', { name: 'Close', exact: true }).or(ann.getByRole('button', { name: 'Done' })).first().click();
+
+  await ann.goto('/quiz/review');
+  await expect(ann.getByRole('heading', { name: 'Review deck' })).toBeVisible();
+  await ann.getByRole('button', { name: 'Show answer' }).click();
+  await ann.getByRole('button', { name: /^Good/ }).click();
+  await expect(ann.getByText(/reviewed this session/)).toContainText('1');
+  await expect(ann.locator('.review__history')).toContainText('Networking basics (advanced)');
+});
+
+test('admin builds a quiz from a study hub', async ({ browser }) => {
+  const hostContext = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+  await signInAdmin(hostContext);
+  const host = await hostContext.newPage();
+  await host.goto('/quiz/host');
+  await host.getByRole('button', { name: /From a study hub/ }).click();
+  const hub = host.getByRole('combobox', { name: 'Hub', exact: true });
+  await expect(hub.locator('option')).not.toHaveCount(1);
+  await hub.selectOption({ index: 1 });
+  await host.locator('.bank__modules input[type=checkbox]').first().check();
+  await host.getByRole('button', { name: 'Create quiz' }).click();
+  await host.waitForURL(/\/quiz\/host\/edit\//);
+  await expect(host.locator('.editor__list .sortable__chip').first()).toContainText('Slide');
+  await host.getByRole('button', { name: 'Check', exact: true }).click();
+  await expect(host.getByText(/Ready: \d+ items/)).toBeVisible();
 });

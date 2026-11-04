@@ -430,14 +430,26 @@ Optional per-hub overrides (code, cert name, blurb) go in `hubs.config.json` →
 
 Players join with a 6-digit PIN and a nickname (no account needed). Admins build and run quizzes in the **Studio** (`/quiz/host`).
 
-- **Studio:** a library of quizzes saved in the admin's browser, with export/import as `.json` or `.txt` (the text format is described in `site/server/app/quiz/parse.py`). **Start from the example** creates one item of every type.
-- **Editor:** add items by type, drag the item list to reorder, tick the correct options, set time, points and an explanation per item, and **Check** before hosting.
-- **Item types:** quiz (single answer), multiple choice, true/false, typed answer (text or `/regex/i`), match (drag pairs), put in order (drag into sequence), poll (no right answer, no points), slide (content to present).
-- **Live mode:** the host runs the room with a run sheet. Any item can go next, in any order; **Next** takes the next item not yet run. **+10 s** adds time, **Lock joining** closes the room to newcomers, and **End quiz now** finishes with the scores so far. Slides are presented with no timer. Results download as CSV.
-- **Self-paced mode:** each player moves through the items with their own timer. With **flashcards first**, players can study cards before they start. The host sees each player's progress, a leaderboard and per-item stats.
-- **Flashcards:** after any quiz, and before a self-paced one when enabled. Flip the card, then mark it known or study it again; missed cards come back in another round.
-- **Scoring:** 50–100% of the points depending on speed. Multiple choice, match and order give partial credit; ties go to the faster player.
-- **Limits:** 250 players per room and 50 open rooms. Rooms live in server memory, so a deploy or restart ends running rooms. Answers wake only the host; lobby updates are batched; lookups are O(1) and the ranking is sorted once per change (`site/server/app/quiz/room.py`).
+- **Library (server):** quizzes are saved on the server and shared by every admin. They are stored as `quiz-index` and `quiz:<id>` settings documents, with version checks so two admins cannot overwrite each other. Export as `.json` or `.txt` any time. The site **Backup** does not include them yet, so export the ones you care about. Quizzes from the old browser-only library can be uploaded once from the studio.
+- **New quiz:** a *quick* quiz (questions, polls, slides; fast to make) or an *advanced* quiz (adds confidence ratings, hints, teach-back and insights). You can also start from either example, import a file, or build from a **study hub**: the collector writes every hub's practice questions and key points to `quiz-bank.json` at build time. Pick modules and get the key points as slides plus the questions.
+- **Item types:** quiz (single answer), multiple choice, true/false, typed answer (text or `/regex/i`), match (drag pairs), put in order (drag), poll, slide, and *explain it* (teach-back: free text, not scored; the host sees every answer and players see a model answer).
+- **Advanced quizzes**, based on the learning-science playbook in `.claude/skills/pro-instructor/references/learning-science.md`:
+  - **Confidence ratings:** players say "I'm sure" or "Not sure" before answering. They get a calibration grid at the end; *sure but wrong* is the quadrant to fix first.
+  - **Hints:** up to 3 per question, each costing 25% of the points.
+  - **Host insights:** questions listed hardest first, the most-picked wrong answer, average time, sure-but-wrong counts and hints used.
+- **Live mode:**
+  - A run sheet opens any item next.
+  - **+10 s** adds time, **Lock joining** closes the room to newcomers, and **End quiz now** finishes with the scores so far.
+  - Results download as CSV.
+- **Self-paced mode:** each player has their own pace and timer, with optional **flashcards first**. The host sees a progress dashboard and insights.
+- **After a quiz:**
+  - **Replay my mistakes** re-asks only the missed questions, checked in the browser.
+  - **Flashcards** review the whole quiz.
+  - Every question goes into the player's **review deck** (`/quiz/review`). Spaced repetition uses SM-2 with Again/Hard/Good/Easy, the same scheme as the vault's `srs.py`. Missed questions are due at once.
+  - The quiz is added to the player's quiz history.
+- **Player data:** kept in the browser. For signed-in players it is also synced to their account through a virtual hub, `live-quiz`, in the progress API. Account export, delete, backups and the write quota therefore cover it.
+- **Scoring:** 50–100% of the points depending on speed. Multiple choice, match and order give partial credit; each hint used takes 25%; ties go to the faster player.
+- **Limits:** 250 players per room and 50 open rooms. Running rooms live in server memory, so a deploy or restart ends them; saved quizzes and player history are unaffected. Answers wake only the host, lookups are O(1), and the ranking is sorted once per change (`site/server/app/quiz/room.py`).
 
 ## Auto-deploy
 

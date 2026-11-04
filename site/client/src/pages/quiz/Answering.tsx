@@ -65,6 +65,7 @@ export function Answering({
   }
   if (q.type === 'multi') return <MultiAnswer q={q} disabled={disabled} onAnswer={onAnswer} />;
   if (q.type === 'text') return <TextAnswer disabled={disabled} onAnswer={onAnswer} />;
+  if (q.type === 'explain') return <ExplainAnswer disabled={disabled} onAnswer={onAnswer} />;
   if (q.type === 'match' || q.type === 'order') return <DragAnswer q={q} disabled={disabled} onAnswer={onAnswer} />;
   return null;
 }
@@ -126,6 +127,37 @@ function TextAnswer({ disabled, onAnswer }: { disabled: boolean; onAnswer: (v: u
       </div>
       <button type="submit" className="btn btn--primary btn--wide" disabled={disabled || !text.trim()}>
         Submit
+      </button>
+    </form>
+  );
+}
+
+/** Teach-back: explain in your own words. Not scored; the host reads the answers. */
+function ExplainAnswer({ disabled, onAnswer }: { disabled: boolean; onAnswer: (v: unknown) => void }) {
+  const [text, setText] = useState('');
+  return (
+    <form
+      className="quiz-text"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (text.trim()) onAnswer(text.trim());
+      }}
+    >
+      <div className="field">
+        <label htmlFor="quiz-explain-answer">Explain it in your own words, as if to a new teammate</label>
+        <textarea
+          id="quiz-explain-answer"
+          rows={4}
+          maxLength={600}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          disabled={disabled}
+          autoFocus
+        />
+        <span className="field__hint">{600 - text.length} characters left · not scored</span>
+      </div>
+      <button type="submit" className="btn btn--primary btn--wide" disabled={disabled || !text.trim()}>
+        Send
       </button>
     </form>
   );
@@ -194,6 +226,23 @@ export function Solution({ q, mine }: { q: QuestionView; mine?: unknown }) {
           );
         })}
       </ul>
+    );
+  }
+  if (q.type === 'explain') {
+    return (
+      <div className="quiz-solution">
+        {typeof mine === 'string' && (
+          <p>
+            <strong>You wrote:</strong> {mine}
+          </p>
+        )}
+        {q.model && q.model.length > 0 && (
+          <p className="quiz-model">
+            <strong>A model answer:</strong> {q.model.join(' / ')}
+          </p>
+        )}
+        <p className="muted small">Compare: what did you include, and what did you leave out?</p>
+      </div>
     );
   }
   if (!s) return null;

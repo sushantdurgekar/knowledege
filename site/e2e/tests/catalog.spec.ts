@@ -72,7 +72,8 @@ test.describe('catalog', () => {
     const watch = await watchPage(page);
     await page.goto('/');
     await page.locator(`a[href="${hubPath(hub)}"]`).click();
-    await expect(page).toHaveURL(new RegExp(`${hubPath(hub)}$`));
+    // The bridge names the hub's first screen in the hash (history.ts), without a new entry.
+    await expect(page).toHaveURL(new RegExp(`${hubPath(hub)}(#[\\w-]+)?$`));
     // The URL changes when the navigation commits; the bridge has run once the DOM is parsed.
     await page.waitForLoadState('domcontentloaded');
     if (withBridge(hub)) expect((await bridgeStats(page)).slug).toBe(hub.slug);

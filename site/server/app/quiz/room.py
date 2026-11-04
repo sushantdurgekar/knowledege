@@ -43,9 +43,12 @@ Stage = Literal["ready", "question", "reveal", "done"]
 MAX_PLAYERS = 250
 MAX_NAME = 24
 MAX_TEXT_ANSWER = 200
+MAX_EXPLAIN = 600
+CONFIDENCE = ("sure", "unsure")
 ROOM_IDLE_S = 6 * 3600
 LEADERBOARD_SIZE = 10
 LOBBY_COALESCE_S = 1.0
+MAX_RESPONSES = 250
 MAX_EXTEND_S = 120
 
 
@@ -62,6 +65,8 @@ class Answer:
     fraction: float
     points: int
     scored: bool = True
+    confidence: str | None = None  # advanced quizzes: "sure" or "unsure"
+    hints: int = 0
 
     @property
     def correct(self) -> bool:
@@ -79,6 +84,7 @@ class Player:
     streak: int = 0
     joined: float = 0.0
     answers: dict[int, Answer] = field(default_factory=dict)
+    hints_used: dict[int, int] = field(default_factory=dict)
     # self-paced progress
     index: int = -1
     stage: Stage = "ready"
@@ -118,14 +124,22 @@ def score_answer(q: Question, value: Any, order: list[int]) -> float:
         if placed is None or len(set(placed)) != size:
             raise bad
         return sum(1 for k, v in enumerate(placed) if order[v] == k) / size
+    if q.type == "explain":
+        if not isinstance(value, str) or not value.strip() or len(value) > MAX_EXPLAIN:
+            raise bad
+        return 0.0  # teach-back is never scored
     raise bad  # slides take no answers
 
 
-def points_for(q: Question, fraction: float, elapsed: float) -> int:
+HINT_COST = 0.25
+
+
+def points_for(q: Question, fraction: float, elapsed: float, hints: int = 0) -> int:
     if not q.scored or fraction <= 0:
         return 0
     speed = 1.0 - 0.5 * min(1.0, max(0.0, elapsed / q.time_limit))
-    return round(q.points * fraction * speed)
+    penalty = max(0.25, 1.0 - HINT_COST * hints)
+    return round(q.points * fraction * speed * penalty)
 
 
 def _shuffled(n: int) -> list[int]:
@@ -353,10 +367,22 @@ class Room:
             self.answered_count -= 1
         self.bump()
 
-    def _record(self, player: Player, index: int, value: Any, elapsed: float) -> Answer:
+    def _record(
+        self, player: Player, index: int, value: Any, elapsed: float, confidence: Any = None
+    ) -> Answer:
         q = self.quiz.questions[index]
         fraction = score_answer(q, value, self.orders.get(index, []))
-        answer = Answer(value, elapsed, fraction, points_for(q, fraction, elapsed), scored=q.scored)
+        hints = player.hints_used.get(index, 0)
+        sure = confidence if self.quiz.advanced and q.scored and confidence in CONFIDENCE else None
+        answer = Answer(
+            value,
+            elapsed,
+            fraction,
+            points_for(q, fraction, elapsed, hints),
+            scored=q.scored,
+            confidence=sure,
+            hints=hints,
+        )
         player.answers[index] = answer
         player.score += answer.points
         if q.scored:
@@ -364,16 +390,35 @@ class Room:
             player.correct += 1 if answer.correct else 0
         return answer
 
-    def answer(self, player: Player, index: int, value: Any) -> Answer:
+    def current_for(self, player: Player) -> int | None:
+        """The item this player can answer now, or None."""
         if self.mode == "self":
-            return self._answer_self(player, index, value)
+            self.self_tick(player)
+            return player.index if self.phase == "question" and player.stage == "question" else None
+        self.tick()
+        return self.index if self.phase == "question" else None
+
+    def hint(self, player: Player, index: int) -> list[str]:
+        """Advanced quizzes: reveal the next hint for the open question (costs points)."""
+        q = self.quiz.questions[index] if 0 <= index < self.total else None
+        if not self.quiz.advanced or q is None or not q.hints:
+            raise QuizError(409, "no_hints", "This question has no hints")
+        if self.current_for(player) != index or index in player.answers:
+            raise QuizError(409, "closed", "This question is closed")
+        used = min(len(q.hints), player.hints_used.get(index, 0) + 1)
+        player.hints_used[index] = used
+        return q.hints[:used]
+
+    def answer(self, player: Player, index: int, value: Any, confidence: Any = None) -> Answer:
+        if self.mode == "self":
+            return self._answer_self(player, index, value, confidence)
         self.tick()
         q = self.question
         if self.phase != "question" or index != self.index or q is None or not q.answerable:
             raise QuizError(409, "closed", "This question is closed")
         if index in player.answers:
             raise QuizError(409, "answered", "You already answered this question")
-        answer = self._record(player, index, value, max(0.0, self.clock() - self.opened_at))
+        answer = self._record(player, index, value, max(0.0, self.clock() - self.opened_at), confidence)
         self.answered_count += 1
         if self.answered_count >= len(self.players):
             self._reveal()  # everyone is in: no need to wait for the clock
@@ -408,14 +453,14 @@ class Room:
             player.deadline = player.opened_at + q.time_limit if q.answerable else math.inf
         self.bump(players=False)
 
-    def _answer_self(self, player: Player, index: int, value: Any) -> Answer:
+    def _answer_self(self, player: Player, index: int, value: Any, confidence: Any = None) -> Answer:
         if self.phase != "question":
             raise QuizError(409, "closed", "This quiz is not running")
         self.self_tick(player)
         q = self.quiz.questions[player.index] if 0 <= player.index < self.total else None
         if player.stage != "question" or index != player.index or q is None or not q.answerable:
             raise QuizError(409, "closed", "This question is closed")
-        answer = self._record(player, index, value, max(0.0, self.clock() - player.opened_at))
+        answer = self._record(player, index, value, max(0.0, self.clock() - player.opened_at), confidence)
         if q.scored:
             player.streak = player.streak + 1 if answer.correct else 0
         player.stage = "reveal"
@@ -456,11 +501,17 @@ class Room:
             view["right"] = [q.pairs[i][1] for i in self.orders[index]]
         elif q.type == "order":
             view["items"] = [q.items[i] for i in self.orders[index]]
-        if (host or not open_) and q.answerable and q.type != "poll":
+        if self.quiz.advanced and q.hints:
+            view["hintCount"] = len(q.hints)
+            if host:
+                view["hints"] = q.hints
+        if (host or not open_) and q.answerable and q.type not in ("poll", "explain"):
             view["solution"] = self._solution(index)
             view["answerText"] = answer_text(q)
         if (host or not open_) and q.explain:
             view["explain"] = q.explain
+        if (host or not open_) and q.type == "explain" and q.model:
+            view["model"] = q.model
         if stats and q.answerable:
             view["stats"] = self._stats(index)
         return view
@@ -489,6 +540,12 @@ class Room:
                 for v in set(a.value) if isinstance(a.value, list) else {a.value}:
                     counts[v] += 1
             stats["counts"] = counts
+        elif q.type == "explain":
+            stats["responses"] = [
+                {"name": p.name, "text": str(p.answers[index].value)}
+                for p in self.players.values()
+                if index in p.answers
+            ][:MAX_RESPONSES]
         elif q.type == "text":
             tally: dict[str, int] = {}
             for a in answers:
@@ -523,6 +580,7 @@ class Room:
             "scoredTotal": sum(1 for q in self.quiz.questions if q.scored),
             "playerCount": len(self.players),
             "locked": self.locked,
+            "advanced": self.quiz.advanced,
         }
 
     def _live_question(self, host: bool) -> dict[str, Any] | None:
@@ -545,6 +603,8 @@ class Room:
         out = self._common(True)
         out["answeredCount"] = self.answered_count
         out["leaderboard"] = self._board(ranked, len(ranked))
+        if self.mode == "self" or self.phase in ("reveal", "finished"):
+            out["insights"] = self.insights()
         out["sheet"] = [
             {"index": i, "type": q.type, "text": q.text[:120], "done": i in self.done, "points": q.points}
             for i, q in enumerate(self.quiz.questions)
@@ -634,13 +694,71 @@ class Room:
             if self.mode == "live"
             else player.stage in ("reveal", "done")
         )
+        q = self.quiz.questions[index] if 0 <= index < self.total else None
+        if q is not None and q.hints and self.quiz.advanced:
+            me["hints"] = q.hints[: player.hints_used.get(index, 0)]
         if mine is not None:
             me["answer"] = mine.value
             if closed:
                 me["lastPoints"] = mine.points
                 me["lastCorrect"] = mine.correct if mine.scored else None
                 me["lastFraction"] = round(mine.fraction, 3)
+                me["lastConfidence"] = mine.confidence
+        if self.quiz.advanced and (self.phase == "finished" or player.stage == "done"):
+            me["calibration"] = self.calibration(player)
         return me
+
+    def calibration(self, player: Player) -> dict[str, int]:
+        """Confidence vs result: sure-and-wrong is the most important to fix."""
+        out = {"sureRight": 0, "sureWrong": 0, "unsureRight": 0, "unsureWrong": 0}
+        for a in player.answers.values():
+            if a.confidence is None or not a.scored:
+                continue
+            out[("sure" if a.confidence == "sure" else "unsure") + ("Right" if a.correct else "Wrong")] += 1
+        return out
+
+    def insights(self) -> list[dict[str, Any]]:
+        """Per item, for the host: how hard it was and where players went wrong."""
+        out: list[dict[str, Any]] = []
+        for i, q in enumerate(self.quiz.questions):
+            if not q.scored:
+                continue
+            answers = [p.answers[i] for p in self.players.values() if i in p.answers]
+            row: dict[str, Any] = {
+                "index": i,
+                "type": q.type,
+                "text": q.text[:120],
+                "answered": len(answers),
+                "correct": sum(1 for a in answers if a.correct),
+                "avgSeconds": round(sum(a.elapsed for a in answers) / len(answers), 1) if answers else None,
+                "sureWrong": sum(1 for a in answers if a.confidence == "sure" and not a.correct),
+                "hintsUsed": sum(a.hints for a in answers),
+            }
+            if q.type in ("single", "truefalse"):
+                wrong: dict[int, int] = {}
+                for a in answers:
+                    if not a.correct:
+                        wrong[a.value] = wrong.get(a.value, 0) + 1
+                if wrong:
+                    pick, n = max(wrong.items(), key=lambda kv: kv[1])
+                    row["topWrong"] = {"text": q.options[pick], "count": n}
+            out.append(row)
+        return out
+
+    def review(self, player: Player) -> list[dict[str, Any]]:
+        """Every question with its solution and this player's result: "replay my mistakes"."""
+        out: list[dict[str, Any]] = []
+        for i, q in enumerate(self.quiz.questions):
+            if not q.scored:
+                continue
+            item = self._item_view(i, open_=False, remaining_ms=0, host=False, stats=False)
+            mine = player.answers.get(i)
+            item["correct"] = bool(mine and mine.correct)
+            item["answered"] = mine is not None
+            if q.type == "text":
+                item["patterns"] = [a.raw for a in q.answers]
+            out.append(item)
+        return out
 
     def cards(self) -> list[dict[str, Any]]:
         """Flashcards: each slide as a reading card, each question with its answer."""
