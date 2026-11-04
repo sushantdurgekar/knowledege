@@ -289,6 +289,7 @@ Accounts use **Firebase Authentication** on the free **Spark** plan and progress
 **Web app and API key**
 10. Firebase console → **Project settings → General → Your apps → Add app → Web** (no Hosting). From the shown `firebaseConfig`, build one line of JSON with only four fields and set it as **`FIREBASE_WEB_CONFIG`** in Render:
     `{"apiKey":"AIza…","authDomain":"<project-id>.firebaseapp.com","projectId":"<project-id>","appId":"1:…:web:…"}`
+    You can also paste the console's `const firebaseConfig = { apiKey: "…", … };` snippet as it is, because the server reads the string fields out of it. Paste only the value, without a `FIREBASE_WEB_CONFIG=` prefix.
 11. Google Cloud console → **APIs & Services → Credentials** → the **Browser key (auto created by Firebase)** → **Application restrictions: Websites (HTTP referrers)**: `https://<render-host>/*`, `https://<project-id>.firebaseapp.com/*` and any custom domain. Under **API restrictions** allow only **Identity Toolkit API** and **Token Service API**. Save. (The key is public by design; the restriction stops other sites from using your auth quota.)
 12. **OAuth consent screen** (Google Auth Platform → Branding): app name **Study Hubs**, a support email, home page `https://<render-host>/`, privacy policy **`https://<render-host>/privacy`**, and the site's domain under Authorized domains. Leave it **In production** with only the default scopes (email, profile, openid), so no verification is needed.
 
