@@ -1,5 +1,5 @@
 import { useId, useMemo, type CSSProperties } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { FilterBar } from '../components/FilterBar';
 import { HubCard } from '../components/HubCard';
 import { useCatalog } from '../hooks/useCatalog';
@@ -32,6 +32,12 @@ export function Catalog() {
         <p className="lede">
           Self-paced Study Hubs for certifications and core tech skills. Open one to start: your progress is saved in
           this browser.
+        </p>
+        <p className="hero__quiz">
+          <Link className="btn btn--small" to="/quiz">
+            Join a live quiz
+          </Link>
+          <span className="muted small">Got a PIN from your host? Enter it here.</span>
         </p>
       </section>
 

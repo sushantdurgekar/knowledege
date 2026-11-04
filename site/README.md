@@ -425,3 +425,14 @@ Optional per-hub overrides (code, cert name, blurb) go in `hubs.config.json` →
 | The deploy job times out on `/api/version` | Check the Render dashboard for a failed or still-running build. If the live site reports commit `dev`, the deploy worked but Render passed no `RENDER_GIT_COMMIT` (check with `echo $RENDER_GIT_COMMIT` in the Render shell), so CI cannot confirm it. The Dockerfile accepts it as a build argument and the server reads it at runtime |
 | The first visit after a while is slow | The free instance was asleep. Check that the UptimeRobot monitor is up and every 5 min |
 | `check-image.sh` fails | Something private or unexpected reached `/app` (a `.md`, `_meta`, a non-catalog file under `hubs/`). Fix `.dockerignore` or the Dockerfile `COPY` lines; never widen the check |
+
+## Live quiz (`/quiz`)
+
+Admins host, players join with a 6-digit PIN and a nickname (no account needed).
+
+- **Host:** sign in as an admin → **Live quiz → Host a quiz** (`/quiz/host`). Paste questions or upload a `.txt` file, **Check questions**, **Open room**, then project the host screen. Start, close each question (or let the timer run out), show the answer and leaderboard, go to the next question, and download the results as CSV at the end.
+- **Players:** open `/quiz` (or the join link the host shows), enter the PIN and a nickname, answer on their phone.
+- **Question types:** single answer, multiple choice, typed answer (plain text or `/regex/i`), true/false, match the following. The format is under **Import format** on the host page; **Load the example** fills in one of each.
+- **Scoring:** a correct answer earns 50–100% of the question's points, more for answering sooner. Multiple choice and match earn partial points. Ties go to the faster player.
+- **Limits:** up to 250 players per room and 50 open rooms. Rooms live in the server's memory, so a deploy or restart ends any running quiz, and a room closes after 6 idle hours. Don't deploy during an event.
+- **Design for 250 players:** answers wake only the host, not all players, and lobby head-count updates are batched to one per second. Lookups are hash maps, and the leaderboard is sorted once per change. Join limits are set per IP address and allow a full room through one shared school network. See `site/server/app/quiz/room.py`.

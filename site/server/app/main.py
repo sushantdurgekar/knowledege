@@ -42,6 +42,7 @@ from app.errors import install_error_handlers
 from app.logging_setup import configure_logging
 from app.progress import routes as progress_routes
 from app.progress import seed
+from app.quiz import routes as quiz_routes
 from app.quota.egress import AppEgressMiddleware
 from app.quota.meter import PERSIST_INTERVAL_S
 from app.runtime import Runtime, build_runtime
@@ -184,6 +185,7 @@ def create_app(
     app.include_router(account_routes.router)
     app.include_router(admin_restore.router)  # before admin_routes: its catch-all is last
     app.include_router(admin_routes.router)
+    app.include_router(quiz_routes.router)
     app.include_router(hubs_routes.router)
     app.include_router(static_routes.router)
     # No catch-all route: a path match with the wrong method must still get a 405.

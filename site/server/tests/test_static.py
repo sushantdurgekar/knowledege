@@ -20,6 +20,8 @@ SPA_ROUTES = [
     "/admin/backup",
     "/admin/restore/step-2",
     "/privacy",
+    "/quiz",
+    "/quiz/host",
 ]
 
 

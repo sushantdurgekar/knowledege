@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router';
 import { useMe } from '../context/me';
 import { AccountNav } from './AccountNav';
 import { BrandMark } from './BrandMark';
+import { BackBar, SiteNav } from './SiteNav';
 
 /** Shown while a lazily loaded page (sign-in, account, ...) downloads. */
 function PageLoading() {
@@ -40,6 +41,7 @@ export function Layout() {
             <BrandMark />
             <span>Study Hubs</span>
           </Link>
+          <SiteNav />
           <nav aria-label="Account">
             <AccountNav />
           </nav>
@@ -47,6 +49,7 @@ export function Layout() {
       </header>
 
       <main id="main" ref={mainRef} tabIndex={-1} className="wrap site-main">
+        <BackBar />
         <Suspense fallback={<PageLoading />}>
           <Outlet />
         </Suspense>
@@ -61,6 +64,9 @@ export function Layout() {
             <ul className="site-footer__links">
               <li>
                 <Link to="/">All hubs</Link>
+              </li>
+              <li>
+                <Link to="/quiz">Live quiz</Link>
               </li>
               <li>
                 <Link to="/privacy">Privacy</Link>
