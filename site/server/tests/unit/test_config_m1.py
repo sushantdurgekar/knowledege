@@ -201,3 +201,24 @@ def test_web_config_error_does_not_echo_value() -> None:
     with pytest.raises(ConfigError) as err:
         parse_web_config("AIza-secretish-garbage")
     assert "AIza" not in str(err.value)
+
+
+def test_render_external_url_is_a_second_allowed_origin() -> None:
+    from app.auth.csrf import csrf_problem
+
+    env = {
+        **PROD,
+        "PUBLIC_ORIGIN": "https://typo.example",
+        "RENDER_EXTERNAL_URL": "https://study-hubs.onrender.com",
+    }
+    s = Settings.from_env(env)
+    assert s.public_origin == "https://typo.example"
+    assert s.allowed_origins == {"https://typo.example", "https://study-hubs.onrender.com"}
+    headers = {"x-studyhubs": "1", "origin": "https://study-hubs.onrender.com"}
+    assert csrf_problem("POST", headers, s.allowed_origins) is None
+    assert csrf_problem("POST", {**headers, "origin": "https://evil.example"}, s.allowed_origins)
+    assert s.origin_for_host("study-hubs.onrender.com") == "https://study-hubs.onrender.com"
+    assert s.origin_for_host("other.example") == "https://typo.example"
+    # Unset PUBLIC_ORIGIN falls back to Render's URL.
+    env.pop("PUBLIC_ORIGIN")
+    assert Settings.from_env(env).public_origin == "https://study-hubs.onrender.com"

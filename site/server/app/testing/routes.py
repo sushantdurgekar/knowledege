@@ -39,7 +39,7 @@ async def require_test_header(request: Request) -> None:
     if request.headers.get(PROTOCOL_HEADER) != PROTOCOL_VERSION:
         raise ApiError(403, "csrf", "Test routes require X-StudyHubs: 1")
     origin = request.headers.get("origin")
-    if origin is not None and origin != get_runtime(request).settings.public_origin:
+    if origin is not None and origin not in get_runtime(request).settings.allowed_origins:
         raise ApiError(403, "csrf", "Cross-origin request")
 
 
