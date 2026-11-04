@@ -72,8 +72,12 @@ def header_aad(preamble_bytes: bytes) -> bytes:
     return hashlib.sha256(preamble_bytes).digest()
 
 
-def settings_record(value: dict[str, Any]) -> bytes:
-    kept = {key: value.get(key) for key in SETTINGS_KEYS}
+def settings_record(value: dict[str, Any], studio: dict[str, Any] | None = None) -> bytes:
+    """The one settings record: site settings, plus the quiz studio's library when there is one
+    (`studio`: saved quizzes and their images; see app/quiz/library.py studio_snapshot)."""
+    kept: dict[str, Any] = {key: value.get(key) for key in SETTINGS_KEYS}
+    if studio:
+        kept["studio"] = studio
     return compact({"t": "settings", "key": "site", "value": kept}) + b"\n"
 
 

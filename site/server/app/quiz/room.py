@@ -91,6 +91,12 @@ class Player:
     stage: Stage = "ready"
     opened_at: float = 0.0
     deadline: float = 0.0
+    team: int | None = None  # index into TEAM_NAMES when the room plays in teams
+
+
+# Team play: teams are named by colour; the client draws them with the same palette.
+TEAM_NAMES = ("Violet", "Teal", "Coral", "Amber", "Blue", "Rose")
+MAX_SCHEDULE_S = 14 * 86400  # a scheduled self-paced challenge stays open at most 14 days
 
 
 def _ints(value: Any, n: int, length: int | None = None) -> list[int] | None:
@@ -190,6 +196,11 @@ class Room:
         self._lobby_pending = False
         self._ranked: tuple[int, list[Player], dict[str, int]] | None = None
         self._pview: tuple[int, dict[str, Any]] | None = None
+        # Team play (0 = individual) and, for self-paced rooms, an opening window in wall-clock
+        # epoch seconds (None = opened and closed by the host).
+        self.teams = 0
+        self.opens_at: float | None = None
+        self.closes_at: float | None = None
         # Match and order items are shown in one shuffled order per question (same for all).
         self.orders: dict[int, list[int]] = {}
         for i, q in enumerate(quiz.questions):
@@ -253,9 +264,86 @@ class Room:
         return self.quiz.questions[self.index] if 0 <= self.index < self.total else None
 
     def tick(self) -> None:
-        """Close the open live question once its time is up."""
+        """Close the open live question once its time is up; open/close a scheduled challenge."""
         if self.mode == "live" and self.phase == "question" and self.clock() >= self.deadline:
             self._reveal()
+        if self.mode == "self" and (self.opens_at is not None or self.closes_at is not None):
+            now = time.time()
+            if self.phase == "lobby" and self.opens_at is not None and now >= self.opens_at:
+                self.phase = "question"
+                self.bump()
+            if self.phase != "finished" and self.closes_at is not None and now >= self.closes_at:
+                self._finish()
+
+    # -- options, teams, schedule ----------------------------------------------------------
+    def configure(
+        self, *, teams: int = 0, opens_at: float | None = None, closes_at: float | None = None
+    ) -> None:
+        if not (teams == 0 or 2 <= teams <= len(TEAM_NAMES)):
+            raise QuizError(422, "invalid", f"Teams must be 0 (off) or 2-{len(TEAM_NAMES)}")
+        if (opens_at is not None or closes_at is not None) and self.mode != "self":
+            raise QuizError(422, "invalid", "Only self-paced rooms can be scheduled")
+        now = time.time()
+        if closes_at is not None:
+            start = opens_at if opens_at is not None else now
+            if closes_at <= max(start, now):
+                raise QuizError(
+                    422, "invalid", "The closing time must be after the opening time and in the future"
+                )
+            if closes_at - start > MAX_SCHEDULE_S:
+                raise QuizError(422, "invalid", "A challenge can stay open for at most 14 days")
+        if opens_at is not None and opens_at - now > MAX_SCHEDULE_S:
+            raise QuizError(422, "invalid", "The opening time must be within 14 days")
+        self.teams, self.opens_at, self.closes_at = teams, opens_at, closes_at
+
+    def extra_state(self) -> dict[str, Any]:
+        return {"teams": self.teams, "opensAt": self.opens_at, "closesAt": self.closes_at}
+
+    def load_extra_state(self, extra: dict[str, Any]) -> None:
+        self.teams = int(extra.get("teams") or 0)
+        self.opens_at = extra.get("opensAt")
+        self.closes_at = extra.get("closesAt")
+
+    def adopt(self, player: Player) -> None:
+        """Add a player restored from a saved room."""
+        self.players[player.id] = player
+        self._by_token[player.token] = player
+        self._names.add(normalise(player.name))
+
+    def _pick_team(self) -> int | None:
+        if not self.teams:
+            return None
+        sizes = [0] * self.teams
+        for p in self.players.values():
+            if p.team is not None and p.team < self.teams:
+                sizes[p.team] += 1
+        return min(range(self.teams), key=lambda t: (sizes[t], t))  # the smallest team
+
+    def team_board(self) -> list[dict[str, Any]]:
+        """Teams ranked by average score (fair for uneven sizes), then total."""
+        if not self.teams:
+            return []
+        rows = []
+        for t in range(self.teams):
+            members = [p for p in self.players.values() if p.team == t]
+            total = sum(p.score for p in members)
+            rows.append(
+                {
+                    "team": t,
+                    "name": TEAM_NAMES[t],
+                    "players": len(members),
+                    "total": total,
+                    "score": round(total / len(members)) if members else 0,
+                }
+            )
+        rows.sort(key=lambda r: (-r["score"], -r["total"], r["team"]))
+        for rank, row in enumerate(rows, start=1):
+            row["rank"] = rank
+        return rows
+
+    def expired(self, now_wall: float) -> bool:
+        """A scheduled challenge stays until a day after it closes, whatever the idle time."""
+        return self.closes_at is None or now_wall > self.closes_at + 86400
 
     def _open(self, index: int) -> None:
         if not 0 <= index < self.total:
@@ -344,7 +432,11 @@ class Room:
         if key in self._names:
             raise QuizError(409, "name_taken", "Someone in this room already uses that nickname")
         player = Player(
-            id=secrets.token_hex(6), name=name, token=secrets.token_urlsafe(24), joined=self.clock()
+            id=secrets.token_hex(6),
+            name=name,
+            token=secrets.token_urlsafe(24),
+            joined=self.clock(),
+            team=self._pick_team(),
         )
         self.players[player.id] = player
         self._by_token[player.token] = player
@@ -496,6 +588,8 @@ class Room:
         }
         if q.type == "slide":
             view["body"] = q.body
+        if q.image:
+            view["image"] = q.image
         if q.type in ("single", "multi", "truefalse", "poll"):
             view["options"] = q.options
             if q.type == "multi":
@@ -567,6 +661,7 @@ class Room:
                 "score": p.score,
                 "correct": p.correct,
                 "streak": p.streak,
+                "team": p.team,
             }
             for i, p in enumerate(ranked[:size])
         ]
@@ -585,6 +680,9 @@ class Room:
             "playerCount": len(self.players),
             "locked": self.locked,
             "advanced": self.quiz.advanced,
+            "teams": self.teams,
+            "opensAt": round(self.opens_at * 1000) if self.opens_at is not None else None,
+            "closesAt": round(self.closes_at * 1000) if self.closes_at is not None else None,
         }
 
     def _live_question(self, host: bool) -> dict[str, Any] | None:
@@ -608,6 +706,8 @@ class Room:
         out["answeredCount"] = self.answered_count
         out["presentKey"] = self.present_key
         out["leaderboard"] = self._board(ranked, len(ranked))
+        if self.teams:
+            out["teamBoard"] = self.team_board()
         if self.mode == "self" or self.phase in ("reveal", "finished"):
             out["insights"] = self.insights()
         out["sheet"] = [
@@ -618,7 +718,13 @@ class Room:
         if self.mode == "live":
             out["question"] = self._live_question(True)
             out["players"] = [
-                {"id": p.id, "name": p.name, "score": p.score, "answered": self.index in p.answers}
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "score": p.score,
+                    "answered": self.index in p.answers,
+                    "team": p.team,
+                }
                 for p in self.players.values()
             ]
         else:
@@ -651,8 +757,10 @@ class Room:
         out["question"] = self._live_question(False) if self.mode == "live" else None
         if self.phase in ("reveal", "finished") or self.mode == "self":
             out["leaderboard"] = self._board(ranked, LEADERBOARD_SIZE)
+            if self.teams:
+                out["teamBoard"] = self.team_board()
         if self.phase == "lobby":
-            out["players"] = [{"id": p.id, "name": p.name} for p in self.players.values()]
+            out["players"] = [{"id": p.id, "name": p.name, "team": p.team} for p in self.players.values()]
         if self.mode == "self":
             out["doneCount"] = sum(1 for p in self.players.values() if p.stage == "done")
         return out
@@ -670,6 +778,8 @@ class Room:
         )
         # Live: the standings as of the last reveal (answers in flight are not shown).
         out["leaderboard"] = self._board(ranked, BOARD_SIZE)
+        if self.teams:
+            out["teamBoard"] = self.team_board()
         return out
 
     def view(self, player: Player | None = None, host: bool = False) -> dict[str, Any]:
@@ -683,6 +793,8 @@ class Room:
             base["question"] = self._live_question(False)
             if self.phase in ("reveal", "finished"):
                 base["leaderboard"] = self._board(self.ranking(), LEADERBOARD_SIZE)
+                if self.teams:
+                    base["teamBoard"] = self.team_board()
             self._pview = (self.pversion, base)
         out = dict(self._pview[1])
         if out["question"] is not None and self.phase == "question" and math.isfinite(self.deadline):
@@ -702,6 +814,8 @@ class Room:
         self.self_tick(player)
         if self.phase == "finished" or player.stage == "done":
             out["leaderboard"] = self._board(self.ranking(), LEADERBOARD_SIZE)
+            if self.teams:
+                out["teamBoard"] = self.team_board()
         if player.stage in ("question", "reveal") and 0 <= player.index < self.total:
             open_ = player.stage == "question"
             remaining = 0
@@ -726,6 +840,7 @@ class Room:
             "correctCount": player.correct,
             "streak": player.streak,
             "answered": mine is not None,
+            "team": player.team,
         }
         closed = (
             self.phase in ("reveal", "finished")
@@ -826,12 +941,22 @@ class RoomManager:
         self.rooms: dict[str, Room] = {}
 
     def _sweep(self) -> None:
-        now = self.clock()
+        now, wall = self.clock(), time.time()
         for pin, room in list(self.rooms.items()):
-            if now - room.touched > ROOM_IDLE_S:
+            if now - room.touched > ROOM_IDLE_S and room.expired(wall):
                 del self.rooms[pin]
 
-    def create(self, quiz: Quiz, owner: str, *, mode: Mode = "live", study: bool = False) -> Room:
+    def create(
+        self,
+        quiz: Quiz,
+        owner: str,
+        *,
+        mode: Mode = "live",
+        study: bool = False,
+        teams: int = 0,
+        opens_at: float | None = None,
+        closes_at: float | None = None,
+    ) -> Room:
         self._sweep()
         if len(self.rooms) >= self.MAX_ROOMS:
             raise QuizError(429, "too_many_rooms", "Too many open rooms; close one first")
@@ -840,6 +965,7 @@ class RoomManager:
             if pin not in self.rooms:
                 break
         room = Room(pin, quiz, owner, self.clock, mode=mode, study=study)
+        room.configure(teams=teams, opens_at=opens_at, closes_at=closes_at)
         self.rooms[pin] = room
         return room
 

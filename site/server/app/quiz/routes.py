@@ -9,6 +9,8 @@ Admin (signed-in admin, CSRF on writes):
   GET|PUT|DELETE /api/quiz/library/{id}   one saved quiz ({doc, version}; PUT {doc, expect})
   GET  /api/quiz/bank                hubs and modules with practice questions
   GET  /api/quiz/bank/{hubId}        one hub's modules: key points and questions
+  POST /api/quiz/images              {data: data-URL} -> {id} (shrunk in the browser first)
+  GET  /api/quiz/images/{id}         the image (public, immutable)
 
 Host (X-Quiz-Host: the room's hostKey; no admin re-check per poll):
   GET  /api/quiz/rooms/{pin}/host?since=N      long-poll, full view with solutions and run sheet
@@ -48,7 +50,7 @@ from app.auth import ratelimit
 from app.auth.csrf import csrf_protect
 from app.auth.deps import Viewer
 from app.errors import ApiError
-from app.quiz import library
+from app.quiz import images, library
 from app.quiz.bank import bank_hub, bank_index, load_bank
 from app.quiz.library import LibraryError
 from app.quiz.parse import (
@@ -60,9 +62,10 @@ from app.quiz.parse import (
     quiz_from_json,
     quiz_to_json,
 )
+from app.quiz.persist import RoomSaver
 from app.quiz.room import QuizError, Room, RoomManager
 from app.runtime import get_runtime
-from app.store.base import StoreError
+from app.store.base import Store, StoreError
 
 router = APIRouter(prefix="/api/quiz")
 Admin = Annotated[Viewer, Depends(require_admin)]
@@ -137,6 +140,15 @@ def _load(data: dict[str, Any]) -> Quiz:
     return parse_quiz(source)
 
 
+def _epoch(value: Any) -> float | None:
+    """A time from the client: epoch milliseconds, or None."""
+    if value in (None, ""):
+        return None
+    if not isinstance(value, int | float) or isinstance(value, bool) or value <= 0:
+        raise ApiError(422, "invalid", "Times must be epoch milliseconds")
+    return float(value) / 1000
+
+
 def _summary(quiz: Quiz) -> dict[str, Any]:
     return {
         "title": quiz.title,
@@ -177,8 +189,19 @@ async def create_room(request: Request, admin: Admin) -> JSONResponse:
     mode = data.get("mode", "live")
     if mode not in ("live", "self"):
         raise ApiError(422, "invalid", "mode must be live or self")
+    teams = data.get("teams") or 0
+    if not isinstance(teams, int) or isinstance(teams, bool):
+        raise ApiError(422, "invalid", "teams must be a number")
     try:
-        room = _manager.create(quiz, admin.uid, mode=mode, study=bool(data.get("study")))
+        room = _manager.create(
+            quiz,
+            admin.uid,
+            mode=mode,
+            study=bool(data.get("study")),
+            teams=teams,
+            opens_at=_epoch(data.get("opensAt")),
+            closes_at=_epoch(data.get("closesAt")),
+        )
     except QuizError as exc:
         raise _err(exc) from None
     return _json({"pin": room.pin, "hostKey": room.host_key, "mode": room.mode, **_summary(quiz)}, 201)
@@ -414,3 +437,49 @@ async def board(request: Request, pin: str) -> JSONResponse:
     if _manager.rooms.get(room.pin) is not room:
         raise ApiError(404, "no_room", "This quiz has closed")
     return _json(room.board_view())
+
+
+# -- images -----------------------------------------------------------------------------------
+IMAGE_CACHE = "public, max-age=31536000, immutable"
+
+
+@router.post("/images", dependencies=CSRF)
+async def image_upload(request: Request, admin: Admin) -> JSONResponse:
+    data = await _body(request)
+    try:
+        image_id = await run_in_threadpool(images.save_image, get_runtime(request).store, data.get("data"))
+    except images.ImageError as exc:
+        raise ApiError(exc.status, "invalid", exc.message) from None
+    except StoreError as exc:
+        raise ApiError(503, "unavailable", "Images are unavailable right now", retry_after=30) from exc
+    return _json({"id": image_id}, 201)
+
+
+@router.get("/images/{image_id}")
+async def image_get(request: Request, image_id: str) -> Response:
+    try:
+        found = await run_in_threadpool(images.load_image, get_runtime(request).store, image_id)
+    except StoreError as exc:
+        raise ApiError(503, "unavailable", "Images are unavailable right now", retry_after=30) from exc
+    if found is None:
+        raise ApiError(404, "not_found", "No such image")
+    mime, raw = found
+    return Response(
+        raw, media_type=mime, headers={"Cache-Control": IMAGE_CACHE, "X-Content-Type-Options": "nosniff"}
+    )
+
+
+# -- saving rooms across restarts ---------------------------------------------------------------
+_saver: RoomSaver | None = None
+
+
+async def start_saver(store: Store) -> None:
+    """Restore saved rooms, then keep saving changed ones (app lifespan)."""
+    global _saver
+    _saver = RoomSaver(_manager, store)
+    await _saver.start()
+
+
+async def stop_saver() -> None:
+    if _saver is not None:
+        await _saver.stop()

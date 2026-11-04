@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BusyLine, FormMessage } from '../../components/forms';
 import { apiMessage, checkLocally, fetchReview, TYPE_LABELS, type ReviewItem } from '../../lib/quiz';
-import { Answering, Solution } from './Answering';
+import { Answering, QuestionImage, Solution } from './Answering';
 
 /** "Replay my mistakes": re-ask only the questions this player missed, checked in the browser. */
 export function Replay({ pin, token, onClose }: { pin: string; token: string; onClose: () => void }) {
@@ -68,6 +68,7 @@ export function Replay({ pin, token, onClose }: { pin: string; token: string; on
         </button>
       </div>
       <h2 className="quiz-q__text">{item.text}</h2>
+      <QuestionImage id={item.image} alt={`Picture for the question: ${item.text}`} />
       {answer === null ? (
         <Answering
           key={pos}

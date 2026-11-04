@@ -19,7 +19,8 @@ import {
   type RoomView,
 } from '../../lib/quiz';
 import { commit, dueCards, loadState, recordQuiz } from '../../lib/quiz-history';
-import { Answering, Leaderboard, SlideBody, Solution } from './Answering';
+import { Answering, Leaderboard, QuestionImage, SlideBody, Solution } from './Answering';
+import { TeamBoard, TeamChip } from './Teams';
 import { Calibration } from './Calibration';
 import { Flashcards } from './Flashcards';
 import { Replay } from './Replay';
@@ -154,6 +155,7 @@ function Playing({ pin, token }: { pin: string; token: string }) {
         {view.title}
       </span>
       <span className="quiz-bar__me">
+        <TeamChip team={me.team} />
         {me.name} · <strong>{me.score.toLocaleString()}</strong> pts
       </span>
     </header>
@@ -191,7 +193,9 @@ function Playing({ pin, token }: { pin: string; token: string }) {
           <p className="quiz-big">You’re in!</p>
           <p className="lede">
             {self
-              ? 'This is a self-paced quiz. It opens when the host starts it.'
+              ? view.opensAt && view.opensAt > Date.now()
+                ? `This is a self-paced challenge. It opens ${new Date(view.opensAt).toLocaleString()}.`
+                : 'This is a self-paced quiz. It opens when the host starts it.'
               : 'See your nickname on the host’s screen? Waiting for the host to start…'}
           </p>
           <p className="muted">{view.playerCount} player(s) in the room</p>
@@ -229,7 +233,7 @@ function Playing({ pin, token }: { pin: string; token: string }) {
               {q.index + 1} of {view.total} · Slide
             </span>
           </p>
-          <SlideBody text={q.text} body={q.body} />
+          <SlideBody text={q.text} body={q.body} image={q.image} />
           {self ? (
             <button type="button" className="btn btn--primary btn--wide" disabled={sending} onClick={next}>
               Continue
@@ -251,6 +255,7 @@ function Playing({ pin, token }: { pin: string; token: string }) {
             </span>
           </div>
           <h2 className="quiz-q__text">{q.text}</h2>
+          <QuestionImage id={q.image} alt={`Picture for the question: ${q.text}`} />
           {me.answered ? (
             <div className="quiz-wait">
               <p className="quiz-big">Answer locked in</p>
@@ -314,6 +319,7 @@ function Playing({ pin, token }: { pin: string; token: string }) {
             </div>
           )}
           <h2 className="quiz-q__text">{q.text}</h2>
+          <QuestionImage id={q.image} alt={`Picture for the question: ${q.text}`} />
           <Solution q={q} mine={me.answer} />
           {q.explain && <p className="quiz-explain">{q.explain}</p>}
           {self ? (
@@ -340,6 +346,15 @@ function Playing({ pin, token }: { pin: string; token: string }) {
               <Link to="/quiz/review">{saved.due} due for review now</Link>
               {signedIn ? ' · synced to your account' : ' · saved in this browser (sign in to keep it everywhere)'}
             </p>
+          )}
+          {view.teamBoard && view.teamBoard.length > 0 && (
+            <>
+              <h2>Teams</h2>
+              <TeamBoard rows={view.teamBoard} highlight={me.team} />
+            </>
+          )}
+          {view.closesAt && view.phase !== 'finished' && (
+            <p className="muted">The challenge closes {new Date(view.closesAt).toLocaleString()}; the final ranking settles then.</p>
           )}
           <h2>Top players</h2>
           <Leaderboard rows={view.leaderboard ?? []} highlight={me.id} />

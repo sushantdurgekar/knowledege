@@ -20,6 +20,7 @@ export interface DocItem {
   items?: string[]; // order
   explain?: string;
   hints?: string[]; // advanced quizzes
+  image?: string; // an uploaded picture's id
 }
 
 export interface QuizDoc {
@@ -73,7 +74,15 @@ export function blankItem(type: QuestionType): DocItem {
 /** Switch an item to another type, keeping the text and whatever carries over. */
 export function retype(item: DocItem, type: QuestionType): DocItem {
   const fresh = blankItem(type);
-  const keep = { id: item.id, text: item.text, time: item.time, points: item.points, explain: item.explain, hints: item.hints };
+  const keep = {
+    id: item.id,
+    text: item.text,
+    time: item.time,
+    points: item.points,
+    explain: item.explain,
+    hints: item.hints,
+    image: item.image,
+  };
   if (item.options && fresh.options) {
     const options = item.options.map((o) => ({ text: o.text, correct: type === 'poll' ? false : o.correct }));
     if (type === 'single' && options.filter((o) => o.correct).length !== 1) options.forEach((o, i) => (o.correct = i === 0));
@@ -143,6 +152,7 @@ export function toText(doc: QuizDoc): string {
   for (const item of doc.items) {
     if (item.type === 'slide') {
       lines.push(`Slide: ${item.text}`);
+      if (item.image) lines.push(`image: ${item.image}`);
       if (item.body) lines.push(...item.body.split('\n'));
       lines.push('');
       continue;
@@ -157,6 +167,7 @@ export function toText(doc: QuizDoc): string {
     for (const [l, r] of item.pairs ?? []) lines.push(`pair: ${l.replace(/=/g, ' ')} = ${r}`);
     for (const i of item.items ?? []) lines.push(`item: ${i}`);
     if (doc.advanced) for (const h of item.hints ?? []) if (h.trim()) lines.push(`hint: ${h}`);
+    if (item.image) lines.push(`image: ${item.image}`);
     if (item.explain) lines.push(`explain: ${item.explain.replace(/\n/g, ' ')}`);
     lines.push('');
   }

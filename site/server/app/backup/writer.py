@@ -34,6 +34,7 @@ from app.backup.format import (
     tombstone_record,
     user_record,
 )
+from app.quiz.library import studio_snapshot
 from app.store.base import PARTS, Store
 
 CHUNK = 256 * 1024
@@ -109,7 +110,7 @@ class BackupWriter:
         self.result: BackupResult | None = None
 
     def _records(self, counts: dict[str, int], recount: list[int]) -> Iterator[bytes]:
-        yield settings_record(self._site)
+        yield settings_record(self._site, studio_snapshot(self._store))
         counts["settings"] += 1
         for stone in self._store.iter_tombstones(page=self._page):
             counts["tombstone"] += 1

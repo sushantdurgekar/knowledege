@@ -479,3 +479,150 @@ def test_presenter_and_public_board(admin: TestClient) -> None:
     assert shown["phase"] == "reveal"
     assert shown["question"]["solution"] == {"correct": [1]}
     assert shown["leaderboard"][0]["score"] > 0
+
+
+def test_room_survives_a_restart_mid_question() -> None:
+    """Save a running room to the store, restore it in a "new process", keep playing."""
+    from app.quiz.persist import RoomSaver, pack, room_state, unpack
+    from app.store.memory import MemoryStore
+
+    now = [100.0]
+    manager = RoomManager(lambda: now[0])
+    room = manager.create(parse_quiz(SOURCE), "boss", teams=2)
+    ann, bob = room.join("Ann"), room.join("Bob")
+    room.act("start")
+    room.answer(ann, 0, 1, None)
+    now[0] = 103.0  # 3 s into a 10 s question
+    store = MemoryStore()
+    RoomSaver(manager, store).flush(force=True)
+    assert unpack(pack(room_state(room)))["players"][0]["name"] == "Ann"
+
+    later = [5000.0]  # a new process: monotonic time starts elsewhere
+    fresh = RoomManager(lambda: later[0])
+    assert RoomSaver(fresh, store).load() == 1
+    again = fresh.get(room.pin)
+    assert again.host_key == room.host_key
+    assert again.present_key == room.present_key
+    assert again.player_by_token(bob.token).name == "Bob"
+    assert again.phase == "question"
+    assert again.players[ann.id].answers[0].points == ann.answers[0].points
+    assert 5 < again.deadline - later[0] <= 7.5  # the timer went on in real time
+    again.answer(again.player_by_token(bob.token), 0, 0, None)  # Bob answers after the restart
+    assert again.phase == "reveal"
+    assert [t["name"] for t in again.team_board()] == ["Violet", "Teal"]
+
+    # Closing a room removes it from what the next start restores.
+    saver = RoomSaver(fresh, store)
+    saver.load()
+    fresh.close(room.pin)
+    saver.flush()
+    assert RoomSaver(RoomManager(), store).load() == 0
+
+
+def test_teams_are_balanced_and_ranked_by_average() -> None:
+    room = Room("1", parse_quiz(SOURCE), "boss", lambda: 0.0)
+    room.configure(teams=3)
+    players = [room.join(n) for n in ["A", "B", "C", "D", "E"]]
+    assert [p.team for p in players] == [0, 1, 2, 0, 1]
+    room.act("start")
+    room.answer(players[2], 0, 1)  # C, alone in team 2, scores
+    board = room.team_board()
+    assert board[0]["name"] == "Coral"
+    assert (board[0]["players"], board[0]["score"]) == (1, players[2].score)
+    with pytest.raises(QuizError):
+        room.configure(teams=9)
+
+
+def test_scheduled_self_paced_challenge_opens_and_closes_itself(monkeypatch: pytest.MonkeyPatch) -> None:
+    import time as _time
+
+    wall = [1_000_000.0]
+    monkeypatch.setattr(_time, "time", lambda: wall[0])
+    manager = RoomManager(lambda: 0.0)
+    room = manager.create(
+        parse_quiz(SOURCE), "boss", mode="self", opens_at=wall[0] + 60, closes_at=wall[0] + 3600
+    )
+    cy = room.join("Cy")  # joins early, waits in the lobby
+    room.tick()
+    assert room.phase == "lobby"
+    wall[0] += 61
+    room.tick()
+    assert room.phase == "question"
+    room.advance(cy)
+    wall[0] += 4000
+    room.tick()
+    assert room.phase == "finished"
+    assert not room.expired(wall[0])  # kept a day after closing for the results
+    with pytest.raises(QuizError, match="self-paced"):
+        manager.create(parse_quiz(SOURCE), "boss", mode="live", closes_at=wall[0] + 100)
+    with pytest.raises(QuizError, match="14 days"):
+        manager.create(parse_quiz(SOURCE), "boss", mode="self", closes_at=wall[0] + 20 * 86400)
+
+
+def test_images_upload_and_serve(admin: TestClient) -> None:
+    import base64 as _b64
+
+    png = _b64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    )
+    url = "data:image/png;base64," + _b64.b64encode(png).decode()
+    up = admin.post("/api/quiz/images", json={"data": url}, headers=API)
+    assert up.status_code == 201
+    image_id = up.json()["id"]
+    assert admin.post("/api/quiz/images", json={"data": url}, headers=API).json()["id"] == image_id
+    got = admin.get(f"/api/quiz/images/{image_id}")
+    assert (got.status_code, got.headers["content-type"], got.content) == (200, "image/png", png)
+    assert "immutable" in got.headers["cache-control"]
+    fake = "data:image/png;base64," + _b64.b64encode(b"<svg onload=alert(1)>").decode()
+    assert admin.post("/api/quiz/images", json={"data": fake}, headers=API).status_code == 422
+    assert admin.get("/api/quiz/images/" + "0" * 24).status_code == 404
+    # A quiz item can carry the image; players see its id.
+    source = f"Q: Look\nimage: {image_id}\n* a\n- b\n"
+    quiz = parse_quiz(source)
+    assert quiz.questions[0].image == image_id
+    with pytest.raises(QuizFormatError, match="uploaded image"):
+        parse_quiz("Q: x\nimage: nope\n* a\n- b\n")
+
+
+def test_quiz_library_travels_in_the_backup_settings_record() -> None:
+    import base64 as _b64
+    import json as _json
+
+    from app.backup.format import settings_record
+    from app.backup.reader import check_records
+    from app.quiz import images, library
+    from app.store.memory import MemoryStore
+
+    png = _b64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    )
+    source = MemoryStore()
+    image_id = images.save_image(source, "data:image/png;base64," + _b64.b64encode(png).decode())
+    doc = {"title": "Pics", "items": [{"type": "slide", "text": "Look", "body": "x", "image": image_id}]}
+    library.save_quiz(source, "pics1234", doc, None, "a@b")
+    studio = library.studio_snapshot(source)
+    assert studio is not None
+    assert [q["id"] for q in studio["quizzes"]] == ["pics1234"]
+    assert list(studio["images"]) == [image_id]
+
+    # The record passes the backup reader's checks (the format stays v1).
+    line = settings_record({"tz": "UTC", "notice": None}, studio)
+    sha = __import__("hashlib").sha256(line).hexdigest()
+    end = _json.dumps(
+        {"t": "end", "counts": {"settings": 1, "tombstone": 0, "user": 0, "progress": 0}, "sha256": sha}
+    )
+    check_records(
+        iter([(line.rstrip(b"\n"), True), (end.encode(), True)]), max_part_gz=131072, out=lambda _b: None
+    )
+
+    # Restore: a merge keeps an existing quiz, a replace makes the library the backup's.
+    target = MemoryStore()
+    library.save_quiz(target, "pics1234", {**doc, "title": "Mine"}, None, "me")
+    library.save_quiz(target, "other123", {"title": "Other", "items": []}, None, "me")
+    assert library.restore_studio(target, studio, "merge") == {"quizzes": 0, "images": 1}
+    assert library.get_quiz(target, "pics1234")[0]["title"] == "Mine"
+    assert library.restore_studio(target, studio, "replace")["quizzes"] == 1
+    assert [q["id"] for q in library.list_quizzes(target)] == ["pics1234"]
+    assert library.get_quiz(target, "pics1234")[0]["title"] == "Pics"
+    assert images.load_image(target, image_id) == ("image/png", png)
+    assert library.studio_snapshot(MemoryStore()) is None

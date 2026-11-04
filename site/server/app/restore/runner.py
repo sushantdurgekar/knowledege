@@ -55,6 +55,7 @@ from app.backup import reader
 from app.clock import Clock
 from app.config import Settings
 from app.progress.validate import compact_json, done_count, encode_gz
+from app.quiz.library import restore_studio
 from app.quota.pacific import iso_utc, next_reset
 from app.restore.plan import build_plan
 from app.restore.uploads import UploadError, Uploads
@@ -626,6 +627,12 @@ class RestoreService:
             kind = rec["t"]
             if kind == "settings":  # the runner's own: applied after a replace, kept on a merge
                 site = rec.get("value") if isinstance(rec.get("value"), dict) else None
+                if site is not None and isinstance(site.get("studio"), dict):
+                    # The quiz library is applied here, in both modes (a merge keeps quizzes that
+                    # exist), and kept out of the checkpoint: it can be megabytes, a job document
+                    # cannot. Applying it again after a resume writes the same documents.
+                    self._call(job_id, restore_studio, self.store, site["studio"], mode)
+                    site = {k: v for k, v in site.items() if k != "studio"}
                 if mode == "merge":
                     kept["settings"] += 1
             elif kind == "tombstone":

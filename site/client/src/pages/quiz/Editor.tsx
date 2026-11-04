@@ -13,6 +13,8 @@ import {
   TYPE_LABELS,
   type Mode,
   type QuestionType,
+  type RoomOptions,
+  uploadImage,
 } from '../../lib/quiz';
 import {
   blankItem,
@@ -28,6 +30,8 @@ import {
   type QuizDoc,
 } from '../../lib/quiz-doc';
 import { AdminGate } from './AdminGate';
+import { QuestionImage } from './Answering';
+import { HostOptions } from './HostOptions';
 import { Sortable } from './Sortable';
 
 /** `/quiz/host/edit/:id`: build a quiz item by item, check it, then host it. */
@@ -49,7 +53,7 @@ function EditorPage() {
   const [errors, setErrors] = useState<string[]>([]);
   const [checked, setChecked] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [study, setStudy] = useState(false);
+  const [starting, setStarting] = useState<Mode | null>(null);
   const [saved, setSaved] = useState<'saved' | 'pending' | 'saving' | 'error'>('saved');
   useDocumentTitle(doc ? `Edit: ${doc.title}` : 'Edit quiz');
 
@@ -155,12 +159,12 @@ function EditorPage() {
     }
   };
 
-  const host = async (mode: Mode) => {
+  const host = async (options: RoomOptions) => {
     if (!(await check())) return;
     if (saved !== 'saved' && !(await save(doc))) return;
     setBusy(true);
     try {
-      const room = await createRoom(toServer(doc), mode, study);
+      const room = await createRoom(toServer(doc), options);
       setHostSecret(room.pin, room.hostKey);
       navigate(`/quiz/host/${room.pin}`);
     } catch (e) {
@@ -211,16 +215,13 @@ function EditorPage() {
       </div>
 
       <div className="editor__actions">
-        <button type="button" className="btn btn--primary" disabled={busy} onClick={() => host('live')}>
+        <button type="button" className="btn btn--primary" disabled={busy} onClick={() => setStarting('live')}>
           Host live
         </button>
-        <button type="button" className="btn" disabled={busy} onClick={() => host('self')}>
-          Start self-paced
+        <button type="button" className="btn" disabled={busy} onClick={() => setStarting('self')}>
+          Self-paced challenge
         </button>
-        <label className="studio__check small">
-          <input type="checkbox" checked={study} onChange={(e) => setStudy(e.target.checked)} /> flashcards before
-          self-paced
-        </label>
+        
         <span className="editor__spacer" />
         <button type="button" className="btn btn--small" disabled={busy} onClick={check}>
           Check
@@ -233,6 +234,18 @@ function EditorPage() {
         </button>
       </div>
 
+      {starting && (
+        <HostOptions
+          title={doc.title}
+          initialMode={starting}
+          busy={busy}
+          onCancel={() => setStarting(null)}
+          onStart={(options) => {
+            setStarting(null);
+            void host(options);
+          }}
+        />
+      )}
       {checked && <FormMessage tone="success">{checked}</FormMessage>}
       {errors.length > 0 && (
         <div className="form-message form-message--error" role="alert">
@@ -349,6 +362,8 @@ function ItemForm({
         <label htmlFor="item-text">{slide ? 'Slide title' : 'Question'}</label>
         <textarea id="item-text" rows={2} maxLength={1000} value={item.text} onChange={(e) => set({ text: e.target.value })} />
       </div>
+
+      <ImageField image={item.image} onChange={(image) => set({ image })} />
 
       {slide && (
         <div className="field">
@@ -614,6 +629,50 @@ function ItemForm({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+
+/** A picture for the question or slide: shrunk in the browser, then uploaded. */
+function ImageField({ image, onChange }: { image?: string; onChange: (image: string | undefined) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="editor__image">
+      {image ? (
+        <>
+          <QuestionImage id={image} alt="Picture attached to this item" />
+          <button type="button" className="btn btn--small btn--quiet" onClick={() => onChange(undefined)}>
+            Remove picture
+          </button>
+        </>
+      ) : (
+        <label className={`btn btn--small${busy ? ' is-busy' : ''}`}>
+          {busy ? 'Uploading…' : '+ Add a picture'}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            hidden
+            disabled={busy}
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (!file) return;
+              setBusy(true);
+              setError(null);
+              try {
+                onChange(await uploadImage(file));
+              } catch (err) {
+                setError(apiMessage(err));
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        </label>
+      )}
+      {error && <FormMessage tone="error">{error}</FormMessage>}
     </div>
   );
 }
