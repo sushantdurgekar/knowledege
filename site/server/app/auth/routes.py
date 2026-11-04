@@ -46,7 +46,7 @@ async def config(request: Request) -> JSONResponse:
     body = {
         "authMode": settings.auth_mode,
         "firebase": web.to_json() if web is not None and settings.auth_mode == "firebase" else None,
-        "origin": settings.public_origin,
+        "origin": settings.origin_for_host(request.headers.get("host")),
         "version": __version__,
     }
     return JSONResponse(body, headers={"Cache-Control": "no-cache"})

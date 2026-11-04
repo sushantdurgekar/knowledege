@@ -217,6 +217,9 @@ class Settings:
     # M0
     app_env: AppEnv = "development"
     public_origin: str = "http://127.0.0.1:10000"
+    # RENDER_EXTERNAL_URL, set by Render itself: always accepted as a second origin, so a
+    # mistyped PUBLIC_ORIGIN cannot lock everyone out of sign-in (CSRF compares origins).
+    render_origin: str | None = None
     port: int = 10000
     public_dir: Path = SERVER_DIR / "public"
     hubs_dir: Path = field(default_factory=_default_hubs_dir)
@@ -274,6 +277,11 @@ class Settings:
         set_ = object.__setattr__
         set_(self, "log_level", level)
         set_(self, "public_origin", normalize_origin(self.public_origin))
+        if self.render_origin is not None:
+            try:
+                set_(self, "render_origin", normalize_origin(self.render_origin))
+            except ConfigError:
+                set_(self, "render_origin", None)
         set_(self, "public_dir", Path(self.public_dir))
         set_(self, "hubs_dir", Path(self.hubs_dir))
         self._check_m1()
@@ -414,6 +422,20 @@ class Settings:
         return bool(email) and str(email).strip().lower() in self.admin_emails
 
     @property
+    def allowed_origins(self) -> frozenset[str]:
+        """Origins accepted by the CSRF check: PUBLIC_ORIGIN, plus Render's own URL."""
+        return frozenset(o for o in (self.public_origin, self.render_origin) if o)
+
+    def origin_for_host(self, host: str | None) -> str:
+        """The allowed origin whose host is `host` (the Host header), else PUBLIC_ORIGIN."""
+        if host:
+            host = host.lower()
+            for origin in (self.public_origin, self.render_origin):
+                if origin and urlsplit(origin).netloc == host:
+                    return origin
+        return self.public_origin
+
+    @property
     def is_production(self) -> bool:
         return self.app_env == "production"
 
@@ -480,8 +502,13 @@ class Settings:
         kwargs: dict[str, object] = {}
         if (app_env := get("APP_ENV")) is not None:
             kwargs["app_env"] = cast(AppEnv, app_env.lower())
+        render_url = get("RENDER_EXTERNAL_URL")
+        if render_url is not None:
+            kwargs["render_origin"] = render_url
         if (origin := get("PUBLIC_ORIGIN")) is not None:
             kwargs["public_origin"] = origin
+        elif render_url is not None:
+            kwargs["public_origin"] = render_url
         if (port := get_int("PORT")) is not None:
             kwargs["port"] = port
         if (public_dir := get("PUBLIC_DIR")) is not None:

@@ -116,6 +116,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = state.settings
     if settings.is_production and not settings.public_origin.startswith("https://"):
         logger.warning("PUBLIC_ORIGIN should be https in production, got %s", settings.public_origin)
+    if settings.render_origin and settings.render_origin != settings.public_origin:
+        logger.warning(
+            "PUBLIC_ORIGIN (%s) differs from Render's URL (%s); both are accepted. Fix PUBLIC_ORIGIN "
+            "unless it is a custom domain.",
+            settings.public_origin,
+            settings.render_origin,
+        )
     if settings.uses_dev_secret:
         logger.warning("SECRET_KEY is not set: using the development key (never in production)")
     logger.info(
