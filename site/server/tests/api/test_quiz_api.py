@@ -449,3 +449,33 @@ def test_library_bank_and_quiz_history_sync(admin: TestClient, tmp_path: Any) ->
     assert got["parts"]["main"]["S"] == {"deck": {}, "history": []}
     hubs = admin.get("/api/me/progress", headers=API).json()["hubs"]
     assert any(h["hub"] == "live-quiz" and h["title"] == "Live quiz history" for h in hubs)
+
+
+def test_presenter_and_public_board(admin: TestClient) -> None:
+    created = admin.post("/api/quiz/rooms", json={"source": SOURCE}, headers=API).json()
+    pin, key = created["pin"], created["hostKey"]
+    host = {**API, "X-Quiz-Host": key}
+    present_key = admin.get(f"/api/quiz/rooms/{pin}/host", headers=host).json()["presentKey"]
+    admin.cookies.clear()
+    token = admin.post(f"/api/quiz/rooms/{pin}/join", json={"name": "Ann"}, headers=API).json()["token"]
+    me = {**API, "X-Quiz-Token": token}
+    presenter = {**API, "X-Quiz-Present": present_key}
+    assert admin.get(f"/api/quiz/rooms/{pin}/present", headers=API).status_code == 403
+    assert (
+        admin.get(f"/api/quiz/rooms/{pin}/present", headers={**API, "X-Quiz-Present": key}).status_code == 403
+    )
+    lobby = admin.get(f"/api/quiz/rooms/{pin}/present", headers=presenter).json()
+    assert [p["name"] for p in lobby["players"]] == ["Ann"]
+    admin.post(f"/api/quiz/rooms/{pin}/host/action", json={"action": "start"}, headers=host)
+    open_ = admin.get(f"/api/quiz/rooms/{pin}/present", headers=presenter).json()
+    assert open_["question"]["options"] == ["3", "4"]
+    assert "solution" not in open_["question"]  # never before the reveal
+    assert "presentKey" not in open_
+    board = admin.get(f"/api/quiz/rooms/{pin}/board", headers=API).json()
+    assert board["current"]["text"] == "2 + 2?"
+    assert board["leaderboard"][0]["name"] == "Ann"
+    admin.post(f"/api/quiz/rooms/{pin}/answer", json={"index": 0, "answer": 1}, headers=me)
+    shown = admin.get(f"/api/quiz/rooms/{pin}/present", headers=presenter).json()
+    assert shown["phase"] == "reveal"
+    assert shown["question"]["solution"] == {"correct": [1]}
+    assert shown["leaderboard"][0]["score"] > 0

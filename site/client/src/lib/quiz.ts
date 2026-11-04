@@ -118,7 +118,10 @@ export interface RoomView {
   playerCount: number;
   question: QuestionView | null;
   leaderboard?: BoardRow[];
-  players?: { id: string; name: string; score: number; answered: boolean | number; position?: number; stage?: Stage }[];
+  players?: { id: string; name: string; score?: number; answered?: boolean | number; position?: number; stage?: Stage }[];
+  presentKey?: string;
+  doneCount?: number;
+  current?: { index: number; type: QuestionType; text: string } | null;
   answeredCount?: number;
   me?: MeView;
 }
@@ -381,3 +384,20 @@ export function checkLocally(item: ReviewItem, value: unknown): boolean {
       return false;
   }
 }
+
+// -- presenter screen and public leaderboard -------------------------------------------------
+const presentStore = (pin: string) => `studyhubs.quiz.present.${pin}`;
+
+/** The presenter key from the link (#k=...), remembered for this tab so reloads keep working. */
+export function presenterKey(pin: string): string | null {
+  const fromHash = new URLSearchParams(window.location.hash.slice(1)).get('k');
+  try {
+    if (fromHash) window.sessionStorage.setItem(presentStore(pin), fromHash);
+    return fromHash ?? window.sessionStorage.getItem(presentStore(pin));
+  } catch {
+    return fromHash;
+  }
+}
+
+export const presenterLink = (pin: string, key: string) => `${window.location.origin}/quiz/present/${pin}#k=${encodeURIComponent(key)}`;
+export const boardLink = (pin: string) => `${window.location.origin}/quiz/board/${pin}`;

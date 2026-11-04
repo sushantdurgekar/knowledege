@@ -1,0 +1,263 @@
+/* Aurora theme layer (loaded after app.css): rounded, tactile, colourful, on the tokens in
+   tokens.css. Every rule here only restyles existing components; layout stays in app.css. */
+
+body {
+  background: var(--bg);
+  background-image: var(--grad-hero);
+  background-repeat: no-repeat;
+  background-size: 100% 1100px;
+}
+
+/* -- header ----------------------------------------------------------------------------------- */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  background: var(--header-bg);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+}
+.brand-mark,
+.brand svg {
+  border-radius: 10px;
+}
+.site-nav__link {
+  border-radius: 999px;
+  padding-inline: 14px;
+  transition: background-color 0.15s, color 0.15s;
+}
+.site-nav__link.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: var(--shadow-2);
+}
+.avatar {
+  background: var(--grad-accent);
+  box-shadow: var(--shadow-2);
+}
+.user-menu__panel {
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
+}
+
+/* -- buttons: tactile pills ------------------------------------------------------------------- */
+.btn {
+  border-radius: 999px;
+  padding-inline: 20px;
+  border-color: var(--line);
+  box-shadow: var(--shadow-1);
+  transition: transform 0.12s ease, box-shadow 0.15s ease, background-color 0.15s, border-color 0.15s;
+}
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-2);
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-1);
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+.btn--primary {
+  border-color: transparent;
+  background: var(--grad-accent);
+  color: var(--accent-ink);
+  box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--accent) 70%, transparent), var(--shadow-1);
+}
+.btn--primary:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--grad-accent);
+  box-shadow: 0 10px 22px -8px color-mix(in srgb, var(--accent) 80%, transparent), var(--shadow-2);
+}
+.btn--quiet {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.btn--quiet:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: transparent;
+  box-shadow: none;
+}
+.btn--danger {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 45%, var(--line));
+}
+.btn:disabled {
+  box-shadow: none;
+}
+
+/* -- typography ------------------------------------------------------------------------------- */
+h1,
+.page h1 {
+  letter-spacing: -0.02em;
+}
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  letter-spacing: 0.06em;
+}
+
+/* -- home hero -------------------------------------------------------------------------------- */
+.hero {
+  position: relative;
+  margin-top: 16px;
+  padding: 32px clamp(20px, 4vw, 40px) 28px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  border-radius: var(--r-xl);
+  background:
+    radial-gradient(500px 220px at 100% 0%, color-mix(in srgb, var(--d2) 22%, transparent), transparent 70%),
+    radial-gradient(420px 220px at 0% 100%, color-mix(in srgb, var(--d3) 16%, transparent), transparent 70%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, var(--surface)), var(--surface));
+  box-shadow: var(--shadow-2);
+}
+.hero h1 {
+  max-width: 22ch;
+  font-size: clamp(1.9rem, 4.6vw, 2.9rem);
+  line-height: 1.08;
+}
+.hero .lede {
+  max-width: 60ch;
+}
+.hero__quiz {
+  margin-top: 18px;
+}
+.hero__quiz .btn {
+  background: var(--grad-accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+
+/* -- catalog ---------------------------------------------------------------------------------- */
+.domain__title {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.domain__title::after {
+  content: '';
+  display: block;
+  width: 56px;
+  height: 4px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: var(--grad-accent);
+}
+.hub-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 18px;
+  box-shadow: var(--shadow-1);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s;
+}
+.hub-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 5px;
+  background: var(--hub-accent, var(--accent));
+}
+.hub-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-3);
+  border-color: color-mix(in srgb, var(--hub-accent, var(--accent)) 40%, var(--line));
+}
+.hub-card__code {
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: color-mix(in srgb, var(--hub-accent, var(--accent)) 14%, var(--surface));
+  color: var(--fg);
+}
+.chip {
+  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.chip[aria-pressed='true'],
+.chip.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: var(--shadow-2);
+}
+.meter {
+  height: 8px;
+}
+.meter > span {
+  background: var(--grad-accent);
+  border-radius: 999px;
+}
+.search__input {
+  border-radius: 999px;
+  box-shadow: var(--shadow-1);
+}
+
+/* -- surfaces --------------------------------------------------------------------------------- */
+.notice,
+.panel,
+.dialog {
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+}
+.form-message {
+  border-radius: var(--r);
+  border-left-width: 1px;
+  box-shadow: var(--shadow-1);
+}
+.form-message--error {
+  background: var(--bad-soft);
+  border-color: color-mix(in srgb, var(--bad) 40%, var(--line));
+}
+.form-message--success {
+  background: var(--good-soft);
+  border-color: color-mix(in srgb, var(--good) 40%, var(--line));
+}
+.form-message--info {
+  background: var(--info-soft);
+  border-color: color-mix(in srgb, var(--info) 40%, var(--line));
+}
+.field input,
+.field select,
+.field textarea {
+  border-radius: var(--r);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+.site-footer {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+.back-bar__btn {
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .hub-card,
+  .studio__card,
+  .quiz-option {
+    transition: none;
+  }
+  .btn:hover:not(:disabled),
+  .hub-card:hover,
+  .studio__card:hover,
+  .quiz-option:hover:not(:disabled) {
+    transform: none;
+  }
+}

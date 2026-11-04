@@ -1,35 +1,66 @@
-/* Design tokens copied verbatim from the Study Hubs (the :root block at the top of
-   technical/software-engineering/dsa/hubs/dsa-l1-foundation-hub.html), so the shell and the hubs
-   look like one site. Light by default; dark follows prefers-color-scheme unless the page sets
-   data-theme="light", and data-theme="dark" forces it. Keep in sync with the hubs. */
+/* Design tokens for the Study Hubs shell: the "Aurora" theme.
+
+   A learning-portal palette: one confident violet primary, playful supporting colours (teal,
+   coral, amber) for categories and quiz answers, a warm near-white canvas, generous radii and
+   soft layered shadows. Text colours meet WCAG AA (4.5:1) on their usual backgrounds in both
+   themes. Light by default; dark follows prefers-color-scheme unless the page sets
+   data-theme="light", and data-theme="dark" forces it.
+
+   The variable names are the hubs' (so shared components keep working); the hubs themselves
+   keep their own look. */
 :root{color-scheme:light}
 :root{
-  --bg:#f2f4f7; --surface:#ffffff; --surface-2:#e8ecf2; --surface-3:#dde3eb; --line:#d0d8e2;
-  --fg:#121b26; --muted:#526072; --accent:#2343c4; --accent-ink:#ffffff; --accent-soft:#e2e8fb;
-  --good:#16774b; --good-soft:#d9f1e4; --bad:#b1232b; --bad-soft:#fae1e2; --trap:#965200; --trap-soft:#fcedd5;
-  --info:#1f5fa8; --info-soft:#dfeafa;
-  --d1:#6a44c2; --d1-soft:#ebe4fa; --d2:#0d7585; --d2-soft:#d9f0f2; --d3:#a8521a; --d3-soft:#f8e6d8;
-  --d4:#a72a62; --d4-soft:#f8e0eb; --d5:#3d6b22; --d5-soft:#e3efd9;
-  --code-bg:#0e1621; --code-fg:#d9e4f1; --code-line:#5b6b7d;
-  --tk-kw:#c7a8ff; --tk-str:#a3e39a; --tk-com:#7f8d9b; --tk-num:#ffbd7a; --tk-fn:#80cbff; --tk-key:#7fd6c2;
+  --bg:#f6f5fb; --surface:#ffffff; --surface-2:#f1effa; --surface-3:#e7e3f6; --line:#e3def4;
+  --fg:#1a1533; --muted:#5f5980; --accent:#6c4cf5; --accent-ink:#ffffff; --accent-soft:#ece8ff;
+  --accent-strong:#5236d6;
+  --good:#0b7550; --good-soft:#dcf5ea; --bad:#b8293a; --bad-soft:#fde4e6; --trap:#8f5000; --trap-soft:#fff0d6;
+  --info:#2364c9; --info-soft:#e1ecfd;
+  /* Category / answer colours (quiz tiles, domains): vivid, each with readable ink. */
+  --d1:#6c4cf5; --d1-soft:#ece8ff; --d2:#0b8478; --d2-soft:#d8f4f0; --d3:#d63a48; --d3-soft:#fde4e6;
+  --d4:#9a5503; --d4-soft:#fff0d6; --d5:#2364c9; --d5-soft:#e1ecfd;
+  --code-bg:#151129; --code-fg:#e4defb; --code-line:#5f5980;
+  --tk-kw:#c7a8ff; --tk-str:#a3e39a; --tk-com:#8a84aa; --tk-num:#ffbd7a; --tk-fn:#80cbff; --tk-key:#7fd6c2;
   --f-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
   --f-body:"Atkinson Hyperlegible","Segoe UI",system-ui,sans-serif;
   --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
-  --r:10px;
+  --r-sm:10px; --r:14px; --r-lg:20px; --r-xl:28px;
+  --shadow-1:0 1px 2px rgba(35,22,90,.06),0 1px 3px rgba(35,22,90,.08);
+  --shadow-2:0 4px 10px -2px rgba(35,22,90,.08),0 2px 4px rgba(35,22,90,.05);
+  --shadow-3:0 18px 40px -12px rgba(35,22,90,.22),0 6px 14px -6px rgba(35,22,90,.10);
+  --ring:0 0 0 4px rgba(108,76,245,.28);
+  --grad-hero:radial-gradient(1200px 400px at 0% 0%,rgba(108,76,245,.18),transparent 60%),
+              radial-gradient(900px 380px at 100% 0%,rgba(11,164,150,.16),transparent 55%),
+              radial-gradient(700px 300px at 60% 45%,rgba(255,122,89,.10),transparent 60%);
+  --grad-accent:linear-gradient(135deg,#7b5cff 0%,#6c4cf5 45%,#5236d6 100%);
+  --header-bg:rgba(255,255,255,.78);
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0c1117; --surface:#141b24; --surface-2:#1b2531; --surface-3:#22303e; --line:#2a3644;
-  --fg:#e3eaf2; --muted:#93a2b2; --accent:#8fa4ff; --accent-ink:#0c1117; --accent-soft:#1c2748;
-  --good:#4fc98d; --good-soft:#11301f; --bad:#ff7d86; --bad-soft:#3a1519; --trap:#f2b24c; --trap-soft:#33240c;
-  --info:#7fb3f5; --info-soft:#152a44;
-  --d1:#b89dff; --d1-soft:#271d40; --d2:#55cddd; --d2-soft:#0f2f34; --d3:#f2a46a; --d3-soft:#3a2312;
-  --d4:#f58cba; --d4-soft:#3c1628; --d5:#9fd77c; --d5-soft:#1d3010;
-  --code-bg:#0a0f14; --code-fg:#d6e2ef; --code-line:#4f5e6e; color-scheme:dark;}}
+  --bg:#0e0b1f; --surface:#171331; --surface-2:#1f1a3d; --surface-3:#29234d; --line:#2f2858;
+  --fg:#efecfd; --muted:#a9a3cc; --accent:#a08bff; --accent-ink:#120e27; --accent-soft:#2a2353; --accent-strong:#b8a8ff;
+  --good:#45d39b; --good-soft:#0f3226; --bad:#ff7d89; --bad-soft:#3d1520; --trap:#ffbf4d; --trap-soft:#3a2a0c;
+  --info:#7fb3ff; --info-soft:#16284a;
+  --d1:#a08bff; --d1-soft:#2a2353; --d2:#4fd6c6; --d2-soft:#0f3431; --d3:#ff7d89; --d3-soft:#3d1520;
+  --d4:#ffbf4d; --d4-soft:#3a2a0c; --d5:#7fb3ff; --d5-soft:#16284a;
+  --code-bg:#09071a; --code-fg:#e4defb; --code-line:#5f5980; color-scheme:dark;
+  --shadow-1:0 1px 2px rgba(0,0,0,.4); --shadow-2:0 4px 12px -2px rgba(0,0,0,.45);
+  --shadow-3:0 20px 44px -12px rgba(0,0,0,.6); --ring:0 0 0 4px rgba(160,139,255,.32);
+  --grad-hero:radial-gradient(1200px 400px at 0% 0%,rgba(124,92,255,.28),transparent 60%),
+              radial-gradient(900px 380px at 100% 0%,rgba(20,184,166,.18),transparent 55%),
+              radial-gradient(700px 300px at 60% 45%,rgba(255,122,89,.10),transparent 60%);
+  --grad-accent:linear-gradient(135deg,#b4a3ff 0%,#a08bff 50%,#8a6fff 100%);
+  --header-bg:rgba(23,19,49,.78);}}
 :root[data-theme="dark"]{
-  --bg:#0c1117; --surface:#141b24; --surface-2:#1b2531; --surface-3:#22303e; --line:#2a3644;
-  --fg:#e3eaf2; --muted:#93a2b2; --accent:#8fa4ff; --accent-ink:#0c1117; --accent-soft:#1c2748;
-  --good:#4fc98d; --good-soft:#11301f; --bad:#ff7d86; --bad-soft:#3a1519; --trap:#f2b24c; --trap-soft:#33240c;
-  --info:#7fb3f5; --info-soft:#152a44;
-  --d1:#b89dff; --d1-soft:#271d40; --d2:#55cddd; --d2-soft:#0f2f34; --d3:#f2a46a; --d3-soft:#3a2312;
-  --d4:#f58cba; --d4-soft:#3c1628; --d5:#9fd77c; --d5-soft:#1d3010;
-  --code-bg:#0a0f14; --code-fg:#d6e2ef; --code-line:#4f5e6e; color-scheme:dark;}
+  --bg:#0e0b1f; --surface:#171331; --surface-2:#1f1a3d; --surface-3:#29234d; --line:#2f2858;
+  --fg:#efecfd; --muted:#a9a3cc; --accent:#a08bff; --accent-ink:#120e27; --accent-soft:#2a2353; --accent-strong:#b8a8ff;
+  --good:#45d39b; --good-soft:#0f3226; --bad:#ff7d89; --bad-soft:#3d1520; --trap:#ffbf4d; --trap-soft:#3a2a0c;
+  --info:#7fb3ff; --info-soft:#16284a;
+  --d1:#a08bff; --d1-soft:#2a2353; --d2:#4fd6c6; --d2-soft:#0f3431; --d3:#ff7d89; --d3-soft:#3d1520;
+  --d4:#ffbf4d; --d4-soft:#3a2a0c; --d5:#7fb3ff; --d5-soft:#16284a;
+  --code-bg:#09071a; --code-fg:#e4defb; --code-line:#5f5980; color-scheme:dark;
+  --shadow-1:0 1px 2px rgba(0,0,0,.4); --shadow-2:0 4px 12px -2px rgba(0,0,0,.45);
+  --shadow-3:0 20px 44px -12px rgba(0,0,0,.6); --ring:0 0 0 4px rgba(160,139,255,.32);
+  --grad-hero:radial-gradient(1200px 400px at 0% 0%,rgba(124,92,255,.28),transparent 60%),
+              radial-gradient(900px 380px at 100% 0%,rgba(20,184,166,.18),transparent 55%),
+              radial-gradient(700px 300px at 60% 45%,rgba(255,122,89,.10),transparent 60%);
+  --grad-accent:linear-gradient(135deg,#b4a3ff 0%,#a08bff 50%,#8a6fff 100%);
+  --header-bg:rgba(23,19,49,.78);}

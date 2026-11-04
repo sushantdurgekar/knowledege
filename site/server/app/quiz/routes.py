@@ -24,6 +24,10 @@ Players (no account needed; X-Quiz-Token from join):
   GET  /api/quiz/rooms/{pin}/review            every question with its solution and my result
   GET  /api/quiz/rooms/{pin}/cards             flashcards (study rooms, or once finished)
 
+Presenter (X-Quiz-Present: the room's presentKey, handed out by the host) and anyone:
+  GET  /api/quiz/rooms/{pin}/present?since=N   long-poll, the projected screen (no early answers)
+  GET  /api/quiz/rooms/{pin}/board?since=N     long-poll, public leaderboard (no key)
+
 Long-polls answer at once when the room's version is above `since`, otherwise within 20 s
 (or when the open question's time runs out).
 """
@@ -386,3 +390,27 @@ async def bank_get(request: Request, hub_id: str, admin: Admin) -> JSONResponse:
     if hub is None:
         raise ApiError(404, "not_found", "No such hub in the question bank")
     return _json(hub)
+
+
+@router.get("/rooms/{pin}/present")
+async def present(request: Request, pin: str) -> JSONResponse:
+    room = _room(pin)
+    key = request.headers.get("x-quiz-present", "")
+    if not key or not secrets.compare_digest(key, room.present_key):
+        raise ApiError(403, "not_presenter", "This presenter link is not valid; ask the host for a new one")
+    since = _since(request)
+    await room.wait(since, POLL_S, host=True)
+    if room.version > since and room.phase == "question":
+        await asyncio.sleep(HOST_DEBOUNCE_S)  # batch a burst of answers into one update
+    if _manager.rooms.get(room.pin) is not room:
+        raise ApiError(404, "no_room", "This room was closed")
+    return _json(room.present_view())
+
+
+@router.get("/rooms/{pin}/board")
+async def board(request: Request, pin: str) -> JSONResponse:
+    room = _room(pin)
+    await room.wait(_since(request), POLL_S)
+    if _manager.rooms.get(room.pin) is not room:
+        raise ApiError(404, "no_room", "This quiz has closed")
+    return _json(room.board_view())

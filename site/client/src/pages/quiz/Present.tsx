@@ -1,0 +1,203 @@
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router';
+import { BusyLine } from '../../components/forms';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { presenterKey, TYPE_LABELS, useCountdown, useRoomPoll, type RoomView } from '../../lib/quiz';
+import { Leaderboard, LETTERS, SlideBody, Solution } from './Answering';
+
+/**
+ * `/quiz/present/:pin#k=<key>`: the screen someone shares in a meeting or on a projector.
+ * View-only and full-bleed: it follows the host, shows the PIN to join, the question and
+ * timer, the answer counts after the reveal, the leaderboard and the podium. Never an answer
+ * before the reveal (the server leaves solutions out).
+ */
+export function Present() {
+  const { pin = '' } = useParams();
+  const [key] = useState(() => presenterKey(pin));
+  useDocumentTitle(`Presenting ${pin}`);
+  if (!key) {
+    return (
+      <section className="present present--message">
+        <h1>Presenter link needed</h1>
+        <p>Ask the host for the presenter link of room {pin}.</p>
+      </section>
+    );
+  }
+  return <Presenting pin={pin} presentKey={key} />;
+}
+
+function Presenting({ pin, presentKey }: { pin: string; presentKey: string }) {
+  const { view, fatal, offline } = useRoomPoll(`/api/quiz/rooms/${encodeURIComponent(pin)}/present`, {
+    'X-Quiz-Present': presentKey,
+  });
+  const seconds = useCountdown(view);
+  const [full, setFull] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => setFull(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  if (fatal) {
+    return (
+      <section className="present present--message">
+        <h1>Room {pin} has ended</h1>
+        <p>{fatal}</p>
+      </section>
+    );
+  }
+  if (!view) return <BusyLine>Connecting to room {pin}…</BusyLine>;
+  const host = window.location.host;
+
+  return (
+    <section className="present" aria-label={`Presenter screen for ${view.title}`}>
+      <header className="present__bar">
+        <span className="present__title">{view.title}</span>
+        <span className="present__join">
+          Join at <strong>{host}/quiz</strong> · PIN <strong className="mono">{pin}</strong>
+        </span>
+        <span className="present__tools">
+          {offline && <span className="present__offline">Reconnecting…</span>}
+          <button
+            type="button"
+            className="present__btn"
+            onClick={() => (full ? document.exitFullscreen() : document.documentElement.requestFullscreen())}
+          >
+            {full ? 'Exit full screen' : 'Full screen'}
+          </button>
+        </span>
+      </header>
+      <div className="present__stage">
+        <Stage view={view} seconds={seconds} pin={pin} host={host} />
+      </div>
+    </section>
+  );
+}
+
+function Stage({ view, seconds, pin, host }: { view: RoomView; seconds: number; pin: string; host: string }) {
+  if (view.phase === 'lobby') {
+    return (
+      <div className="present__lobby">
+        <p className="present__kicker">Join on your phone</p>
+        <p className="present__url">{host}/quiz</p>
+        <p className="present__kicker">Game PIN</p>
+        <p className="present__pin">{pin}</p>
+        <p className="present__count">
+          <strong>{view.playerCount}</strong> {view.playerCount === 1 ? 'player' : 'players'} in
+        </p>
+        <ul className="present__chips">
+          {(view.players ?? []).slice(0, 120).map((p) => (
+            <li key={p.id}>{p.name}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  if (view.phase === 'finished') {
+    const top = (view.leaderboard ?? []).slice(0, 3);
+    return (
+      <div className="present__final">
+        <h2 className="present__headline">Final results</h2>
+        <ol className="quiz-podium quiz-podium--big">
+          {top.map((r) => (
+            <li key={r.id} className={`quiz-podium__step quiz-podium__step--${r.rank}`}>
+              <span className="quiz-podium__name">{r.name}</span>
+              <span className="quiz-podium__score">{r.score.toLocaleString()}</span>
+              <span className="quiz-podium__rank">{r.rank}</span>
+            </li>
+          ))}
+        </ol>
+        <Leaderboard rows={(view.leaderboard ?? []).slice(3, 10)} />
+      </div>
+    );
+  }
+
+  if (view.mode === 'self') {
+    return (
+      <div className="present__split">
+        <div>
+          <p className="present__kicker">Self-paced quiz</p>
+          <h2 className="present__headline">Everyone is answering at their own pace</h2>
+          <p className="present__count">
+            <strong>{view.doneCount ?? 0}</strong> of {view.playerCount} finished
+          </p>
+        </div>
+        <div>
+          <h2 className="present__sub">Leaderboard</h2>
+          <Leaderboard rows={view.leaderboard ?? []} />
+        </div>
+      </div>
+    );
+  }
+
+  const q = view.question;
+  if (!q) return null;
+  if (q.type === 'slide') return <SlideBody text={q.text} body={q.body} big />;
+  const open = view.phase === 'question';
+
+  return (
+    <div className={open ? 'present__question' : 'present__split'}>
+      <div>
+        <div className="present__meta">
+          <span>
+            {q.index + 1} / {view.total} · {TYPE_LABELS[q.type]}
+          </span>
+          {open && q.timeLimit > 0 && (
+            <span className={`present__timer${seconds <= 5 ? ' is-low' : ''}`} style={{ ['--p' as string]: `${(seconds / q.timeLimit) * 100}%` }}>
+              <span>{seconds}</span>
+            </span>
+          )}
+        </div>
+        <h2 className="present__q">{q.text}</h2>
+        {open ? (
+          <>
+            {q.options && (
+              <div className="quiz-options quiz-options--static present__options">
+                {q.options.map((o, i) => (
+                  <div key={i} className={`quiz-option quiz-option--${i % 8}`}>
+                    <span className="quiz-option__letter">{LETTERS[i]}</span>
+                    {o}
+                  </div>
+                ))}
+              </div>
+            )}
+            {(q.type === 'match' || q.type === 'order') && (
+              <div className="quiz-match-show">
+                {q.type === 'match' && (
+                  <ol>
+                    {(q.left ?? []).map((l) => (
+                      <li key={l}>{l}</li>
+                    ))}
+                  </ol>
+                )}
+                <ul>
+                  {((q.type === 'match' ? q.right : q.items) ?? []).map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {q.type === 'text' && <p className="present__sub">Type your answer on your phone</p>}
+            {q.type === 'explain' && <p className="present__sub">Explain it in your own words on your phone</p>}
+            <p className="present__count">
+              <strong>{view.answeredCount ?? 0}</strong> of {view.playerCount} answered
+            </p>
+          </>
+        ) : (
+          <>
+            <Solution q={q} />
+            {q.explain && <p className="quiz-explain">{q.explain}</p>}
+          </>
+        )}
+      </div>
+      {!open && (
+        <div>
+          <h2 className="present__sub">Leaderboard</h2>
+          <Leaderboard rows={(view.leaderboard ?? []).slice(0, 8)} />
+        </div>
+      )}
+    </div>
+  );
+}
