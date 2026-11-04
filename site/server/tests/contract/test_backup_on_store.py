@@ -108,7 +108,7 @@ def test_round_trip_counts_and_billing(fresh: Adapter, tmp_path: Path, encrypted
     # 1 read per document; 700 ends on a full page, so that scan asks once more and the
     # empty answer bills 1 read; 250 ends on a partial page (no extra query).
     reads = fresh.counts()[0] - before[0]
-    assert reads == 700 + 1 + 250 + 250
+    assert reads == 700 + 1 + 1 + 250 + 250  # + the quiz library index (empty here)
     assert fresh.wire_counts()[0] - wire_before[0] == reads
     if pages is not None:  # every query is one page of at most 100 documents
         assert max(pages.sizes) == 100

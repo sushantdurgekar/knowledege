@@ -32,6 +32,7 @@ export interface QuestionView {
   body?: string;
   answerText?: string;
   hintCount?: number;
+  image?: string;
   hints?: string[];
   model?: string[];
   solution?: { correct?: number[]; accepted?: string[]; pairs?: number[]; order?: number[] };
@@ -46,7 +47,27 @@ export interface BoardRow {
   score: number;
   correct: number;
   streak: number;
+  team?: number | null;
 }
+
+export interface TeamRow {
+  team: number;
+  name: string;
+  players: number;
+  total: number;
+  score: number; // average per member
+  rank: number;
+}
+
+/** Team names and colours (the server uses the same order: app/quiz/room.py TEAM_NAMES). */
+export const TEAMS = [
+  { name: 'Violet', color: '#6c4cf5' },
+  { name: 'Teal', color: '#0b8478' },
+  { name: 'Coral', color: '#d63a48' },
+  { name: 'Amber', color: '#9a5503' },
+  { name: 'Blue', color: '#2364c9' },
+  { name: 'Rose', color: '#b0306f' },
+] as const;
 
 export interface MeView {
   id: string;
@@ -56,6 +77,7 @@ export interface MeView {
   correctCount: number;
   streak: number;
   answered: boolean;
+  team?: number | null;
   answer?: unknown;
   lastPoints?: number;
   lastCorrect?: boolean | null;
@@ -107,6 +129,10 @@ export interface RoomView {
   locked: boolean;
   advanced?: boolean;
   insights?: Insight[];
+  teams?: number;
+  teamBoard?: TeamRow[];
+  opensAt?: number | null;
+  closesAt?: number | null;
   scoredTotal: number;
   stage?: Stage;
   sheet?: SheetRow[];
@@ -118,7 +144,15 @@ export interface RoomView {
   playerCount: number;
   question: QuestionView | null;
   leaderboard?: BoardRow[];
-  players?: { id: string; name: string; score?: number; answered?: boolean | number; position?: number; stage?: Stage }[];
+  players?: {
+    id: string;
+    name: string;
+    score?: number;
+    answered?: boolean | number;
+    position?: number;
+    stage?: Stage;
+    team?: number | null;
+  }[];
   presentKey?: string;
   doneCount?: number;
   current?: { index: number; type: QuestionType; text: string } | null;
@@ -194,10 +228,39 @@ export type ParseResult = ({ ok: true; quiz: unknown } & QuizSummary) | { ok: fa
 export const parseQuiz = (input: { source: string } | { quiz: unknown }) =>
   api<ParseResult>('/api/quiz/parse', { json: input });
 
-export const createRoom = (quiz: unknown, mode: Mode, study: boolean) =>
+export interface RoomOptions {
+  mode: Mode;
+  study: boolean;
+  teams: number;
+  opensAt?: number | null;
+  closesAt?: number | null;
+}
+
+export const createRoom = (quiz: unknown, options: RoomOptions) =>
   api<{ pin: string; hostKey: string; mode: Mode } & QuizSummary>('/api/quiz/rooms', {
-    json: { quiz, mode, study },
+    json: { quiz, ...options },
   });
+
+export const imageUrl = (id: string) => `/api/quiz/images/${encodeURIComponent(id)}`;
+
+/** Shrink a picture in the browser (longest side 1280 px) and upload it; returns its id. */
+export async function uploadImage(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  let quality = 0.85;
+  let data = canvas.toDataURL('image/webp', quality);
+  if (!data.startsWith('data:image/webp')) data = canvas.toDataURL('image/jpeg', quality);
+  while (data.length > 520_000 && quality > 0.4) {
+    quality -= 0.15;
+    data = canvas.toDataURL(data.startsWith('data:image/webp') ? 'image/webp' : 'image/jpeg', quality);
+  }
+  const r = await api<{ id: string }>('/api/quiz/images', { json: { data } });
+  return r.id;
+}
 
 export interface OpenRoom {
   pin: string;

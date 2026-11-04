@@ -74,8 +74,9 @@ MIN_TIME, MAX_TIME, DEFAULT_TIME = 5, 300, 20
 MIN_POINTS, MAX_POINTS, DEFAULT_POINTS = 0, 5000, 1000
 
 _KEY = re.compile(
-    r"^(title|time|points|type|answer|pair|item|explain|hint|advanced)\s*:\s*(.*)$", re.IGNORECASE
+    r"^(title|time|points|type|answer|pair|item|explain|hint|advanced|image)\s*:\s*(.*)$", re.IGNORECASE
 )
+IMAGE_ID = re.compile(r"^[a-f0-9]{24}$")  # an uploaded image (app/quiz/images.py)
 _Q = re.compile(r"^(?:q|question)\s*\d*\s*[:.)]\s*(.*)$", re.IGNORECASE)
 _SLIDE = re.compile(r"^slide\s*[:.)]\s*(.*)$", re.IGNORECASE)
 _REGEX = re.compile(r"^/(.*)/([a-z]*)$", re.DOTALL)
@@ -113,6 +114,7 @@ class Question:
     explain: str = ""
     hints: list[str] = field(default_factory=list)
     model: list[str] = field(default_factory=list)  # explain: the model answer
+    image: str | None = None  # an uploaded image id, shown with the question or slide
 
     @property
     def scored(self) -> bool:
@@ -148,6 +150,7 @@ class _Draft:
     body: list[str] = field(default_factory=list)
     explain: list[str] = field(default_factory=list)
     hints: list[str] = field(default_factory=list)
+    image: str | None = None
 
 
 def _int(value: str, low: int, high: int, what: str, where: str, errors: list[str]) -> int | None:
@@ -222,6 +225,11 @@ def _build(d: _Draft, default_time: int, default_points: int, errors: list[str])
     q = Question(text=text, type=kind, time_limit=time_limit or default_time, points=points or 0)  # type: ignore[arg-type]
     q.explain = "\n".join(d.explain).strip()[:MAX_TEXT]
     q.body = "\n".join(d.body).strip()
+    if d.image:
+        if IMAGE_ID.fullmatch(d.image.strip()):
+            q.image = d.image.strip()
+        else:
+            errors.append(f"{where}: image must be the id of an uploaded image")
     q.hints = [h.strip()[:MAX_OPTION] for h in d.hints if h.strip()]
     if len(q.hints) > MAX_HINTS:
         errors.append(f"{where}: at most {MAX_HINTS} hints")
@@ -367,6 +375,8 @@ def parse_quiz(source: str) -> Quiz:
                 current.items.append(value)
             elif name == "hint":
                 current.hints.append(value)
+            elif name == "image":
+                current.image = value.strip()
             elif name == "advanced":
                 errors.append(f"line {number}: advanced: belongs at the top of the file")
             elif name == "explain":
@@ -436,6 +446,7 @@ def quiz_from_json(data: Any) -> Quiz:
         d.body = [_str(item.get("body"), MAX_BODY + 1)] if item.get("body") else []
         d.explain = [_str(item.get("explain"), MAX_TEXT)] if item.get("explain") else []
         d.hints = [_str(h, MAX_OPTION) for h in item.get("hints") or [] if isinstance(h, str)]
+        d.image = _str(item.get("image"), 64) or None
         drafts.append(d)
     return _finish(
         _str(data.get("title"), MAX_TITLE),
@@ -470,6 +481,8 @@ def quiz_to_json(quiz: Quiz) -> dict[str, Any]:
             item["explain"] = q.explain
         if q.hints:
             item["hints"] = list(q.hints)
+        if q.image:
+            item["image"] = q.image
         items.append(item)
     out: dict[str, Any] = {"title": quiz.title, "items": items}
     if quiz.advanced:

@@ -43,6 +43,7 @@ test('admin builds and hosts a live quiz; players drag, vote and review flashcar
   await host.getByRole('button', { name: 'Check', exact: true }).click();
   await expect(host.getByText(/Ready: 8 items/)).toBeVisible();
   await host.getByRole('button', { name: 'Host live' }).click();
+  await host.getByRole('dialog').getByRole('button', { name: 'Open the room' }).click();
   await host.waitForURL(/\/quiz\/host\/\d{6}$/);
   const pin = host.url().split('/').pop()!;
 
@@ -97,8 +98,10 @@ test('self-paced room with flashcards first', async ({ browser }) => {
   await host.goto('/quiz/host');
   await host.getByRole('button', { name: 'Quick example' }).click();
   await expect(host.getByText('Items (8)')).toBeVisible();
-  await host.getByLabel('flashcards before self-paced').check();
-  await host.getByRole('button', { name: 'Start self-paced' }).click();
+  await host.getByRole('button', { name: 'Self-paced challenge' }).click();
+  const dialog = host.getByRole('dialog');
+  await dialog.getByLabel('Let players study flashcards first').check();
+  await dialog.getByRole('button', { name: 'Open the challenge' }).click();
   await host.waitForURL(/\/quiz\/host\/\d{6}$/);
   const pin = host.url().split('/').pop()!;
 
@@ -134,6 +137,7 @@ test('advanced quiz: confidence, hints, teach-back, calibration, replay and the 
   await expect(host.getByLabel('Advanced')).toBeChecked();
   await expect(host.getByText('Saved', { exact: true })).toBeVisible();
   await host.getByRole('button', { name: 'Host live' }).click();
+  await host.getByRole('dialog').getByRole('button', { name: 'Open the room' }).click();
   await host.waitForURL(/\/quiz\/host\/\d{6}$/);
   const pin = host.url().split('/').pop()!;
 
@@ -199,6 +203,7 @@ test('presenter screen follows the host without early answers; the public board 
   await host.getByRole('button', { name: 'Quick example' }).click();
   await expect(host.getByText('Items (8)')).toBeVisible();
   await host.getByRole('button', { name: 'Host live' }).click();
+  await host.getByRole('dialog').getByRole('button', { name: 'Open the room' }).click();
   await host.waitForURL(/\/quiz\/host\/\d{6}$/);
   const pin = host.url().split('/').pop()!;
   await host.getByText(/Present on another screen/).click();
@@ -233,4 +238,41 @@ test('presenter screen follows the host without early answers; the public board 
   const bad = await (await browser.newContext()).newPage();
   await bad.goto(`/quiz/present/${pin}#k=wrong`);
   await expect(bad.getByText(/not valid/)).toBeVisible();
+});
+
+test('teams, QR code and a picture: live room in two teams', async ({ browser }) => {
+  const hostContext = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+  await signInAdmin(hostContext);
+  const host = await hostContext.newPage();
+  host.on('dialog', (d) => void d.accept());
+  await host.goto('/quiz/host');
+  await host.getByRole('button', { name: 'Quick example' }).click();
+  await expect(host.getByText('Items (8)')).toBeVisible();
+  // Attach a picture to item 2 (a 1x1 PNG; the browser shrinks and uploads it).
+  await host.locator('.editor__list .sortable__chip').nth(1).click();
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  await host.locator('.editor__image input[type=file]').setInputFiles({ name: 'dot.png', mimeType: 'image/png', buffer: png });
+  await expect(host.locator('.editor__image img')).toBeVisible();
+  await expect(host.getByText('Saved', { exact: true })).toBeVisible();
+
+  await host.getByRole('button', { name: 'Host live' }).click();
+  const dialog = host.getByRole('dialog');
+  await dialog.getByRole('combobox', { name: 'Teams' }).selectOption('2');
+  await dialog.getByRole('button', { name: 'Open the room' }).click();
+  await host.waitForURL(/\/quiz\/host\/\d{6}$/);
+  const pin = host.url().split('/').pop()!;
+  await expect(host.getByRole('img', { name: `QR code to join room ${pin}` })).toBeVisible();
+
+  const ann = await join(browser, pin, 'Ann');
+  const bob = await join(browser, pin, 'Bob');
+  await expect(ann.locator('.team-chip')).toHaveText('Team Violet');
+  await expect(bob.locator('.team-chip')).toHaveText('Team Teal');
+  await host.getByRole('button', { name: /^Start/ }).click();
+  await host.getByRole('button', { name: /^Next: item 2/ }).click();
+  await expect(ann.locator('.quiz-image img')).toBeVisible();
+  await ann.getByRole('button', { name: /443/ }).click();
+  await bob.getByRole('button', { name: /80/ }).click();
+  await expect(host.locator('.team-board__row').first()).toContainText('Team Violet');
+  await host.getByRole('button', { name: 'End quiz now' }).click();
+  await expect(ann.locator('.team-board__row.is-me')).toContainText('Violet');
 });

@@ -1,16 +1,27 @@
 import { useState, type FormEvent } from 'react';
-import type { QuestionView } from '../../lib/quiz';
+import { imageUrl, type QuestionView } from '../../lib/quiz';
 import { Sortable } from './Sortable';
 
 export const LETTERS = 'ABCDEFGH';
 
 const identity = (n: number) => Array.from({ length: n }, (_, i) => i);
 
+/** The picture attached to a question or slide. */
+export function QuestionImage({ id, big = false, alt = '' }: { id?: string; big?: boolean; alt?: string }) {
+  if (!id) return null;
+  return (
+    <figure className={`quiz-image${big ? ' quiz-image--big' : ''}`}>
+      <img src={imageUrl(id)} alt={alt} loading="eager" decoding="async" />
+    </figure>
+  );
+}
+
 /** A slide (presentation content): the title and its body, paragraphs and "- " bullets kept. */
-export function SlideBody({ text, body, big = false }: { text: string; body?: string; big?: boolean }) {
+export function SlideBody({ text, body, big = false, image }: { text: string; body?: string; big?: boolean; image?: string }) {
   const blocks = (body ?? '').split(/\n{2,}/).filter((b) => b.trim());
   return (
-    <article className={`quiz-slide${big ? ' quiz-slide--big' : ''}`}>
+    <article className={`quiz-slide${big ? ' quiz-slide--big' : ''}${image ? ' quiz-slide--image' : ''}`}>
+      <QuestionImage id={image} big={big} alt={`Picture for the slide: ${text}`} />
       <h2 className="quiz-slide__title">{text}</h2>
       {blocks.map((block, i) => {
         const lines = block.split('\n');

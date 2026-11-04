@@ -16,7 +16,9 @@ import {
   type Insight,
   type RoomView,
 } from '../../lib/quiz';
-import { Leaderboard, LETTERS, SlideBody, Solution } from './Answering';
+import { Leaderboard, LETTERS, QuestionImage, SlideBody, Solution } from './Answering';
+import { QrCode } from './QrCode';
+import { TeamBoard, teamOf } from './Teams';
 
 /** `/quiz/host/:pin`: the host's control room, meant for a projector. */
 export function HostRoom() {
@@ -196,6 +198,17 @@ function Lobby({ view, pin, joinUrl, busy, act }: { view: RoomView; pin: string;
       </p>
       <p className="muted">with PIN</p>
       <p className="quiz-pin">{pin}</p>
+      <div className="quiz-lobby__qr">
+        <QrCode text={joinUrl} label={`QR code to join room ${pin}`} size={168} />
+        <span className="muted small">or scan to join</span>
+      </div>
+      {view.teams ? <p className="muted">Playing in {view.teams} teams; players are balanced as they join.</p> : null}
+      {view.opensAt || view.closesAt ? (
+        <p className="muted">
+          Scheduled: {view.opensAt ? `opens ${new Date(view.opensAt).toLocaleString()}` : 'open now'}
+          {view.closesAt ? `, closes ${new Date(view.closesAt).toLocaleString()}` : ''}. It opens by itself; you can also open it now.
+        </p>
+      ) : null}
       <p className="actions quiz-center">
         <button type="button" className="btn btn--primary" disabled={busy || view.playerCount === 0} onClick={() => act('start')}>
           {view.mode === 'self' ? 'Open the quiz' : 'Start'} ({view.total} items)
@@ -204,7 +217,7 @@ function Lobby({ view, pin, joinUrl, busy, act }: { view: RoomView; pin: string;
       {view.playerCount === 0 && <p className="muted small">Waiting for players to join…</p>}
       <ul className="quiz-chips" aria-label="Players">
         {(view.players ?? []).map((p) => (
-          <li key={p.id} className="quiz-chip">
+          <li key={p.id} className="quiz-chip" style={teamOf(p.team) ? { ['--team' as string]: teamOf(p.team)!.color } : undefined} data-team={p.team ?? undefined}>
             {p.name}
             <button type="button" className="quiz-chip__x" aria-label={`Remove ${p.name}`} onClick={() => act('kick', { playerId: p.id })}>
               ×
@@ -228,7 +241,7 @@ function LiveStage({ view, seconds, busy, act }: { view: RoomView; seconds: numb
         <p className="quiz-q__meta">
           Item {q.index + 1} of {view.total} · Slide
         </p>
-        <SlideBody text={q.text} body={q.body} big />
+        <SlideBody text={q.text} body={q.body} image={q.image} big />
         <p className="actions">
           <button type="button" className="btn btn--primary" disabled={busy} onClick={() => act('next')}>
             {nextLabel}
@@ -249,6 +262,7 @@ function LiveStage({ view, seconds, busy, act }: { view: RoomView; seconds: numb
           {open && <span className={`quiz-timer${seconds <= 5 ? ' is-low' : ''}`}>{seconds}s</span>}
         </div>
         <h2 className={`quiz-q__text${open ? ' quiz-q__text--big' : ''}`}>{q.text}</h2>
+        <QuestionImage id={q.image} alt={`Picture for the question: ${q.text}`} />
         {open ? (
           <>
             {q.options && (
@@ -324,6 +338,12 @@ function LiveStage({ view, seconds, busy, act }: { view: RoomView; seconds: numb
       </div>
       {!open && (
         <div>
+          {view.teamBoard && view.teamBoard.length > 0 && (
+            <>
+              <h2>Teams</h2>
+              <TeamBoard rows={view.teamBoard} />
+            </>
+          )}
           <h2>Leaderboard</h2>
           <Leaderboard rows={(view.leaderboard ?? []).slice(0, 10)} />
           <p className="actions">
@@ -381,6 +401,7 @@ function SelfDashboard({ view, act, busy }: { view: RoomView; act: Act; busy: bo
     <div className="self-dash">
       <p className="lede">
         Players work through {view.total} items at their own pace. <strong>{done}</strong> of {players.length} finished.
+        {view.closesAt ? ` Closes by itself ${new Date(view.closesAt).toLocaleString()}.` : ''}
       </p>
       <div className="self-dash__grid">
         <div>
@@ -411,6 +432,12 @@ function SelfDashboard({ view, act, busy }: { view: RoomView; act: Act; busy: bo
           </div>
         </div>
         <div>
+          {view.teamBoard && view.teamBoard.length > 0 && (
+            <>
+              <h2>Teams</h2>
+              <TeamBoard rows={view.teamBoard} />
+            </>
+          )}
           <h2>Leaderboard</h2>
           <Leaderboard rows={(view.leaderboard ?? []).slice(0, 10)} />
           <h2>Per item</h2>
@@ -516,6 +543,12 @@ function Final({ view, busy, act }: { view: RoomView; busy: boolean; act: Act })
           </li>
         ))}
       </ol>
+      {view.teamBoard && view.teamBoard.length > 0 && (
+        <>
+          <h2>Teams</h2>
+          <TeamBoard rows={view.teamBoard} />
+        </>
+      )}
       <Leaderboard rows={view.leaderboard ?? []} />
       {view.insights && <Insights rows={view.insights} advanced={!!view.advanced} />}
       <p className="actions quiz-center">

@@ -4,6 +4,7 @@ import { BusyLine } from '../../components/forms';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { TYPE_LABELS, useRoomPoll } from '../../lib/quiz';
 import { Leaderboard } from './Answering';
+import { TeamBoard } from './Teams';
 
 /** `/quiz/board/:pin`: the live leaderboard, for anyone (playing or just following along). */
 export function Board() {
@@ -39,8 +40,18 @@ export function Board() {
         {view.playerCount} players
       </p>
       {view.current && view.phase !== 'finished' && <p className="muted">{view.current.text}</p>}
+      {view.teamBoard && view.teamBoard.length > 0 && (
+        <>
+          <h2>Teams</h2>
+          <TeamBoard rows={view.teamBoard} />
+          <h2>Players</h2>
+        </>
+      )}
       <Leaderboard rows={view.leaderboard ?? []} />
-      <p className="muted small">Scores update after each question is revealed.</p>
+      <p className="muted small">
+        Scores update after each question is revealed.
+        {view.closesAt && view.phase !== 'finished' ? ` The challenge closes ${new Date(view.closesAt).toLocaleString()}.` : ''}
+      </p>
       <p className="actions">
         {view.phase !== 'finished' && (
           <Link className="btn btn--primary" to={`/quiz?pin=${pin}`}>

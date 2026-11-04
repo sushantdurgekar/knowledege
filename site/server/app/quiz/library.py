@@ -19,6 +19,7 @@ INDEX_KEY = "quiz-index"
 MAX_QUIZZES = 500
 MAX_DOC_BYTES = 300_000
 ID_RE = re.compile(r"^[a-z0-9]{6,24}$")
+ID_IMAGE = re.compile(r"^[a-f0-9]{24}$")
 
 
 class LibraryError(Exception):
@@ -107,3 +108,75 @@ def _update_index(store: Store, change: Any) -> None:
         except Conflict:  # re-read and try again
             continue
     raise LibraryError(409, "conflict", "The library is busy; try again")
+
+
+# -- backups: the library travels inside the backup's settings record ---------------------------
+STUDIO_MAX_BYTES = 6_000_000  # keeps that one record well under the reader's 8 MB line limit
+
+
+def studio_snapshot(store: Store) -> dict[str, Any] | None:
+    """Every saved quiz and the images they use, for a backup (None when the library is empty)."""
+    index = list_quizzes(store)
+    if not index:
+        return None
+    quizzes: list[dict[str, Any]] = []
+    wanted: list[str] = []
+    for entry in index:
+        found = store.get_setting(_key(entry["id"]))
+        if found is None or not found[0].get("doc"):
+            continue
+        doc = found[0]["doc"]
+        quizzes.append(
+            {"id": entry["id"], "doc": doc, "updated": found[0].get("updated"), "by": found[0].get("by")}
+        )
+        for item in doc.get("items") or []:
+            image = item.get("image") if isinstance(item, dict) else None
+            if isinstance(image, str) and image not in wanted:
+                wanted.append(image)
+    size = len(json.dumps(quizzes, ensure_ascii=False))
+    images: dict[str, Any] = {}
+    skipped = 0
+    for image_id in wanted:
+        found = store.get_setting(f"quiz-img:{image_id}")
+        if found is None:
+            continue
+        cost = len(found[0].get("b64", "")) + 64
+        if size + cost > STUDIO_MAX_BYTES:
+            skipped += 1  # the quiz keeps its reference; the picture is left out of this backup
+            continue
+        images[image_id] = {"mime": found[0].get("mime"), "b64": found[0].get("b64")}
+        size += cost
+    return {"v": 1, "quizzes": quizzes, "images": images, "imagesSkipped": skipped}
+
+
+def restore_studio(store: Store, studio: dict[str, Any], mode: str) -> dict[str, int]:
+    """Write a backup's library back. Merge keeps quizzes that already exist; replace overwrites."""
+    written = {"quizzes": 0, "images": 0}
+    for image_id, image in (studio.get("images") or {}).items():
+        if not (isinstance(image_id, str) and ID_IMAGE.fullmatch(image_id) and isinstance(image, dict)):
+            continue
+        if store.get_setting(f"quiz-img:{image_id}") is None and isinstance(image.get("b64"), str):
+            store.put_setting(
+                f"quiz-img:{image_id}", {"mime": image.get("mime"), "b64": image["b64"]}, expect_version=None
+            )
+            written["images"] += 1
+    restored: list[dict[str, Any]] = []
+    for entry in studio.get("quizzes") or []:
+        quiz_id, doc = entry.get("id"), entry.get("doc")
+        if not (isinstance(quiz_id, str) and ID_RE.fullmatch(quiz_id) and isinstance(doc, dict)):
+            continue
+        existing = store.get_setting(_key(quiz_id))
+        if mode == "merge" and existing is not None and existing[0].get("doc"):
+            continue
+        updated = int(entry.get("updated") or time.time() * 1000)
+        by = str(entry.get("by") or "")
+        store.put_setting(_key(quiz_id), {"doc": doc, "updated": updated, "by": by}, expect_version=None)
+        restored.append(_summary(quiz_id, doc, updated, by))
+        written["quizzes"] += 1
+    if restored:
+        ids = {s["id"] for s in restored}
+        if mode == "replace":  # the library becomes exactly the backup's
+            _update_index(store, lambda items: list(restored))
+        else:
+            _update_index(store, lambda items: [s for s in items if s.get("id") not in ids] + restored)
+    return written

@@ -19,6 +19,7 @@ import {
   type LibraryEntry,
   type Mode,
   type OpenRoom,
+  type RoomOptions,
 } from '../../lib/quiz';
 import {
   blankDoc,
@@ -33,6 +34,7 @@ import {
   type QuizDoc,
 } from '../../lib/quiz-doc';
 import { AdminGate } from './AdminGate';
+import { HostOptions } from './HostOptions';
 
 /** `/quiz/host`: the shared quiz library (saved on the server), open rooms and new quizzes. */
 export function Library() {
@@ -53,7 +55,7 @@ function LibraryPage() {
   const [local, setLocal] = useState<QuizDoc[]>(() => loadLocalLibrary());
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<Message>(null);
-  const [study, setStudy] = useState<Record<string, boolean>>({});
+  const [starting, setStarting] = useState<{ entry: LibraryEntry; mode: Mode } | null>(null);
   const [bankOpen, setBankOpen] = useState(false);
   const file = useRef<HTMLInputElement>(null);
 
@@ -108,10 +110,10 @@ function LibraryPage() {
       if (result.ok) await createFrom(fromServer(result.quiz));
     });
 
-  const host = (entry: LibraryEntry, mode: Mode) =>
+  const host = (entry: LibraryEntry, options: RoomOptions) =>
     run(async () => {
       const { doc } = await getSaved(entry.id);
-      const room = await createRoom(doc, mode, !!study[entry.id]);
+      const room = await createRoom(doc, options);
       setHostSecret(room.pin, room.hostKey);
       navigate(`/quiz/host/${room.pin}`);
     });
@@ -253,16 +255,12 @@ function LibraryPage() {
                 {q.by ? ` · ${q.by}` : ''}
               </p>
               <div className="studio__card-actions">
-                <button type="button" className="btn btn--primary btn--small" disabled={busy} onClick={() => host(q, 'live')}>
+                <button type="button" className="btn btn--primary btn--small" disabled={busy} onClick={() => setStarting({ entry: q, mode: 'live' })}>
                   Host live
                 </button>
-                <button type="button" className="btn btn--small" disabled={busy} onClick={() => host(q, 'self')}>
-                  Self-paced
+                <button type="button" className="btn btn--small" disabled={busy} onClick={() => setStarting({ entry: q, mode: 'self' })}>
+                  Self-paced challenge
                 </button>
-                <label className="studio__check small">
-                  <input type="checkbox" checked={!!study[q.id]} onChange={(e) => setStudy((s) => ({ ...s, [q.id]: e.target.checked }))} />{' '}
-                  flashcards first
-                </label>
               </div>
               <div className="studio__card-more">
                 <Link to={`/quiz/host/edit/${q.id}`}>Edit</Link>
@@ -282,6 +280,19 @@ function LibraryPage() {
             </li>
           ))}
         </ul>
+      )}
+      {starting && (
+        <HostOptions
+          title={starting.entry.title}
+          initialMode={starting.mode}
+          busy={busy}
+          onCancel={() => setStarting(null)}
+          onStart={(options) => {
+            const entry = starting.entry;
+            setStarting(null);
+            void host(entry, options);
+          }}
+        />
       )}
       <p className="muted small">
         Quizzes are saved on the server and shared by every admin. Export a copy (.json or .txt) any time.

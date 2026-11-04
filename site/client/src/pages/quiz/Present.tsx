@@ -3,7 +3,9 @@ import { useParams } from 'react-router';
 import { BusyLine } from '../../components/forms';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { presenterKey, TYPE_LABELS, useCountdown, useRoomPoll, type RoomView } from '../../lib/quiz';
-import { Leaderboard, LETTERS, SlideBody, Solution } from './Answering';
+import { Leaderboard, LETTERS, QuestionImage, SlideBody, Solution } from './Answering';
+import { QrCode } from './QrCode';
+import { TeamBoard, teamOf } from './Teams';
 
 /**
  * `/quiz/present/:pin#k=<key>`: the screen someone shares in a meeting or on a projector.
@@ -79,16 +81,27 @@ function Stage({ view, seconds, pin, host }: { view: RoomView; seconds: number; 
   if (view.phase === 'lobby') {
     return (
       <div className="present__lobby">
-        <p className="present__kicker">Join on your phone</p>
-        <p className="present__url">{host}/quiz</p>
-        <p className="present__kicker">Game PIN</p>
-        <p className="present__pin">{pin}</p>
+        <div className="present__join-grid">
+          <div>
+            <p className="present__kicker">Join on your phone</p>
+            <p className="present__url">{host}/quiz</p>
+            <p className="present__kicker">Game PIN</p>
+            <p className="present__pin">{pin}</p>
+          </div>
+          <div className="present__qr">
+            <QrCode text={`${window.location.origin}/quiz?pin=${pin}`} label={`QR code to join room ${pin}`} size={260} />
+            <span>Scan to join</span>
+          </div>
+        </div>
+        {view.teams ? <p className="present__kicker">{view.teams} teams</p> : null}
         <p className="present__count">
           <strong>{view.playerCount}</strong> {view.playerCount === 1 ? 'player' : 'players'} in
         </p>
         <ul className="present__chips">
           {(view.players ?? []).slice(0, 120).map((p) => (
-            <li key={p.id}>{p.name}</li>
+            <li key={p.id} style={teamOf(p.team) ? { ['--team' as string]: teamOf(p.team)!.color } : undefined} data-team={p.team ?? undefined}>
+              {p.name}
+            </li>
           ))}
         </ul>
       </div>
@@ -109,6 +122,7 @@ function Stage({ view, seconds, pin, host }: { view: RoomView; seconds: number; 
             </li>
           ))}
         </ol>
+        {view.teamBoard && view.teamBoard.length > 0 && <TeamBoard rows={view.teamBoard} big />}
         <Leaderboard rows={(view.leaderboard ?? []).slice(3, 10)} />
       </div>
     );
@@ -125,6 +139,7 @@ function Stage({ view, seconds, pin, host }: { view: RoomView; seconds: number; 
           </p>
         </div>
         <div>
+          {view.teamBoard && view.teamBoard.length > 0 && <TeamBoard rows={view.teamBoard} big />}
           <h2 className="present__sub">Leaderboard</h2>
           <Leaderboard rows={view.leaderboard ?? []} />
         </div>
@@ -134,7 +149,7 @@ function Stage({ view, seconds, pin, host }: { view: RoomView; seconds: number; 
 
   const q = view.question;
   if (!q) return null;
-  if (q.type === 'slide') return <SlideBody text={q.text} body={q.body} big />;
+  if (q.type === 'slide') return <SlideBody text={q.text} body={q.body} image={q.image} big />;
   const open = view.phase === 'question';
 
   return (
@@ -151,6 +166,7 @@ function Stage({ view, seconds, pin, host }: { view: RoomView; seconds: number; 
           )}
         </div>
         <h2 className="present__q">{q.text}</h2>
+        <QuestionImage id={q.image} big alt={`Picture for the question: ${q.text}`} />
         {open ? (
           <>
             {q.options && (
@@ -194,6 +210,7 @@ function Stage({ view, seconds, pin, host }: { view: RoomView; seconds: number; 
       </div>
       {!open && (
         <div>
+          {view.teamBoard && view.teamBoard.length > 0 && <TeamBoard rows={view.teamBoard} big />}
           <h2 className="present__sub">Leaderboard</h2>
           <Leaderboard rows={(view.leaderboard ?? []).slice(0, 8)} />
         </div>

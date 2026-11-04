@@ -142,10 +142,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         threading.Thread(target=runtime.meter.load, name="quota-meter-load", daemon=True).start()
         task = asyncio.create_task(_persist_meter_forever(runtime, PERSIST_INTERVAL_S))
     scheduler_task = await _start_scheduler(runtime) if runtime is not None else None
+    if runtime is not None:
+        with anyio.move_on_after(BOOT_TICK_TIMEOUT_S):  # a slow store must not hold startup
+            await quiz_routes.start_saver(runtime.store)
     try:
         yield
     finally:
         if runtime is not None:
+            await quiz_routes.stop_saver()
             await _shutdown_runtime(runtime, scheduler_task, task)
 
 
