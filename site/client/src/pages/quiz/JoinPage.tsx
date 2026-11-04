@@ -85,9 +85,9 @@ export function JoinPage() {
       {admin && (
         <div className="notice quiz-host-cta">
           <h2>Hosting?</h2>
-          <p>Import your questions, open a room and run it question by question.</p>
+          <p>Build quizzes and lessons in the studio, then run them live or self-paced.</p>
           <Link className="btn" to="/quiz/host">
-            Host a quiz
+            Open the quiz studio
           </Link>
         </div>
       )}

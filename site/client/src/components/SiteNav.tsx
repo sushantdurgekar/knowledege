@@ -14,10 +14,17 @@ export function SiteNav() {
           </NavLink>
         </li>
         <li>
-          <NavLink to="/quiz" className="site-nav__link">
+          <NavLink to="/quiz" end className="site-nav__link">
             Live quiz
           </NavLink>
         </li>
+        {admin && (
+          <li>
+            <NavLink to="/quiz/host" className="site-nav__link">
+              Studio
+            </NavLink>
+          </li>
+        )}
         {admin && (
           <li>
             <NavLink to="/admin" className="site-nav__link">
@@ -32,7 +39,8 @@ export function SiteNav() {
 
 const LABELS: Record<string, string> = {
   quiz: 'Live quiz',
-  host: 'Host',
+  host: 'Studio',
+  edit: 'Edit',
   play: 'Play',
   admin: 'Admin',
   account: 'Account',
@@ -51,6 +59,7 @@ const LABELS: Record<string, string> = {
 /** The parent of a path: /quiz/play/123456 -> /quiz, /admin/backup -> /admin, /account -> /. */
 export function parentOf(pathname: string): string {
   const parts = pathname.split('/').filter(Boolean);
+  if (parts[0] === 'quiz' && parts[1] === 'host' && parts.length > 2) return '/quiz/host';
   if (parts[0] === 'quiz' && parts.length > 1) return '/quiz';
   return parts.length > 1 ? `/${parts.slice(0, -1).join('/')}` : '/';
 }
@@ -66,7 +75,7 @@ export function BackBar() {
   const parts = pathname.split('/').filter(Boolean);
   const crumbs = parts
     .map((part, i) => ({ to: `/${parts.slice(0, i + 1).join('/')}`, label: LABELS[part] ?? part }))
-    .filter((_c, i) => !(parts[0] === 'quiz' && i === 1 && (parts[1] === 'play' || parts[1] === 'host') && parts.length > 2));
+    .filter((_c, i) => !(parts[0] === 'quiz' && ((i === 1 && parts[1] === 'play') || (i === 2 && parts[2] === 'edit'))));
 
   const goBack = () => {
     const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;

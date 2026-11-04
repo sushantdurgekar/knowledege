@@ -1,30 +1,32 @@
-"""Live quiz rooms, kept in memory (one server process; a restart ends running rooms).
+"""Quiz rooms, kept in memory (one server process; a restart ends running rooms).
 
-Flow: lobby -> question -> reveal -> question -> ... -> finished. The host moves it on; a
-question also closes by itself when its time runs out or every player has answered.
+Two modes:
+  live  The host runs the room: lobby -> question -> reveal -> ... -> finished. The host picks
+        which item comes next from the run sheet (any order), can add time, lock the room, and
+        end at any point (scores stand as they are). A question also closes by itself when its
+        time runs out or every player has answered. Slides have no timer and no answers.
+  self  Self-paced: once the host opens it, each player moves through the items on their own,
+        with their own timer per question. Optional flashcards ("study") before they start.
 
-Scoring: a fully correct answer earns between 50% and 100% of the question's points, more for
-answering sooner (100% at once, 50% at the buzzer). Multi-select and match questions earn the
-same, scaled by the share they got right (a wrong pick cancels a right one); "correct" means
-all of it was right. Ties rank by total answer time, quicker first.
+Scoring: a fully correct answer earns 50-100% of the question's points, more for answering
+sooner. Multiple choice, match and order earn the same scaled by the share they got right
+(multiple choice: a wrong pick cancels a right one). Polls and slides earn nothing. Ties rank
+by total answer time, quicker first.
 
-Sized for up to MAX_PLAYERS (250) players per room on one server process:
+Sized for MAX_PLAYERS (250) per room on one process:
 - Two change channels. `version` (host) moves on every change; `pversion` (players) only when
-  something players see changes: a phase change, a kick, and the lobby head count (coalesced to
-  at most one wake-up per LOBBY_COALESCE_S). So 250 answers wake the host, not 250 x 250 polls.
-- Lookups are hash maps: player by token, nickname taken, answered-this-question counter, so a
-  join or an answer is O(1) (no scans over the room).
-- The ranking is sorted once per `version` (O(n log n), n <= 250) and cached with a rank index;
-  the shared part of the player view is built once per `pversion`. A wake-up of all players is
-  then O(n) small dict copies instead of n sorts.
-
-Clients learn about changes by long-polling (one coroutine per waiting client, no threads).
+  players can see something new: a phase change, a kick, the lobby head count (coalesced to one
+  wake-up per LOBBY_COALESCE_S). So 250 answers wake the host, not 250 x 250 long-polls.
+- O(1) lookups: player by token, nickname taken, answered-this-question counter.
+- The ranking is sorted once per `version` (n log n, n <= 250) and cached with a rank index; the
+  shared part of the live player view is built once per `pversion`.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import math
 import random
 import secrets
 import time
@@ -32,17 +34,19 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from app.quiz.parse import Question, Quiz, normalise
+from app.quiz.parse import Question, Quiz, answer_text, normalise
 
 Phase = Literal["lobby", "question", "reveal", "finished"]
+Mode = Literal["live", "self"]
+Stage = Literal["ready", "question", "reveal", "done"]
 
-MAX_ROOMS = 50
 MAX_PLAYERS = 250
-LOBBY_COALESCE_S = 1.0
 MAX_NAME = 24
 MAX_TEXT_ANSWER = 200
 ROOM_IDLE_S = 6 * 3600
 LEADERBOARD_SIZE = 10
+LOBBY_COALESCE_S = 1.0
+MAX_EXTEND_S = 120
 
 
 class QuizError(Exception):
@@ -57,10 +61,11 @@ class Answer:
     elapsed: float
     fraction: float
     points: int
+    scored: bool = True
 
     @property
     def correct(self) -> bool:
-        return self.fraction >= 1.0
+        return self.scored and self.fraction >= 1.0
 
 
 @dataclass(slots=True)
@@ -74,56 +79,85 @@ class Player:
     streak: int = 0
     joined: float = 0.0
     answers: dict[int, Answer] = field(default_factory=dict)
+    # self-paced progress
+    index: int = -1
+    stage: Stage = "ready"
+    opened_at: float = 0.0
+    deadline: float = 0.0
 
 
-def _score(q: Question, value: Any, order: list[int]) -> float:
+def _ints(value: Any, n: int, length: int | None = None) -> list[int] | None:
+    if not isinstance(value, list) or (length is not None and len(value) != length):
+        return None
+    if not all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v < n for v in value):
+        return None
+    return value
+
+
+def score_answer(q: Question, value: Any, order: list[int]) -> float:
     """Share of the question answered correctly, 0..1. Raises QuizError for a malformed answer."""
     bad = QuizError(422, "invalid", "That answer does not fit this question")
-    if q.type in ("single", "truefalse"):
+    if q.type in ("single", "truefalse", "poll"):
         if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value < len(q.options):
             raise bad
         return 1.0 if value in q.correct else 0.0
     if q.type == "multi":
-        if not isinstance(value, list) or not all(
-            isinstance(v, int) and not isinstance(v, bool) for v in value
-        ):
+        picks = _ints(value, len(q.options))
+        if not picks:
             raise bad
-        picks = set(value)
-        if not picks or any(not 0 <= v < len(q.options) for v in picks):
-            raise bad
-        right = set(q.correct)
-        hits, misses = len(picks & right), len(picks - right)
-        return max(0.0, (hits - misses) / len(right))
+        right, chosen = set(q.correct), set(picks)
+        return max(0.0, (len(chosen & right) - len(chosen - right)) / len(right))
     if q.type == "text":
         if not isinstance(value, str) or not value.strip() or len(value) > MAX_TEXT_ANSWER:
             raise bad
         return 1.0 if any(a.matches(value) for a in q.answers) else 0.0
-    # match: value[i] = index into the shuffled right-hand list shown to players, for left item i
-    if not isinstance(value, list) or len(value) != len(q.pairs):
-        raise bad
-    if not all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v < len(order) for v in value):
-        raise bad
-    hits = sum(1 for i, v in enumerate(value) if order[v] == i)
-    return hits / len(q.pairs)
+    if q.type in ("match", "order"):
+        # value[k] = index into the shuffled list players saw, placed at row k.
+        size = len(q.pairs) if q.type == "match" else len(q.items)
+        placed = _ints(value, size, size)
+        if placed is None or len(set(placed)) != size:
+            raise bad
+        return sum(1 for k, v in enumerate(placed) if order[v] == k) / size
+    raise bad  # slides take no answers
 
 
-def _points(q: Question, fraction: float, elapsed: float) -> int:
-    if fraction <= 0 or q.points <= 0:
+def points_for(q: Question, fraction: float, elapsed: float) -> int:
+    if not q.scored or fraction <= 0:
         return 0
     speed = 1.0 - 0.5 * min(1.0, max(0.0, elapsed / q.time_limit))
     return round(q.points * fraction * speed)
 
 
+def _shuffled(n: int) -> list[int]:
+    order = list(range(n))
+    while n > 1 and order == sorted(order):
+        random.shuffle(order)
+    return order
+
+
 class Room:
-    def __init__(self, pin: str, quiz: Quiz, owner: str, clock: Callable[[], float]) -> None:
+    def __init__(
+        self,
+        pin: str,
+        quiz: Quiz,
+        owner: str,
+        clock: Callable[[], float],
+        *,
+        mode: Mode = "live",
+        study: bool = False,
+    ) -> None:
         self.pin = pin
         self.quiz = quiz
         self.owner = owner
+        self.mode: Mode = mode
+        self.study = study
         self.host_key = secrets.token_urlsafe(24)
         self.clock = clock
         self.players: dict[str, Player] = {}
         self.phase: Phase = "lobby"
+        self.locked = False
         self.index = -1
+        self.done: set[int] = set()
         self.opened_at = 0.0
         self.deadline = 0.0
         self.version = 1  # host channel: every change
@@ -138,14 +172,17 @@ class Room:
         self._lobby_pending = False
         self._ranked: tuple[int, list[Player], dict[str, int]] | None = None
         self._pview: tuple[int, dict[str, Any]] | None = None
-        # Each match question shows its right-hand items in one shuffled order (same for all).
+        # Match and order items are shown in one shuffled order per question (same for all).
         self.orders: dict[int, list[int]] = {}
         for i, q in enumerate(quiz.questions):
             if q.type == "match":
-                order = list(range(len(q.pairs)))
-                while len(order) > 1 and order == sorted(order):
-                    random.shuffle(order)
-                self.orders[i] = order
+                self.orders[i] = _shuffled(len(q.pairs))
+            elif q.type == "order":
+                self.orders[i] = _shuffled(len(q.items))
+
+    @property
+    def total(self) -> int:
+        return len(self.quiz.questions)
 
     # -- change notification -------------------------------------------------------------
     def bump(self, players: bool = True) -> None:
@@ -176,61 +213,101 @@ class Room:
         self._lobby_pending = True
         loop.call_later(LOBBY_COALESCE_S, lambda: self._lobby_pending and self._bump_players())
 
-    async def wait(self, since: int, timeout: float, *, host: bool = False) -> None:
-        """Return when the channel's version > since, the open question's time runs out, or after timeout."""
+    async def wait(
+        self, since: int, timeout: float, *, host: bool = False, until: float | None = None
+    ) -> None:
+        """Return when the channel's version > since, a timer runs out, or after timeout."""
         self.tick()
         if (self.version if host else self.pversion) > since:
             return
-        if self.phase == "question":
+        if self.phase == "question" and self.mode == "live" and math.isfinite(self.deadline):
             timeout = min(timeout, max(0.05, self.deadline - self.clock() + 0.05))
+        if until is not None and math.isfinite(until):
+            timeout = min(timeout, max(0.05, until - self.clock() + 0.05))
         event = self._event if host else self._pevent
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(event.wait(), timeout)
         self.tick()
 
-    # -- state machine -------------------------------------------------------------------
+    # -- live flow -----------------------------------------------------------------------
     @property
     def question(self) -> Question | None:
-        return self.quiz.questions[self.index] if 0 <= self.index < len(self.quiz.questions) else None
+        return self.quiz.questions[self.index] if 0 <= self.index < self.total else None
 
     def tick(self) -> None:
-        """Close the open question once its time is up."""
-        if self.phase == "question" and self.clock() >= self.deadline:
+        """Close the open live question once its time is up."""
+        if self.mode == "live" and self.phase == "question" and self.clock() >= self.deadline:
             self._reveal()
 
     def _open(self, index: int) -> None:
+        if not 0 <= index < self.total:
+            raise QuizError(422, "invalid", "No such item")
         self.index = index
+        self.done.add(index)
         self.phase = "question"
         self.opened_at = self.clock()
-        self.deadline = self.opened_at + self.question.time_limit  # type: ignore[union-attr]
+        q = self.quiz.questions[index]
+        self.deadline = self.opened_at + q.time_limit if q.answerable else math.inf
         self.answered_count = 0
         self.bump()
 
     def _reveal(self) -> None:
         self.phase = "reveal"
-        for player in self.players.values():
-            answer = player.answers.get(self.index)
-            player.streak = player.streak + 1 if answer is not None and answer.correct else 0
+        q = self.question
+        if q is not None and q.scored:
+            for player in self.players.values():
+                answer = player.answers.get(self.index)
+                player.streak = player.streak + 1 if answer is not None and answer.correct else 0
         self.bump()
 
-    def act(self, action: str) -> None:
-        self.tick()
-        last = len(self.quiz.questions) - 1
-        if action == "start" and self.phase == "lobby":
-            self._open(0)
-        elif action == "reveal" and self.phase == "question":
+    def next_index(self) -> int | None:
+        """The next item not run yet: after the current one first, then from the top."""
+        for i in [*range(self.index + 1, self.total), *range(0, self.index + 1)]:
+            if i not in self.done:
+                return i
+        return None
+
+    def _finish(self) -> None:
+        if self.phase == "question" and self.mode == "live":
             self._reveal()
-        elif action == "next" and self.phase == "reveal":
-            if self.index < last:
-                self._open(self.index + 1)
-            else:
-                self.phase = "finished"
+        self.phase = "finished"
+        for player in self.players.values():
+            player.stage = "done"
+        self.bump()
+
+    def act(self, action: str, *, index: int | None = None, seconds: int | None = None) -> None:
+        self.tick()
+        q = self.question
+        between = self.phase == "reveal" or (self.phase == "question" and q is not None and not q.answerable)
+        if action == "lock":
+            self.locked = True
+            self.bump(players=False)
+        elif action == "unlock":
+            self.locked = False
+            self.bump(players=False)
+        elif action == "end":
+            if self.phase == "finished":
+                raise QuizError(409, "conflict", "The quiz has already ended")
+            self._finish()
+        elif self.mode == "self":
+            if action == "start" and self.phase == "lobby":
+                self.phase = "question"  # running: players move on their own
                 self.bump()
-        elif action == "end" and self.phase != "finished":
-            if self.phase == "question":
-                self._reveal()
-            self.phase = "finished"
+            else:
+                raise QuizError(409, "conflict", f"Cannot {action} a self-paced room now")
+        elif action == "start" and self.phase == "lobby":
+            self._open(0 if index is None else index)
+        elif action == "reveal" and self.phase == "question" and q is not None and q.answerable:
+            self._reveal()
+        elif action == "extend" and self.phase == "question" and q is not None and q.answerable:
+            self.deadline += max(5, min(MAX_EXTEND_S, seconds or 10))
             self.bump()
+        elif action in ("next", "goto") and (between or (action == "goto" and self.phase == "lobby")):
+            target = self.next_index() if action == "next" or index is None else index
+            if target is None:
+                self._finish()
+            else:
+                self._open(target)
         else:
             raise QuizError(409, "conflict", f"Cannot {action} now (the room is at {self.phase})")
 
@@ -241,6 +318,8 @@ class Room:
             raise QuizError(422, "invalid", "Enter a nickname")
         if self.phase == "finished":
             raise QuizError(409, "finished", "This quiz has ended")
+        if self.locked:
+            raise QuizError(409, "locked", "The host has locked this room")
         if len(self.players) >= MAX_PLAYERS:
             raise QuizError(409, "full", "This room is full")
         key = normalise(name)
@@ -255,11 +334,10 @@ class Room:
         if self.phase == "lobby":
             self._bump_lobby()
         else:
-            self.bump(players=False)  # a late joiner changes nothing other players see mid-question
+            self.bump(players=False)  # a late joiner changes nothing other players see
         return player
 
     def player_by_token(self, token: str | None) -> Player:
-        # A dict lookup by a 192-bit random token: the hash lookup leaks nothing useful.
         player = self._by_token.get(token or "")
         if player is None:
             raise QuizError(403, "not_joined", "Join the room first")
@@ -271,29 +349,77 @@ class Room:
             raise QuizError(404, "not_found", "No such player")
         self._by_token.pop(player.token, None)
         self._names.discard(normalise(player.name))
-        if self.index in player.answers and self.phase == "question":
+        if self.mode == "live" and self.phase == "question" and self.index in player.answers:
             self.answered_count -= 1
         self.bump()
 
+    def _record(self, player: Player, index: int, value: Any, elapsed: float) -> Answer:
+        q = self.quiz.questions[index]
+        fraction = score_answer(q, value, self.orders.get(index, []))
+        answer = Answer(value, elapsed, fraction, points_for(q, fraction, elapsed), scored=q.scored)
+        player.answers[index] = answer
+        player.score += answer.points
+        if q.scored:
+            player.time_total += elapsed
+            player.correct += 1 if answer.correct else 0
+        return answer
+
     def answer(self, player: Player, index: int, value: Any) -> Answer:
+        if self.mode == "self":
+            return self._answer_self(player, index, value)
         self.tick()
         q = self.question
-        if self.phase != "question" or index != self.index or q is None:
+        if self.phase != "question" or index != self.index or q is None or not q.answerable:
             raise QuizError(409, "closed", "This question is closed")
         if index in player.answers:
             raise QuizError(409, "answered", "You already answered this question")
-        elapsed = max(0.0, self.clock() - self.opened_at)
-        fraction = _score(q, value, self.orders.get(index, []))
-        answer = Answer(value=value, elapsed=elapsed, fraction=fraction, points=_points(q, fraction, elapsed))
-        player.answers[index] = answer
-        player.score += answer.points
-        player.time_total += elapsed
-        player.correct += 1 if answer.correct else 0
+        answer = self._record(player, index, value, max(0.0, self.clock() - self.opened_at))
         self.answered_count += 1
         if self.answered_count >= len(self.players):
             self._reveal()  # everyone is in: no need to wait for the clock
         else:
             self.bump(players=False)  # only the host's answered count moves
+        return answer
+
+    # -- self-paced ----------------------------------------------------------------------
+    def self_tick(self, player: Player) -> None:
+        if player.stage == "question" and self.clock() >= player.deadline:
+            player.stage = "reveal"  # time ran out: no answer, no points
+            if self.quiz.questions[player.index].scored:
+                player.streak = 0
+            self.bump(players=False)
+
+    def advance(self, player: Player) -> None:
+        """Self-paced: open the player's next item (or finish them)."""
+        if self.mode != "self" or self.phase != "question":
+            raise QuizError(409, "conflict", "This room is not running self-paced")
+        self.self_tick(player)
+        if player.stage == "done":
+            return
+        if player.stage == "question" and self.quiz.questions[player.index].answerable:
+            raise QuizError(409, "conflict", "Answer this question first")
+        nxt = player.index + 1
+        if nxt >= self.total:
+            player.stage = "done"
+        else:
+            q = self.quiz.questions[nxt]
+            player.index, player.stage = nxt, "question"
+            player.opened_at = self.clock()
+            player.deadline = player.opened_at + q.time_limit if q.answerable else math.inf
+        self.bump(players=False)
+
+    def _answer_self(self, player: Player, index: int, value: Any) -> Answer:
+        if self.phase != "question":
+            raise QuizError(409, "closed", "This quiz is not running")
+        self.self_tick(player)
+        q = self.quiz.questions[player.index] if 0 <= player.index < self.total else None
+        if player.stage != "question" or index != player.index or q is None or not q.answerable:
+            raise QuizError(409, "closed", "This question is closed")
+        answer = self._record(player, index, value, max(0.0, self.clock() - player.opened_at))
+        if q.scored:
+            player.streak = player.streak + 1 if answer.correct else 0
+        player.stage = "reveal"
+        self.bump(players=False)
         return answer
 
     # -- views ---------------------------------------------------------------------------
@@ -307,61 +433,60 @@ class Room:
     def ranking(self) -> list[Player]:
         return self._rank_index()[0]
 
-    def _question_view(self, host: bool) -> dict[str, Any] | None:
-        q = self.question
-        if q is None or self.phase in ("lobby",):
-            return None
+    def _item_view(
+        self, index: int, *, open_: bool, remaining_ms: int, host: bool, stats: bool
+    ) -> dict[str, Any]:
+        q = self.quiz.questions[index]
         view: dict[str, Any] = {
-            "index": self.index,
+            "index": index,
             "text": q.text,
             "type": q.type,
-            "timeLimit": q.time_limit,
+            "timeLimit": q.time_limit if q.answerable else 0,
             "points": q.points,
-            "remainingMs": max(0, round((self.deadline - self.clock()) * 1000))
-            if self.phase == "question"
-            else 0,
+            "remainingMs": remaining_ms if open_ else 0,
         }
-        if q.type in ("single", "multi", "truefalse"):
+        if q.type == "slide":
+            view["body"] = q.body
+        if q.type in ("single", "multi", "truefalse", "poll"):
             view["options"] = q.options
             if q.type == "multi":
                 view["pick"] = len(q.correct)
         elif q.type == "match":
-            order = self.orders[self.index]
             view["left"] = [left for left, _ in q.pairs]
-            view["right"] = [q.pairs[i][1] for i in order]
-        if host or self.phase in ("reveal", "finished"):
-            view["solution"] = self._solution(q)
-            if q.explain:
-                view["explain"] = q.explain
-        if self.phase in ("reveal", "finished") or host:
-            view["stats"] = self._stats(q)
+            view["right"] = [q.pairs[i][1] for i in self.orders[index]]
+        elif q.type == "order":
+            view["items"] = [q.items[i] for i in self.orders[index]]
+        if (host or not open_) and q.answerable and q.type != "poll":
+            view["solution"] = self._solution(index)
+            view["answerText"] = answer_text(q)
+        if (host or not open_) and q.explain:
+            view["explain"] = q.explain
+        if stats and q.answerable:
+            view["stats"] = self._stats(index)
         return view
 
-    def _solution(self, q: Question) -> dict[str, Any]:
+    def _solution(self, index: int) -> dict[str, Any]:
+        q = self.quiz.questions[index]
         if q.type in ("single", "multi", "truefalse"):
             return {"correct": q.correct}
         if q.type == "text":
             plain = [a.raw for a in q.answers if a.pattern is None]
             return {"accepted": plain or [a.raw for a in q.answers]}
-        order = self.orders[self.index]
-        return {"pairs": [order.index(i) for i in range(len(q.pairs))]}
+        order = self.orders[index]  # row k's item sits at display position order.index(k)
+        return {"pairs" if q.type == "match" else "order": [order.index(k) for k in range(len(order))]}
 
-    def _stats(self, q: Question) -> dict[str, Any]:
-        answers = [p.answers[self.index] for p in self.players.values() if self.index in p.answers]
+    def _stats(self, index: int) -> dict[str, Any]:
+        q = self.quiz.questions[index]
+        answers = [p.answers[index] for p in self.players.values() if index in p.answers]
         stats: dict[str, Any] = {
             "answered": len(answers),
             "players": len(self.players),
             "correct": sum(1 for a in answers if a.correct),
         }
-        if q.type in ("single", "truefalse"):
+        if q.type in ("single", "truefalse", "poll", "multi"):
             counts = [0] * len(q.options)
             for a in answers:
-                counts[a.value] += 1
-            stats["counts"] = counts
-        elif q.type == "multi":
-            counts = [0] * len(q.options)
-            for a in answers:
-                for v in set(a.value):
+                for v in set(a.value) if isinstance(a.value, list) else {a.value}:
                     counts[v] += 1
             stats["counts"] = counts
         elif q.type == "text":
@@ -385,63 +510,161 @@ class Room:
             for i, p in enumerate(ranked[:size])
         ]
 
-    def _base(self, host: bool) -> dict[str, Any]:
-        ranked, _ = self._rank_index()
-        out: dict[str, Any] = {
+    def _common(self, host: bool) -> dict[str, Any]:
+        return {
             "pin": self.pin,
             "title": self.quiz.title,
+            "mode": self.mode,
+            "study": self.study,
             "phase": self.phase,
             "version": self.version if host else self.pversion,
             "index": self.index,
-            "total": len(self.quiz.questions),
+            "total": self.total,
+            "scoredTotal": sum(1 for q in self.quiz.questions if q.scored),
             "playerCount": len(self.players),
-            "question": self._question_view(host),
+            "locked": self.locked,
         }
-        if self.phase in ("reveal", "finished") or host:
-            out["leaderboard"] = self._board(ranked, len(ranked) if host else LEADERBOARD_SIZE)
+
+    def _live_question(self, host: bool) -> dict[str, Any] | None:
+        if self.question is None or self.phase == "lobby":
+            return None
+        open_ = self.phase == "question"
+        remaining = 0
+        if open_ and math.isfinite(self.deadline):
+            remaining = max(0, round((self.deadline - self.clock()) * 1000))
+        return self._item_view(
+            self.index, open_=open_, remaining_ms=remaining, host=host, stats=host or not open_
+        )
+
+    def host_view(self) -> dict[str, Any]:
+        self.tick()
+        if self.mode == "self":
+            for p in self.players.values():
+                self.self_tick(p)
+        ranked, _ = self._rank_index()
+        out = self._common(True)
+        out["answeredCount"] = self.answered_count
+        out["leaderboard"] = self._board(ranked, len(ranked))
+        out["sheet"] = [
+            {"index": i, "type": q.type, "text": q.text[:120], "done": i in self.done, "points": q.points}
+            for i, q in enumerate(self.quiz.questions)
+        ]
+        out["nextIndex"] = self.next_index()
+        if self.mode == "live":
+            out["question"] = self._live_question(True)
+            out["players"] = [
+                {"id": p.id, "name": p.name, "score": p.score, "answered": self.index in p.answers}
+                for p in self.players.values()
+            ]
+        else:
+            out["question"] = None
+            out["players"] = [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "score": p.score,
+                    "answered": len(p.answers),
+                    "position": p.index + 1,
+                    "stage": p.stage,
+                }
+                for p in self.players.values()
+            ]
+            out["itemStats"] = [
+                self._stats(i) if q.answerable else None for i, q in enumerate(self.quiz.questions)
+            ]
         return out
 
     def view(self, player: Player | None = None, host: bool = False) -> dict[str, Any]:
-        self.tick()
         if host:
-            out = self._base(True)
-            out["answeredCount"] = self.answered_count
-            out["players"] = [
-                {"id": p.id, "name": p.name, "score": p.score, "answered": self.index in p.answers}
-                for p in self.players.values()  # dicts keep join order
-            ]
-            return out
+            return self.host_view()
+        self.tick()
+        if self.mode == "self":
+            return self._self_view(player)
         if self._pview is None or self._pview[0] != self.pversion:
-            self._pview = (self.pversion, self._base(False))
+            base = self._common(False)
+            base["question"] = self._live_question(False)
+            if self.phase in ("reveal", "finished"):
+                base["leaderboard"] = self._board(self.ranking(), LEADERBOARD_SIZE)
+            self._pview = (self.pversion, base)
         out = dict(self._pview[1])
-        if out["question"] is not None and self.phase == "question":
+        if out["question"] is not None and self.phase == "question" and math.isfinite(self.deadline):
             out["question"] = {
                 **out["question"],
                 "remainingMs": max(0, round((self.deadline - self.clock()) * 1000)),
             }
         if player is not None:
-            _, ranks = self._rank_index()
-            mine = player.answers.get(self.index)
-            me: dict[str, Any] = {
-                "id": player.id,
-                "name": player.name,
-                "score": player.score,
-                "rank": ranks.get(player.id, len(ranks)),
-                "correctCount": player.correct,
-                "streak": player.streak,
-                "answered": mine is not None,
-            }
-            if mine is not None:
-                me["answer"] = mine.value
-                if self.phase in ("reveal", "finished"):
-                    me["lastPoints"] = mine.points
-                    me["lastCorrect"] = mine.correct
-                    me["lastFraction"] = round(mine.fraction, 3)
-            out["me"] = me
+            out["me"] = self._me(player, self.index)
         return out
+
+    def _self_view(self, player: Player | None) -> dict[str, Any]:
+        out = self._common(False)
+        out["question"] = None
+        if player is None:
+            return out
+        self.self_tick(player)
+        if self.phase == "finished" or player.stage == "done":
+            out["leaderboard"] = self._board(self.ranking(), LEADERBOARD_SIZE)
+        if player.stage in ("question", "reveal") and 0 <= player.index < self.total:
+            open_ = player.stage == "question"
+            remaining = 0
+            if open_ and math.isfinite(player.deadline):
+                remaining = max(0, round((player.deadline - self.clock()) * 1000))
+            out["question"] = self._item_view(
+                player.index, open_=open_, remaining_ms=remaining, host=False, stats=False
+            )
+        out["index"] = player.index
+        out["stage"] = player.stage
+        out["me"] = self._me(player, player.index)
+        return out
+
+    def _me(self, player: Player, index: int) -> dict[str, Any]:
+        _, ranks = self._rank_index()
+        mine = player.answers.get(index)
+        me: dict[str, Any] = {
+            "id": player.id,
+            "name": player.name,
+            "score": player.score,
+            "rank": ranks.get(player.id, len(ranks)),
+            "correctCount": player.correct,
+            "streak": player.streak,
+            "answered": mine is not None,
+        }
+        closed = (
+            self.phase in ("reveal", "finished")
+            if self.mode == "live"
+            else player.stage in ("reveal", "done")
+        )
+        if mine is not None:
+            me["answer"] = mine.value
+            if closed:
+                me["lastPoints"] = mine.points
+                me["lastCorrect"] = mine.correct if mine.scored else None
+                me["lastFraction"] = round(mine.fraction, 3)
+        return me
+
+    def cards(self) -> list[dict[str, Any]]:
+        """Flashcards: each slide as a reading card, each question with its answer."""
+        out: list[dict[str, Any]] = []
+        for q in self.quiz.questions:
+            if q.type == "poll":
+                continue
+            card: dict[str, Any] = {"type": q.type, "front": q.text, "back": answer_text(q)}
+            if q.type in ("single", "multi", "truefalse"):
+                card["options"] = q.options
+            if q.explain:
+                card["explain"] = q.explain
+            out.append(card)
+        return out
+
+    def cards_open_to(self, player: Player) -> bool:
+        if self.phase == "finished" or player.stage == "done":
+            return True
+        return self.mode == "self" and self.study
 
 
 class RoomManager:
+    MAX_ROOMS = 50
+
     def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
         self.clock = clock
         self.rooms: dict[str, Room] = {}
@@ -452,15 +675,15 @@ class RoomManager:
             if now - room.touched > ROOM_IDLE_S:
                 del self.rooms[pin]
 
-    def create(self, quiz: Quiz, owner: str) -> Room:
+    def create(self, quiz: Quiz, owner: str, *, mode: Mode = "live", study: bool = False) -> Room:
         self._sweep()
-        if len(self.rooms) >= MAX_ROOMS:
-            raise QuizError(429, "too_many_rooms", "Too many open rooms; end one first")
+        if len(self.rooms) >= self.MAX_ROOMS:
+            raise QuizError(429, "too_many_rooms", "Too many open rooms; close one first")
         while True:
             pin = f"{secrets.randbelow(900_000) + 100_000}"
             if pin not in self.rooms:
                 break
-        room = Room(pin, quiz, owner, self.clock)
+        room = Room(pin, quiz, owner, self.clock, mode=mode, study=study)
         self.rooms[pin] = room
         return room
 

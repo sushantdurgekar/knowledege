@@ -1,19 +1,22 @@
 """Live quiz API.
 
 Admin (signed-in admin, CSRF on writes):
-  GET  /api/quiz/template            the import format, as a text file to start from
-  POST /api/quiz/parse               {source} -> {title, questions:[...summary]} or 422 {errors}
-  POST /api/quiz/rooms               {source} -> {pin, hostKey}
+  GET  /api/quiz/template            the text import format, as a file to start from
+  POST /api/quiz/parse               {source} or {quiz} -> {ok, title, questions, quiz} | {ok:false, errors}
+  POST /api/quiz/rooms               {source|quiz, mode: live|self, study} -> {pin, hostKey}
   GET  /api/quiz/rooms               the admin's open rooms
 
 Host (X-Quiz-Host: the room's hostKey; no admin re-check per poll):
-  GET  /api/quiz/rooms/{pin}/host?since=N      long-poll, full view with solutions
-  POST /api/quiz/rooms/{pin}/host/action       {action: start|reveal|next|end|close|kick, playerId?}
+  GET  /api/quiz/rooms/{pin}/host?since=N      long-poll, full view with solutions and run sheet
+  POST /api/quiz/rooms/{pin}/host/action       {action: start|reveal|next|goto|extend|lock|unlock|
+                                                end|close|kick, index?, seconds?, playerId?}
 
 Players (no account needed; X-Quiz-Token from join):
   POST /api/quiz/rooms/{pin}/join              {name} -> {playerId, token}
   GET  /api/quiz/rooms/{pin}?since=N           long-poll, the player's view
   POST /api/quiz/rooms/{pin}/answer            {index, answer}
+  POST /api/quiz/rooms/{pin}/advance           self-paced: open my next item
+  GET  /api/quiz/rooms/{pin}/cards             flashcards (study rooms, or once finished)
 
 Long-polls answer at once when the room's version is above `since`, otherwise within 20 s
 (or when the open question's time runs out).
@@ -34,7 +37,7 @@ from app.auth import ratelimit
 from app.auth.csrf import csrf_protect
 from app.auth.deps import Viewer
 from app.errors import ApiError
-from app.quiz.parse import TEMPLATE, QuizFormatError, parse_quiz
+from app.quiz.parse import TEMPLATE, Quiz, QuizFormatError, parse_quiz, quiz_from_json, quiz_to_json
 from app.quiz.room import QuizError, Room, RoomManager
 from app.runtime import get_runtime
 
@@ -101,16 +104,17 @@ def _limit(request: Request, key: str, rule: ratelimit.Rule) -> None:
         raise ApiError(429, "rate_limited", "Too many requests, try again shortly", retry_after=wait)
 
 
-def _parse(source: Any) -> Any:
+def _load(data: dict[str, Any]) -> Quiz:
+    """The quiz in a request: the builder's JSON (`quiz`) or the text format (`source`)."""
+    if isinstance(data.get("quiz"), dict):
+        return quiz_from_json(data["quiz"])
+    source = data.get("source")
     if not isinstance(source, str) or not source.strip():
-        raise ApiError(422, "invalid", "Paste or upload the questions first")
-    try:
-        return parse_quiz(source)
-    except QuizFormatError as exc:
-        raise ApiError(422, "quiz_format", "; ".join(exc.errors[:5])) from None
+        raise ApiError(422, "invalid", "Add some questions first")
+    return parse_quiz(source)
 
 
-def _summary(quiz: Any) -> dict[str, Any]:
+def _summary(quiz: Quiz) -> dict[str, Any]:
     return {
         "title": quiz.title,
         "questions": [
@@ -132,25 +136,28 @@ async def template(admin: Admin) -> Response:
 
 @router.post("/parse", dependencies=CSRF)
 async def parse(request: Request, admin: Admin) -> JSONResponse:
-    data = await _body(request)
-    source = data.get("source")
-    if not isinstance(source, str) or not source.strip():
-        raise ApiError(422, "invalid", "Paste or upload the questions first")
     try:
-        quiz = parse_quiz(source)
+        quiz = _load(await _body(request))
     except QuizFormatError as exc:
         return _json({"ok": False, "errors": exc.errors})
-    return _json({"ok": True, **_summary(quiz)})
+    return _json({"ok": True, **_summary(quiz), "quiz": quiz_to_json(quiz)})
 
 
 @router.post("/rooms", dependencies=CSRF)
 async def create_room(request: Request, admin: Admin) -> JSONResponse:
-    quiz = _parse((await _body(request)).get("source"))
+    data = await _body(request)
     try:
-        room = _manager.create(quiz, admin.uid)
+        quiz = _load(data)
+    except QuizFormatError as exc:
+        raise ApiError(422, "quiz_format", "; ".join(exc.errors[:5])) from None
+    mode = data.get("mode", "live")
+    if mode not in ("live", "self"):
+        raise ApiError(422, "invalid", "mode must be live or self")
+    try:
+        room = _manager.create(quiz, admin.uid, mode=mode, study=bool(data.get("study")))
     except QuizError as exc:
         raise _err(exc) from None
-    return _json({"pin": room.pin, "hostKey": room.host_key, **_summary(quiz)}, 201)
+    return _json({"pin": room.pin, "hostKey": room.host_key, "mode": room.mode, **_summary(quiz)}, 201)
 
 
 @router.get("/rooms")
@@ -160,6 +167,7 @@ async def my_rooms(admin: Admin) -> JSONResponse:
             "pin": r.pin,
             "title": r.quiz.title,
             "phase": r.phase,
+            "mode": r.mode,
             "players": len(r.players),
             "hostKey": r.host_key,
             "created": r.created,
@@ -199,10 +207,15 @@ async def host_action(request: Request, pin: str) -> JSONResponse:
         if action == "close":
             _manager.close(room.pin)
             return _json({"closed": True})
+        index, seconds = data.get("index"), data.get("seconds")
         if action == "kick":
             room.kick(str(data.get("playerId", "")))
-        elif action in ("start", "reveal", "next", "end"):
-            room.act(action)
+        elif action in ("start", "reveal", "next", "goto", "extend", "lock", "unlock", "end"):
+            room.act(
+                action,
+                index=index if isinstance(index, int) and not isinstance(index, bool) else None,
+                seconds=seconds if isinstance(seconds, int) and not isinstance(seconds, bool) else None,
+            )
         else:
             raise ApiError(422, "invalid", "Unknown action")
     except QuizError as exc:
@@ -230,7 +243,8 @@ async def player_view(request: Request, pin: str) -> JSONResponse:
         player = room.player_by_token(request.headers.get("x-quiz-token"))
     except QuizError as exc:
         raise _err(exc) from None
-    await room.wait(_since(request), POLL_S)
+    until = player.deadline if room.mode == "self" and player.stage == "question" else None
+    await room.wait(_since(request), POLL_S, until=until)
     if _manager.rooms.get(room.pin) is not room:
         raise ApiError(404, "no_room", "The host closed this room")
     if player.id not in room.players:
@@ -251,3 +265,26 @@ async def answer(request: Request, pin: str) -> JSONResponse:
     except QuizError as exc:
         raise _err(exc) from None
     return _json(room.view(player=player))
+
+
+@router.post("/rooms/{pin}/advance", dependencies=CSRF)
+async def advance(request: Request, pin: str) -> JSONResponse:
+    room = _room(pin)
+    try:
+        player = room.player_by_token(request.headers.get("x-quiz-token"))
+        room.advance(player)
+    except QuizError as exc:
+        raise _err(exc) from None
+    return _json(room.view(player=player))
+
+
+@router.get("/rooms/{pin}/cards")
+async def cards(request: Request, pin: str) -> JSONResponse:
+    room = _room(pin)
+    try:
+        player = room.player_by_token(request.headers.get("x-quiz-token"))
+    except QuizError as exc:
+        raise _err(exc) from None
+    if not room.cards_open_to(player):
+        raise ApiError(403, "cards_closed", "Flashcards open once the quiz is over")
+    return _json({"title": room.quiz.title, "cards": room.cards()})
