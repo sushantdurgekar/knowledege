@@ -1,0 +1,59 @@
+/* Aurora for hub pages: the site's neutrals, radii and shadows. The collector inlines this file,
+   minified, in the span it injects into each served hub (collect-hubs.mjs auroraStyle()).
+   Each hub keeps its own --accent (its identity colour); only neutrals and shapes change.
+
+   The span sits before </head>, but most hubs keep their stylesheet in <body>, after it, so
+   every selector here carries one extra `html` to win over the hub's identical selector
+   while the hub's more specific variants (.btn.small, .opt.correct, ...) still win. */
+html:root {
+  --bg: #f6f5fb; --surface: #ffffff; --surface-2: #f1effa; --surface-3: #e7e3f6; --line: #e3def4;
+  --fg: #1a1533; --muted: #5f5980; --r: 14px;
+  --sh-shadow-1: 0 1px 2px rgba(35, 22, 90, .06), 0 1px 3px rgba(35, 22, 90, .08);
+  --sh-shadow-2: 0 4px 10px -2px rgba(35, 22, 90, .08), 0 2px 4px rgba(35, 22, 90, .05);
+  --sh-shadow-3: 0 18px 40px -12px rgba(35, 22, 90, .22), 0 6px 14px -6px rgba(35, 22, 90, .10);
+}
+@media (prefers-color-scheme: dark) {
+  html:root:not([data-theme="light"]) {
+    --bg: #0e0b1f; --surface: #171331; --surface-2: #1f1a3d; --surface-3: #29234d; --line: #2f2858;
+    --fg: #efecfd; --muted: #a9a3cc;
+    --sh-shadow-1: 0 1px 2px rgba(0, 0, 0, .4); --sh-shadow-2: 0 4px 12px -2px rgba(0, 0, 0, .45);
+    --sh-shadow-3: 0 20px 44px -12px rgba(0, 0, 0, .6);
+  }
+}
+html:root[data-theme="dark"] {
+  --bg: #0e0b1f; --surface: #171331; --surface-2: #1f1a3d; --surface-3: #29234d; --line: #2f2858;
+  --fg: #efecfd; --muted: #a9a3cc;
+  --sh-shadow-1: 0 1px 2px rgba(0, 0, 0, .4); --sh-shadow-2: 0 4px 12px -2px rgba(0, 0, 0, .45);
+  --sh-shadow-3: 0 20px 44px -12px rgba(0, 0, 0, .6);
+}
+html body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(1100px 380px at 0% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%),
+    radial-gradient(800px 340px at 100% 0%, rgba(11, 164, 150, .10), transparent 55%);
+  background-repeat: no-repeat;
+  background-size: 100% 900px;
+}
+html .top {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+}
+html nav.tabs button { border-radius: 999px; transition: background-color .15s, color .15s; }
+html nav.tabs button[aria-selected="true"] { box-shadow: var(--sh-shadow-2); }
+html .btn { border-radius: 999px; box-shadow: var(--sh-shadow-1); transition: transform .12s ease, box-shadow .15s; }
+html .btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--sh-shadow-2); }
+html .btn:active:not(:disabled) { transform: translateY(1px); }
+html .btn.primary { box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--accent) 70%, transparent), var(--sh-shadow-1); }
+html .panel, html .card, html .rail, html .mock-side { border-radius: 18px; box-shadow: var(--sh-shadow-1); }
+html a.card, html button.card { transition: transform .18s ease, box-shadow .18s ease; }
+html a.card:hover, html button.card:hover { transform: translateY(-2px); box-shadow: var(--sh-shadow-3); }
+html .chip, html .tag { border-radius: 999px; }
+html .opt { border-radius: 14px; transition: border-color .15s, box-shadow .15s; }
+html .opt:hover:not(:disabled) { box-shadow: var(--sh-shadow-2); }
+html .rail button { border-radius: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  html .btn, html a.card, html button.card, html .opt { transition: none; }
+  html .btn:hover:not(:disabled), html a.card:hover, html button.card:hover { transform: none; }
+}
+@media print { html body { background: none; } html .top { backdrop-filter: none; } }

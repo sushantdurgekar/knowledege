@@ -214,6 +214,12 @@ Playwright uses `PLAYWRIGHT_BROWSERS_PATH` when it is set, and `/opt/pw-browsers
 
 AWS compose with Postgres and its runbook are M4 ([architecture-spec.md §4.12](docs/architecture-spec.md)).
 
+**Live quiz (optional):**
+
+| Variable | Default | Notes |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | unset (AI drafts off) | Turns on **Draft with AI** in the quiz editor (Claude API, `claude-opus-5-5`). Set it as a Render environment variable; never commit it. A draft of ~8 questions costs a few cents; drafts are admin-only and limited to 3 a minute per admin |
+
 ## Deploy on Render
 
 The site runs as **one free Docker web service in Singapore**. CI deploys it through a deploy hook after all tests pass. Render never auto-deploys.
@@ -430,25 +436,28 @@ Optional per-hub overrides (code, cert name, blurb) go in `hubs.config.json` →
 
 Players join with a 6-digit PIN and a nickname (no account needed). Admins build and run quizzes in the **Studio** (`/quiz/host`).
 
-- **Library (server):** quizzes are saved on the server and shared by every admin. They are stored as `quiz-index` and `quiz:<id>` settings documents, with version checks so two admins cannot overwrite each other. Export as `.json` or `.txt` any time. The site **Backup** does not include them yet, so export the ones you care about. Quizzes from the old browser-only library can be uploaded once from the studio.
+- **Library (server):** quizzes are saved on the server and shared by every admin. They are stored as `quiz-index` and `quiz:<id>` settings documents, with version checks so two admins cannot overwrite each other. Export as `.json` or `.txt` any time. The site **Backup** includes the library and its pictures (inside the settings record); a restore in *merge* mode keeps quizzes that exist, *replace* makes the library exactly the backup's. Quizzes from the old browser-only library can be uploaded once from the studio.
+- **Pictures:** any item can carry one picture (JPEG, PNG, WebP or GIF). The browser scales it to at most 1280 px before upload; the server checks the type, keeps it under 400 KB and serves it at `/api/quiz/images/<id>` with a one-year cache.
+- **Draft with AI** (when `ANTHROPIC_API_KEY` is set): pick hub modules (their key points) or paste notes, choose how many and which types, and Claude drafts questions with explanations (and hints for advanced quizzes). Drafts are added after the current item for you to read and edit; nothing is hosted until you do. Every draft goes through the same checks as a hand-made question, and ones that fail are left out.
 - **New quiz:** a *quick* quiz (questions, polls, slides; fast to make) or an *advanced* quiz (adds confidence ratings, hints, teach-back and insights). You can also start from either example, import a file, or build from a **study hub**: the collector writes every hub's practice questions and key points to `quiz-bank.json` at build time. Pick modules and get the key points as slides plus the questions.
 - **Item types:** quiz (single answer), multiple choice, true/false, typed answer (text or `/regex/i`), match (drag pairs), put in order (drag), poll, slide, and *explain it* (teach-back: free text, not scored; the host sees every answer and players see a model answer).
 - **Advanced quizzes**, based on the learning-science playbook in `.claude/skills/pro-instructor/references/learning-science.md`:
   - **Confidence ratings:** players say "I'm sure" or "Not sure" before answering. They get a calibration grid at the end; *sure but wrong* is the quadrant to fix first.
   - **Hints:** up to 3 per question, each costing 25% of the points.
   - **Host insights:** questions listed hardest first, the most-picked wrong answer, average time, sure-but-wrong counts and hints used.
+- **Starting a room:** **Host live** or **Self-paced challenge** opens the options: live or self-paced, **teams** (2–6, players are balanced into the smallest team and teams rank by average score), flashcards first, and for self-paced challenges a **schedule** (opens and closes on its own, up to 14 days).
 - **Live mode:**
   - A run sheet opens any item next.
   - **+10 s** adds time, **Lock joining** closes the room to newcomers, and **End quiz now** finishes with the scores so far.
   - Results download as CSV.
 - **Presenter screen (for Teams or a projector):** the host opens **Present on another screen** and copies the presenter link (`/quiz/present/<pin>#k=<key>`). The link opens a full-screen, view-only display that follows the host live:
-  - the lobby, with the join address, a big PIN and the players
+  - the lobby, with the join address, a big PIN, a **QR code** to join and the players
   - each question with its options, a timer ring and how many have answered
   - after the reveal, the answer counts and the leaderboard
   - slides, presented large
   - the final podium
 
-  The presenter never receives an answer before the host reveals it; the server leaves solutions out. Its key cannot control the room.
+  It plays short synthesised **sounds** (a pop per join, ticks in the last five seconds, a chord on the reveal, a fanfare at the end) after the first click on the page, as browsers require, and the timer ring drains and pulses in the last seconds. **Sound on/off** is remembered in that browser. The presenter never receives an answer before the host reveals it; the server leaves solutions out. Its key cannot control the room.
 - **Public leaderboard:** `/quiz/board/<pin>`, or **Just watching?** on `/quiz`. Anyone can follow the standings and where the quiz is, playing or not. It updates after each reveal.
 - **Self-paced mode:** each player has their own pace and timer, with optional **flashcards first**. The host sees a progress dashboard and insights.
 - **After a quiz:**
@@ -456,9 +465,17 @@ Players join with a 6-digit PIN and a nickname (no account needed). Admins build
   - **Flashcards** review the whole quiz.
   - Every question goes into the player's **review deck** (`/quiz/review`). Spaced repetition uses SM-2 with Again/Hard/Good/Easy, the same scheme as the vault's `srs.py`. Missed questions are due at once.
   - The quiz is added to the player's quiz history.
+  - **My progress** (`/quiz/progress`): quizzes played, accuracy and its trend, study streak, cards due, accuracy per quiz (weakest first), the confidence grid from advanced quizzes, reviews due over the next two weeks and the questions missed most.
+- **To the Knowledge vault:** the review page exports the player's deck (with its schedule), and the host's final screen exports every question of the room (the ones most players missed are tagged `missed-by-room`), as JSON for the vault's deck manager:
+
+  ```bash
+  python .claude/skills/pro-instructor/scripts/srs.py --deck-file practice/srs/cards.jsonl add --json-file my-review-deck-vault-cards.json
+  ```
+
+  Each quiz becomes a deck `quiz-<title>`; ids are stable, so exporting again only adds new cards.
 - **Player data:** kept in the browser. For signed-in players it is also synced to their account through a virtual hub, `live-quiz`, in the progress API. Account export, delete, backups and the write quota therefore cover it.
 - **Scoring:** 50–100% of the points depending on speed. Multiple choice, match and order give partial credit; each hint used takes 25%; ties go to the faster player.
-- **Limits:** 250 players per room and 50 open rooms. Running rooms live in server memory, so a deploy or restart ends them; saved quizzes and player history are unaffected. Answers wake only the host, lookups are O(1), and the ranking is sorted once per change (`site/server/app/quiz/room.py`).
+- **Limits:** 250 players per room and 50 open rooms. Rooms run in server memory and are saved to the store (`quiz-rooms`, `quiz-room:<pin>`, gzip-compressed) when the phase or item changes, at most every 10 s while answers come in, and on shutdown, so a deploy or restart picks them up where they were, timers included. Answers wake only the host, lookups are O(1), and the ranking is sorted once per change (`site/server/app/quiz/room.py`).
 
 ## Look and feel
 
@@ -468,8 +485,10 @@ The site shell uses the **Aurora** theme (`site/client/src/styles/tokens.css` an
 - pill-shaped buttons that lift on hover and press down
 - a gradient hero, and a deep violet-navy dark mode
 
-Text colours pass WCAG AA in both themes. Hub pages keep their own look.
+Text colours pass WCAG AA in both themes.
+
+Hub pages get the same neutrals, radii and shadows: the collector inlines `site/bridge/src/aurora.css` (minified) at the start of the span it injects, so a hub keeps its own accent colour and still makes no extra request. Edit that file and re-collect to change it.
 
 ## Auto-deploy
 
-Pushes to `main` that touch the site deploy themselves: the `site` workflow calls the Render deploy hook stored in the GitHub secret `RENDER_DEPLOY_HOOK`, waits until `/api/version` reports the new commit, and runs a smoke check. Render's own Auto-Deploy stays off, so each push deploys once. While the repository variable `SITE_RUN_TESTS` is not `true`, the test jobs are skipped and the deploy starts right away.
+Pushes to `main` that touch the site deploy themselves: the `site` workflow calls the Render deploy hook stored in the GitHub secret `RENDER_DEPLOY_HOOK`, waits until `/api/version` reports the new commit, and runs a smoke check. Render's own Auto-Deploy stays off, so each push deploys once. The test jobs run first and a failure stops the deploy. To deploy without them in an emergency, set the repository variable `SITE_RUN_TESTS` to `false`.

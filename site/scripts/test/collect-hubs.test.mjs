@@ -6,6 +6,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import {
   LINT_RULES, cspHash, deriveSlug, extractHubMetadata, findInjectionPoint, injectionSpan, extractInlineScripts,
+  auroraStyle, minifyCss,
   lintText, readAccent, scanHtml, storageKeysFor,
 } from '../collect-hubs.mjs';
 import { LINT_RULE_IDS, globToRegExp, matchesAny, rejectedSegment } from '../lib/hub-paths.mjs';
@@ -221,7 +222,7 @@ describe('collect-hubs end to end (synthetic repo)', () => {
     const h = entry('python-l1-foundation');
     assert.equal(h.engine, 'v2');
     const served = fs.readFileSync(path.join(out, 'hubs/python-l1-foundation/index.html'), 'utf8');
-    const span = '<script src="/_sh/bridge.js" data-hub-id="python-l1" data-slug="python-l1-foundation" data-engine="v2"></script>';
+    const span = auroraStyle() + '<script src="/_sh/bridge.js" data-hub-id="python-l1" data-slug="python-l1-foundation" data-engine="v2"></script>';
     assert.ok(served.includes('<!-- <script>old()</script> -->\n' + span + '<script>\nwindow.HUB'));
     const r = report.hubs.find((x) => x.source === P.noHead);
     assert.equal(r.injected.anchor, 'script');
@@ -260,8 +261,9 @@ describe('collect-hubs end to end (synthetic repo)', () => {
       assert.equal(h.servedSha256, sha256Hex(served));
       assert.equal(h.source.endsWith(h.downloadName), true);
       if (served.equals(original)) continue; // the bare static page
-      // Built here from the contract text, independent of the collector's own template.
-      let span = `<script src="/_sh/bridge.js" data-hub-id="${h.id}" data-slug="${h.slug}" data-engine="${h.engine}"`;
+      // Built here from the contract text, independent of the collector's own template
+      // (the Aurora style is the repo's aurora.css, minified, and comes first).
+      let span = auroraStyle() + `<script src="/_sh/bridge.js" data-hub-id="${h.id}" data-slug="${h.slug}" data-engine="${h.engine}"`;
       span += h.engine === 'legacy'
         ? ` data-legacy-keys="${h.legacyKeys.join(',')}"></script><script src="/api/seed/${h.id}.js"></script>`
         : '></script>';
@@ -526,11 +528,18 @@ describe('collect-hubs units', () => {
     assert.deepEqual(extractInlineScripts(html).map((x) => x.code), ['a()', 'b()', 'c()', 'd()']);
   });
 
-  it('builds the exact spans from build-contracts.md §4', () => {
+  it('builds the exact spans from build-contracts.md §4 (the Aurora style first)', () => {
+    const style = auroraStyle();
+    assert.match(style, /^<style data-studyhubs="aurora">html:root\{--bg: #f6f5fb;/);
+    assert.ok(!style.includes('/*') && !style.includes('\n'), 'minified: no comments, one line');
     assert.equal(injectionSpan({ id: 'ai103', slug: 'ai-103', engine: 'v2' }),
-      '<script src="/_sh/bridge.js" data-hub-id="ai103" data-slug="ai-103" data-engine="v2"></script>');
+      style + '<script src="/_sh/bridge.js" data-hub-id="ai103" data-slug="ai-103" data-engine="v2"></script>');
     assert.equal(injectionSpan({ id: 'ai901', slug: 'ai-901', engine: 'legacy', legacyKeys: ['ai901hub.v1'] }),
-      '<script src="/_sh/bridge.js" data-hub-id="ai901" data-slug="ai-901" data-engine="legacy" data-legacy-keys="ai901hub.v1"></script><script src="/api/seed/ai901.js"></script>');
+      style + '<script src="/_sh/bridge.js" data-hub-id="ai901" data-slug="ai-901" data-engine="legacy" data-legacy-keys="ai901hub.v1"></script><script src="/api/seed/ai901.js"></script>');
+  });
+
+  it('minifies CSS deterministically', () => {
+    assert.equal(minifyCss('/* x */\n.a {\n  color: red ;\n  margin: 0 1px;\n}\n'), '.a{color: red;margin: 0 1px}');
   });
 
   it('hashes inline scripts the way browsers do', () => {

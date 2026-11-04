@@ -94,9 +94,14 @@ export function JoinPage() {
           <p>
             {due ? `${due} card(s) due now` : 'Nothing due right now'} · {cards} cards from your quizzes.
           </p>
-          <Link className="btn" to="/quiz/review">
-            {due ? 'Review now' : 'Open the deck'}
-          </Link>
+          <p className="actions">
+            <Link className="btn" to="/quiz/review">
+              {due ? 'Review now' : 'Open the deck'}
+            </Link>
+            <Link className="btn btn--quiet" to="/quiz/progress">
+              My progress
+            </Link>
+          </p>
         </div>
       )}
       {admin && (

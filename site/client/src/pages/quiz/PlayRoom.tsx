@@ -343,7 +343,7 @@ function Playing({ pin, token }: { pin: string; token: string }) {
           {saved && (
             <p className="quiz-saved">
               {saved.added > 0 ? `${saved.added} new card(s) added to your review deck. ` : ''}
-              <Link to="/quiz/review">{saved.due} due for review now</Link>
+              <Link to="/quiz/review">{saved.due} due for review now</Link> · <Link to="/quiz/progress">your progress</Link>
               {signedIn ? ' · synced to your account' : ' · saved in this browser (sign in to keep it everywhere)'}
             </p>
           )}

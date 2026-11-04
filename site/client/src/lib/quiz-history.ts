@@ -41,6 +41,8 @@ export interface HistoryEntry {
 export interface QuizState {
   deck: Record<string, DeckCard>;
   history: HistoryEntry[];
+  /** Local days (YYYY-MM-DD) with study activity -> how many reviews or quizzes. For streaks. */
+  days?: Record<string, number>;
 }
 
 const KEY = 'studyhubs.quiz.state';
@@ -68,6 +70,28 @@ function saveLocal(state: QuizState): void {
   } catch {
     /* storage full or blocked */
   }
+}
+
+const MAX_DAYS = 400;
+
+/** The local calendar day of a timestamp, as YYYY-MM-DD. */
+export function localDay(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Count one study action (a review or a quiz) on today's date. */
+export function markStudied(state: QuizState, now = Date.now()): QuizState {
+  const day = localDay(now);
+  const days = { ...(state.days ?? {}) };
+  days[day] = (days[day] ?? 0) + 1;
+  return { ...state, days: trimDays(days) };
+}
+
+function trimDays(days: Record<string, number>): Record<string, number> {
+  const keys = Object.keys(days).sort();
+  return keys.length > MAX_DAYS ? Object.fromEntries(keys.slice(-MAX_DAYS).map((k) => [k, days[k]!])) : days;
 }
 
 /** A stable id for a card: the same question from the same quiz is one card. */
@@ -135,7 +159,7 @@ export function recordQuiz(
       updated: now,
     };
   }
-  return trim({ deck, history: [entry, ...state.history] });
+  return markStudied(trim({ deck, history: [entry, ...state.history], days: state.days }), now);
 }
 
 function trim(state: QuizState): QuizState {
@@ -144,10 +168,12 @@ function trim(state: QuizState): QuizState {
     // Drop the most mature cards first (longest interval), they need review least.
     cards = cards.sort((a, b) => a.interval - b.interval).slice(0, MAX_CARDS);
   }
-  return {
+  const out: QuizState = {
     deck: Object.fromEntries(cards.map((c) => [c.id, c])),
     history: [...state.history].sort((a, b) => b.at - a.at).slice(0, MAX_HISTORY),
   };
+  if (state.days) out.days = trimDays(state.days);
+  return out;
 }
 
 /** Two devices' states: newest card wins, histories are united. */
@@ -159,7 +185,13 @@ export function merge(a: QuizState, b: QuizState): QuizState {
   }
   const history = [...a.history];
   for (const h of b.history) if (!history.some((x) => x.id === h.id)) history.push(h);
-  return trim({ deck, history });
+  // Study days: the larger count per day (each device counted its own actions).
+  let days: Record<string, number> | undefined;
+  if (a.days || b.days) {
+    days = { ...(a.days ?? {}) };
+    for (const [day, n] of Object.entries(b.days ?? {})) days[day] = Math.max(days[day] ?? 0, n);
+  }
+  return trim({ deck, history, ...(days ? { days } : {}) });
 }
 
 // -- account sync --------------------------------------------------------------------------

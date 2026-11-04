@@ -7,6 +7,7 @@
  * first and passes its environment to the workers, so every process sees the same list.
  */
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import { BASE_URL } from './env';
 
 export type Engine = 'v2' | 'legacy' | 'static';
@@ -102,14 +103,33 @@ export const progressKey = (hub: Pick<HubEntry, 'id'>): string => `studyhub.${hu
  * The exact span the collector inserts (build-contracts.md section 4). Attribute values are
  * HTML-escaped the same way the collector does it (ids, slugs and keys are plain today).
  */
+/** The collector's minifier (scripts/collect-hubs.mjs minifyCss), byte for byte. */
+function minifyCss(css: string): string {
+  return css
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([{};,])\s*/g, '$1')
+    .replace(/;}/g, '}')
+    .trim();
+}
+
+/** The Aurora <style> the collector puts first in every span (site/bridge/src/aurora.css). */
+export const AURORA_STYLE = `<style data-studyhubs="aurora">${minifyCss(
+  fs.readFileSync(new URL('../../../bridge/src/aurora.css', import.meta.url), 'utf8'),
+)}</style>`;
+
 export function injectionSpan(hub: HubEntry): string {
   const esc = (v: string) =>
     v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   if (hub.engine === 'legacy') {
     return (
+      AURORA_STYLE +
       `<script src="/_sh/bridge.js" data-hub-id="${esc(hub.id)}" data-slug="${esc(hub.slug)}" data-engine="legacy" ` +
       `data-legacy-keys="${esc(hub.legacyKeys.join(','))}"></script><script src="/api/seed/${esc(hub.id)}.js"></script>`
     );
   }
-  return `<script src="/_sh/bridge.js" data-hub-id="${esc(hub.id)}" data-slug="${esc(hub.slug)}" data-engine="${esc(hub.engine)}"></script>`;
+  return (
+    AURORA_STYLE +
+    `<script src="/_sh/bridge.js" data-hub-id="${esc(hub.id)}" data-slug="${esc(hub.slug)}" data-engine="${esc(hub.engine)}"></script>`
+  );
 }

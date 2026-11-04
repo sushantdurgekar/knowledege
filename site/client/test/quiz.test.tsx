@@ -1,10 +1,16 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { parentOf } from '../src/components/SiteNav';
 import { blankDoc, blankItem, fromServer, retype, toServer, toText, type QuizDoc } from '../src/lib/quiz-doc';
 import { Sortable } from '../src/pages/quiz/Sortable';
+import { bodyText, ME_SIGNED_IN, mockServer, setHint, USER } from './api-mock';
+import { renderApp } from './render';
+import type { DeckCard, HistoryEntry } from '../src/lib/quiz-history';
+import { progressOf, streakOf } from '../src/lib/progress-stats';
+import { cueFor, setSoundPreference, soundPreference, type RoomSnap } from '../src/lib/sound';
+import { deckToVault, roomToVault, vaultId } from '../src/lib/vault-export';
 
 describe('quiz builder model', () => {
   const doc: QuizDoc = {
@@ -80,7 +86,7 @@ describe('Sortable', () => {
 
 import { checkLocally, type ReviewItem } from '../src/lib/quiz';
 import { fromBank } from '../src/lib/quiz-doc';
-import { cardId, dueCards, emptyState, merge, recordQuiz, schedule } from '../src/lib/quiz-history';
+import { cardId, dueCards, emptyState, localDay, markStudied, merge, recordQuiz, schedule } from '../src/lib/quiz-history';
 
 describe('review deck (SM-2) and history', () => {
   const cards = [
@@ -151,5 +157,208 @@ describe('replay checking and hub import', () => {
     expect('hints' in sent.items[0]!).toBe(false);
     const adv = toServer({ ...doc, advanced: true }) as { items: Record<string, unknown>[] };
     expect(adv.items[0]!.hints).toEqual(['h']);
+  });
+});
+
+describe('AI drafts in the editor', () => {
+  const ADMIN = { ...USER, email: 'admin@studyhubs.test', provider: 'google.com', admin: true };
+  const SAVED = {
+    doc: { title: 'Networking', items: [{ type: 'single', text: 'Port?', options: [{ text: '80', correct: false }, { text: '443', correct: true }] }] },
+    version: 1,
+  };
+  const BANK = { hubs: [{ id: 'net', title: 'Networking Hub', code: null, modules: [{ id: 'm1', title: 'TLS', questions: 2, keys: 3 }] }] };
+  const DRAFT = {
+    items: [{ type: 'truefalse', text: 'TLS 1.3 removed RSA key exchange.', answer: true, explain: 'Only (EC)DHE remains.' }],
+    dropped: 1,
+    model: 'test',
+    usage: { input: 10, output: 20 },
+  };
+
+  afterEach(() => setHint(null));
+
+  it('hides the button when the server has no API key', async () => {
+    setHint(ADMIN.publicId);
+    mockServer({
+      'GET /api/me': { ...ME_SIGNED_IN, user: ADMIN },
+      'GET /api/quiz/library/abc123': SAVED,
+      'GET /api/quiz/ai': { enabled: false, model: 'test' },
+    });
+    renderApp('/quiz/host/edit/abc123');
+    expect(await screen.findByLabelText('Quiz title')).toHaveValue('Networking');
+    expect(screen.queryByRole('button', { name: 'Draft with AI' })).not.toBeInTheDocument();
+  });
+
+  it('drafts from hub modules, avoids existing questions and adds the drafts after the current item', async () => {
+    setHint(ADMIN.publicId);
+    const server = mockServer({
+      'GET /api/me': { ...ME_SIGNED_IN, user: ADMIN },
+      'GET /api/quiz/library/abc123': SAVED,
+      'PUT /api/quiz/library/abc123': { version: 2 },
+      'GET /api/quiz/ai': { enabled: true, model: 'test' },
+      'GET /api/quiz/bank': BANK,
+      'POST /api/quiz/ai/draft': DRAFT,
+    });
+    const { user } = renderApp('/quiz/host/edit/abc123');
+    await user.click(await screen.findByRole('button', { name: 'Draft with AI' }));
+    const dialog = screen.getByRole('dialog', { name: 'Draft questions with AI' });
+    expect(within(dialog).getByRole('button', { name: 'Draft 8 questions' })).toBeDisabled();
+    await user.selectOptions(await within(dialog).findByLabelText('Hub'), 'net');
+    await user.click(within(dialog).getByRole('checkbox', { name: /TLS/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Draft 8 questions' }));
+
+    expect(await screen.findByText(/Added 1 drafted question after item 1 \(1 failed the checks/)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const sent = JSON.parse(await bodyText(server.to('POST /api/quiz/ai/draft')[0]!));
+    expect(sent).toMatchObject({ hubId: 'net', moduleIds: ['m1'], count: 8, kinds: ['single', 'multi', 'truefalse'], avoid: ['Port?'] });
+    // The draft is now item 2 and selected for review.
+    expect(screen.getByLabelText('Question')).toHaveValue('TLS 1.3 removed RSA key exchange.');
+  });
+});
+
+describe('Knowledge vault export', () => {
+  const card = (over: Partial<DeckCard>): DeckCard => ({
+    id: 'x',
+    quiz: 'Networking 101',
+    type: 'single',
+    front: 'Which port does HTTPS use?',
+    back: '443',
+    options: ['80', '443'],
+    explain: 'TLS on the web port 443.',
+    ef: 2.36,
+    interval: 6,
+    reps: 2,
+    due: new Date(2026, 10, 10, 9).getTime(),
+    lapses: 1,
+    updated: 0,
+    ...over,
+  });
+
+  it('writes srs.py cards with the schedule, options on the front and the explanation on the back', () => {
+    const [out, ...rest] = deckToVault([card({}), card({ type: 'slide', front: 'Intro' })]);
+    expect(rest).toHaveLength(0); // slides are not review cards
+    expect(out).toEqual({
+      id: vaultId('Networking 101', 'Which port does HTTPS use?'),
+      deck: 'quiz-networking-101',
+      track: 'technical',
+      front: 'Which port does HTTPS use?\nA. 80\nB. 443',
+      back: '443\n\nTLS on the web port 443.',
+      tags: ['study-hubs', 'live-quiz', 'missed'],
+      source: 'Study Hubs quiz: Networking 101',
+      ef: 2.36,
+      interval: 6,
+      reps: 2,
+      lapses: 1,
+      due: '2026-11-10',
+    });
+    expect(out!.id).toMatch(/^quiz-networking-101-[a-z0-9]+$/);
+  });
+
+  it('tags the questions most of the room missed', () => {
+    const cards = [
+      { index: 1, type: 'truefalse' as const, front: 'TLS is L4', back: 'False' },
+      { index: 2, type: 'text' as const, front: 'Capital of France?', back: 'Paris' },
+    ];
+    const stats = new Map([
+      [1, { answered: 10, correct: 3 }],
+      [2, { answered: 10, correct: 9 }],
+    ]);
+    const out = roomToVault('Net quiz', cards, stats);
+    expect(out.map((c) => c.tags)).toEqual([
+      ['study-hubs', 'live-quiz', 'missed-by-room'],
+      ['study-hubs', 'live-quiz'],
+    ]);
+    expect(out[0]).not.toHaveProperty('due'); // new to the vault: srs.py makes it due today
+  });
+});
+
+describe('progress page numbers', () => {
+  const NOW = new Date(2026, 10, 4, 15).getTime(); // 4 Nov 2026, 15:00 local
+  const DAYMS = 86_400_000;
+  const entry = (i: number, correct: number, title = 'Net'): HistoryEntry => ({
+    id: `h${i}`,
+    title,
+    at: NOW - (20 - i) * DAYMS,
+    score: 0,
+    rank: 1,
+    players: 3,
+    correct,
+    total: 10,
+  });
+  const deckCard = (id: string, due: number, lapses = 0): DeckCard => ({
+    id, quiz: 'Net', type: 'single', front: id, back: 'x', ef: 2.5, interval: 1, reps: 1, due, lapses, updated: 0,
+  });
+
+  it('computes accuracy, the last-5 delta, weakest quizzes and calibration', () => {
+    const history = [
+      ...Array.from({ length: 5 }, (_, i) => entry(i, 5)),
+      ...Array.from({ length: 5 }, (_, i) => entry(i + 5, 8)),
+      { ...entry(10, 2, 'Crypto'), calibration: { sureRight: 1, sureWrong: 3, unsureRight: 2, unsureWrong: 4 } },
+    ];
+    const p = progressOf({ deck: {}, history }, NOW);
+    expect(p.played).toBe(11);
+    expect(p.accuracy).toBe(Math.round((67 / 110) * 100));
+    // newest five: 8,8,8,8,2 (=68%) against the five before: 8,5,5,5,5 (=56%)
+    expect(p.recentDelta).toBe(12);
+    expect(p.areas.map((a) => [a.title, a.pct])).toEqual([['Crypto', 20], ['Net', 65]]);
+    expect(p.calibration).toEqual({ sureRight: 1, sureWrong: 3, unsureRight: 2, unsureWrong: 4 });
+    expect(p.trend.at(-1)!.title).toBe('Crypto');
+  });
+
+  it('puts overdue cards on today and counts the next two weeks by local day', () => {
+    const deck = Object.fromEntries(
+      [
+        deckCard('late', NOW - 3 * DAYMS),
+        deckCard('tonight', NOW + 2 * 3_600_000),
+        deckCard('tomorrow', NOW + DAYMS, 2),
+        deckCard('far', NOW + 30 * DAYMS),
+      ].map((c) => [c.id, c]),
+    );
+    const p = progressOf({ deck, history: [] }, NOW);
+    expect(p.forecast.slice(0, 3).map((d) => d.count)).toEqual([2, 1, 0]);
+    expect(p.forecast.reduce((n, d) => n + d.count, 0)).toBe(3);
+    expect(p.dueNow).toBe(1);
+    expect(p.hardest.map((c) => c.id)).toEqual(['tomorrow']);
+  });
+
+  it('keeps a streak alive until tonight and merges study days by the larger count', () => {
+    const day = (offset: number) => localDay(NOW + offset * DAYMS);
+    expect(streakOf({ [day(-1)]: 2, [day(-2)]: 1, [day(-4)]: 5 }, NOW)).toEqual({ streak: 2, today: false });
+    expect(streakOf({ [day(0)]: 1, [day(-1)]: 1 }, NOW)).toEqual({ streak: 2, today: true });
+    const studied = markStudied({ deck: {}, history: [] }, NOW);
+    expect(studied.days).toEqual({ [day(0)]: 1 });
+    const merged = merge({ deck: {}, history: [], days: { [day(0)]: 3 } }, { deck: {}, history: [], days: { [day(0)]: 1, [day(-1)]: 2 } });
+    expect(merged.days).toEqual({ [day(0)]: 3, [day(-1)]: 2 });
+  });
+});
+
+describe('presenter sounds', () => {
+  const snap = (over: Partial<RoomSnap>): RoomSnap => ({ phase: 'lobby', self: false, players: 0, done: 0, seconds: 0, ...over });
+
+  it('cues joins, the question start, the last five seconds, the reveal and the finale', () => {
+    expect(cueFor(null, snap({ players: 30 }))).toBeNull(); // what the screen finds on load is silent
+    expect(cueFor(snap({ players: 1 }), snap({ players: 2 }))).toBe('join');
+    const q = snap({ phase: 'question', index: 0, players: 2, seconds: 20 });
+    expect(cueFor(snap({ players: 2 }), q)).toBe('start');
+    expect(cueFor(q, { ...q, seconds: 19 })).toBeNull();
+    expect(cueFor({ ...q, seconds: 6 }, { ...q, seconds: 5 })).toBe('tick');
+    expect(cueFor({ ...q, seconds: 4 }, { ...q, seconds: 3 })).toBe('tock');
+    expect(cueFor({ ...q, seconds: 1 }, { ...q, seconds: 0 })).toBeNull();
+    expect(cueFor(q, { ...q, phase: 'reveal' })).toBe('reveal');
+    expect(cueFor({ ...q, phase: 'reveal' }, { ...q, index: 1 })).toBe('start');
+    expect(cueFor({ ...q, phase: 'reveal' }, { ...q, phase: 'finished' })).toBe('finale');
+    expect(cueFor({ ...q, phase: 'finished' }, { ...q, phase: 'finished' })).toBeNull();
+  });
+
+  it('in a self-paced room pops when a player finishes, without ticks', () => {
+    const s = snap({ phase: 'question', self: true, players: 5, done: 1, seconds: 9 });
+    expect(cueFor(s, { ...s, done: 2 })).toBe('join');
+    expect(cueFor({ ...s, seconds: 5 }, { ...s, seconds: 4 })).toBeNull();
+  });
+
+  it('remembers mute in this browser', () => {
+    setSoundPreference(false);
+    expect(soundPreference()).toBe(false);
+    setSoundPreference(true);
+    expect(soundPreference()).toBe(true);
   });
 });

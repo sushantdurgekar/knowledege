@@ -20,3 +20,10 @@ cryptography==50.0.1
 psycopg[binary,pool]==3.3.6
 psycopg-binary==3.3.6
 psycopg-pool==3.3.3
+# Quiz studio: AI-drafted questions (app/quiz/ai.py; used only when ANTHROPIC_API_KEY is set).
+anthropic==1.8.0
+# Its newer dependencies, held at the last releases before this lock's cutoff (2026-09-27).
+httpx2==2.13.1
+httpcore2==2.13.1
+jiter==0.17.0
+truststore==0.10.4

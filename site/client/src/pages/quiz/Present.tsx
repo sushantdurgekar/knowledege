@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router';
 import { BusyLine } from '../../components/forms';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { presenterKey, TYPE_LABELS, useCountdown, useRoomPoll, type RoomView } from '../../lib/quiz';
+import { cueFor, play, setSoundPreference, soundPreference, unlockAudio, type RoomSnap } from '../../lib/sound';
 import { Leaderboard, LETTERS, QuestionImage, SlideBody, Solution } from './Answering';
 import { QrCode } from './QrCode';
 import { TeamBoard, teamOf } from './Teams';
@@ -34,12 +35,40 @@ function Presenting({ pin, presentKey }: { pin: string; presentKey: string }) {
   });
   const seconds = useCountdown(view);
   const [full, setFull] = useState(false);
+  const [sound, setSound] = useState(soundPreference);
+  const [unlocked, setUnlocked] = useState(false);
+  usePresenterSounds(view, seconds, sound && unlocked);
 
   useEffect(() => {
     const onChange = () => setFull(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onChange);
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
+
+  // Browsers allow audio only after a click or key press on the page.
+  useEffect(() => {
+    if (unlocked) return;
+    const unlock = () => {
+      unlockAudio();
+      setUnlocked(true);
+    };
+    document.addEventListener('pointerdown', unlock, { once: true });
+    document.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      document.removeEventListener('pointerdown', unlock);
+      document.removeEventListener('keydown', unlock);
+    };
+  }, [unlocked]);
+
+  const toggleSound = () => {
+    const next = !sound;
+    setSound(next);
+    setSoundPreference(next);
+    if (next) {
+      unlockAudio();
+      setUnlocked(true);
+    }
+  };
 
   if (fatal) {
     return (
@@ -61,6 +90,10 @@ function Presenting({ pin, presentKey }: { pin: string; presentKey: string }) {
         </span>
         <span className="present__tools">
           {offline && <span className="present__offline">Reconnecting…</span>}
+          {sound && !unlocked && <span className="present__hint">Click anywhere to allow sound</span>}
+          <button type="button" className="present__btn" aria-pressed={sound} onClick={toggleSound}>
+            <span aria-hidden="true">{sound ? '🔊' : '🔇'}</span> {sound ? 'Sound on' : 'Sound off'}
+          </button>
           <button
             type="button"
             className="present__btn"
@@ -160,12 +193,19 @@ function Stage({ view, seconds, pin, host }: { view: RoomView; seconds: number; 
             {q.index + 1} / {view.total} · {TYPE_LABELS[q.type]}
           </span>
           {open && q.timeLimit > 0 && (
-            <span className={`present__timer${seconds <= 5 ? ' is-low' : ''}`} style={{ ['--p' as string]: `${(seconds / q.timeLimit) * 100}%` }}>
-              <span>{seconds}</span>
+            <span
+              className={`present__timer${seconds <= 5 ? ' is-low' : ''}`}
+              style={{ ['--p' as string]: `${(seconds / q.timeLimit) * 100}%` }}
+              role="timer"
+              aria-label={`${seconds} seconds left`}
+            >
+              <span key={seconds}>{seconds}</span>
             </span>
           )}
         </div>
-        <h2 className="present__q">{q.text}</h2>
+        <h2 key={q.index} className="present__q">
+          {q.text}
+        </h2>
         <QuestionImage id={q.image} big alt={`Picture for the question: ${q.text}`} />
         {open ? (
           <>
@@ -217,4 +257,32 @@ function Stage({ view, seconds, pin, host }: { view: RoomView; seconds: number; 
       )}
     </div>
   );
+}
+
+/** Plays the cue for each change in the room (lib/sound.ts cueFor) while sound is on. */
+function usePresenterSounds(view: RoomView | null, seconds: number, on: boolean) {
+  const prev = useRef<RoomSnap | null>(null);
+  const lastPop = useRef(0);
+  useEffect(() => {
+    if (!view) return;
+    const before = prev.current;
+    const now: RoomSnap = {
+      phase: view.phase,
+      self: view.mode === 'self',
+      index: view.question?.index,
+      players: view.playerCount,
+      done: view.doneCount ?? 0,
+      seconds,
+    };
+    prev.current = now;
+    if (!on) return;
+    const cue = cueFor(before, now);
+    if (cue === 'join') {
+      // A burst of joins is one pop, not a drum roll.
+      const t = performance.now();
+      if (t - lastPop.current < 150) return;
+      lastPop.current = t;
+    }
+    if (cue) play(cue);
+  }, [view, seconds, on]);
 }

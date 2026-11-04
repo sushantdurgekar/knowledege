@@ -4,8 +4,10 @@ import { BusyLine, FormMessage } from '../../components/forms';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { isApiProblem } from '../../lib/api';
 import {
+  aiStatus,
   apiMessage,
   createRoom,
+  type DraftResult,
   getSaved,
   parseQuiz,
   putSaved,
@@ -30,6 +32,7 @@ import {
   type QuizDoc,
 } from '../../lib/quiz-doc';
 import { AdminGate } from './AdminGate';
+import { AiDraft } from './AiDraft';
 import { QuestionImage } from './Answering';
 import { HostOptions } from './HostOptions';
 import { Sortable } from './Sortable';
@@ -55,6 +58,9 @@ function EditorPage() {
   const [busy, setBusy] = useState(false);
   const [starting, setStarting] = useState<Mode | null>(null);
   const [saved, setSaved] = useState<'saved' | 'pending' | 'saving' | 'error'>('saved');
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [drafting, setDrafting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   useDocumentTitle(doc ? `Edit: ${doc.title}` : 'Edit quiz');
 
   useEffect(() => {
@@ -65,6 +71,13 @@ function EditorPage() {
       })
       .catch((e) => setLoadError(isApiProblem(e) && e.status === 404 ? 'not_found' : apiMessage(e)));
   }, [id]);
+
+  // The AI button shows only when the server has an API key.
+  useEffect(() => {
+    aiStatus()
+      .then((r) => setAiEnabled(r.enabled))
+      .catch(() => setAiEnabled(false));
+  }, []);
 
   const save = async (current: QuizDoc): Promise<boolean> => {
     setSaved('saving');
@@ -115,6 +128,7 @@ function EditorPage() {
     setDoc((d) => (d ? { ...d, ...change } : d));
     setSaved('pending');
     setChecked(null);
+    setNotice(null);
   };
   const setItems = (items: DocItem[]) => update({ items });
   const item = doc.items[Math.min(selected, doc.items.length - 1)];
@@ -125,6 +139,16 @@ function EditorPage() {
     items.splice(selected + 1, 0, blankItem(type));
     setItems(items);
     setSelected(Math.min(selected + 1, items.length - 1));
+  };
+  const addDrafts = (result: DraftResult) => {
+    const drafted = fromServer({ items: result.items }).items;
+    const items = [...doc.items];
+    items.splice(selected + 1, 0, ...drafted);
+    setItems(items);
+    setSelected(selected + 1);
+    setDrafting(false);
+    const dropped = result.dropped ? ` (${result.dropped} failed the checks and were left out)` : '';
+    setNotice(`Added ${drafted.length} drafted question${drafted.length === 1 ? '' : 's'} after item ${selected + 1}${dropped}. Read each one before you host: AI drafts can be wrong.`);
   };
   const remove = () => {
     if (doc.items.length <= 1) return;
@@ -221,7 +245,11 @@ function EditorPage() {
         <button type="button" className="btn" disabled={busy} onClick={() => setStarting('self')}>
           Self-paced challenge
         </button>
-        
+        {aiEnabled && (
+          <button type="button" className="btn ai-draft__btn" disabled={busy} onClick={() => setDrafting(true)}>
+            Draft with AI
+          </button>
+        )}
         <span className="editor__spacer" />
         <button type="button" className="btn btn--small" disabled={busy} onClick={check}>
           Check
@@ -246,6 +274,15 @@ function EditorPage() {
           }}
         />
       )}
+      {drafting && (
+        <AiDraft
+          advanced={!!doc.advanced}
+          avoid={doc.items.filter((i) => i.type !== 'slide' && i.text).map((i) => i.text)}
+          onAdd={addDrafts}
+          onCancel={() => setDrafting(false)}
+        />
+      )}
+      {notice && <FormMessage tone="success">{notice}</FormMessage>}
       {checked && <FormMessage tone="success">{checked}</FormMessage>}
       {errors.length > 0 && (
         <div className="form-message form-message--error" role="alert">
