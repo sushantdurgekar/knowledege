@@ -91,7 +91,10 @@ def test_parse_known() -> None:
     assert v.parse_known("legacy:9", ("legacy",)) == {"legacy": 9}
 
 
-@pytest.mark.parametrize("value", ["main", "main:", "main:x", "main:-1", "bogus:1", "main:1.5", "x" * 300])
+@pytest.mark.parametrize(
+    "value",
+    ["main", "main:", "main:x", "main:-1", "bogus:1", "main:1.5", "x" * 300, "main:\u00b2", "main:\u0661"],
+)
 def test_parse_known_rejects(value: str) -> None:
     with pytest.raises(ApiError) as caught:
         v.parse_known(value, ("main",))

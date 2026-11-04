@@ -27,3 +27,11 @@ export function withNext(path: string, next: string): string {
 export function isHubPath(next: string): boolean {
   return next.startsWith('/h/');
 }
+
+/**
+ * `/signin?next=<next>&reauth=1`: where a `403 reauth_required` sends the user (build-contracts
+ * §17-18). A signed-in visitor sees the sign-in forms there instead of "You're signed in".
+ */
+export function reauthPath(next: string): string {
+  return `/signin?${new URLSearchParams({ next: safeNext(next), reauth: '1' }).toString()}`;
+}

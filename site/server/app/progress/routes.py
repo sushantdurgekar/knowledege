@@ -11,7 +11,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.auth import ratelimit
 from app.auth.csrf import csrf_protect
-from app.auth.deps import get_viewer, require_user
+from app.auth.deps import flag_clear_cookies, get_viewer, require_user
 from app.errors import ApiError
 from app.progress.validate import (
     HubBatch,
@@ -26,8 +26,11 @@ from app.progress.validate import (
 )
 from app.runtime import Runtime, get_runtime
 from app.state import get_state
+from app.store.base import AccountDeleted
 
 NO_STORE = {"Cache-Control": "no-store"}
+# The publicId of the account a hub page belongs to (the bridge sends it with every request).
+ACCOUNT_HEADER = "x-studyhubs-account"
 
 router = APIRouter()
 
@@ -39,6 +42,19 @@ def maintenance_error(runtime: Runtime) -> ApiError:
         runtime.maintenance()["message"] or "Maintenance in progress",
         retry_after=300,
     )
+
+
+def check_account(request: Request, public_id: str | None) -> None:
+    """409 `account_changed` when the page says it belongs to another account than the session.
+
+    A hub page keeps the account it booted with. If another account signs in on this browser
+    (another tab), the page's in-memory progress must never be written under, or mixed with,
+    the new account's: the cookie alone cannot tell, the page's claim can. Requests without
+    the header (the site shell's reconcile) are not affected.
+    """
+    claimed = request.headers.get(ACCOUNT_HEADER)
+    if claimed is not None and claimed != public_id:
+        raise ApiError(409, "account_changed", "This page belongs to another account; reload it")
 
 
 def rate_limit(runtime: Runtime, key: str, *rules: ratelimit.Rule) -> None:
@@ -79,6 +95,7 @@ async def get_progress(request: Request, hub_id: str, known: str | None = None) 
     viewer = await get_viewer(request)
     if viewer.identity is None:
         return JSONResponse({"signedIn": False}, headers=NO_STORE)
+    check_account(request, viewer.public_id)
     if runtime.maintenance_mode == "full":
         raise maintenance_error(runtime)
     uid = viewer.identity.uid
@@ -103,6 +120,9 @@ async def get_progress(request: Request, hub_id: str, known: str | None = None) 
         "policy": runtime.guard.policy(uid).to_json(),
         "maintenance": runtime.maintenance(),
     }
+    upcoming = runtime.upcoming()
+    if upcoming is not None:  # a maintenance window starts within 10 minutes
+        body["upcoming"] = upcoming
     return JSONResponse(body, headers=NO_STORE)
 
 
@@ -111,6 +131,7 @@ async def sync(request: Request) -> JSONResponse:
     runtime = get_runtime(request)
     settings = runtime.settings
     viewer = await require_user(request)
+    check_account(request, viewer.public_id)
     if runtime.maintenance_mode in ("read_only", "full"):
         raise maintenance_error(runtime)
     uid = viewer.uid
@@ -142,5 +163,16 @@ async def sync(request: Request) -> JSONResponse:
         return parse_sync(data, catalog, limits)
 
     batches = await run_in_threadpool(prepare)
-    results = await run_in_threadpool(runtime.progress.sync, uid, batches, now_ms)
-    return JSONResponse({"results": results, "policy": runtime.guard.policy(uid).to_json()}, headers=NO_STORE)
+    try:
+        results = await run_in_threadpool(runtime.progress.sync, uid, batches, now_ms)
+    except AccountDeleted:
+        # The account was deleted from another device (its cookie here is still valid): sign
+        # this session out, so the bridge goes browser-only instead of recreating its data.
+        runtime.deleted_uids.add(uid)  # this instance now refuses the cookie without a read
+        flag_clear_cookies(request)
+        raise ApiError(401, "unauthenticated", "This account was deleted") from None
+    body: dict[str, Any] = {"results": results, "policy": runtime.guard.policy(uid).to_json()}
+    upcoming = runtime.upcoming()
+    if upcoming is not None:
+        body["upcoming"] = upcoming
+    return JSONResponse(body, headers=NO_STORE)

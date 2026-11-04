@@ -86,8 +86,8 @@ export type OutboxEvent =
   | { type: "skew" }
   | { type: "maintenance"; message: string }
   | { type: "too_large" }
-  /** 401/403/invalid: sync is off for this page. */
-  | { type: "stopped"; code: HubErrorCode };
+  /** 401/403/409/invalid: sync is off for this page; `reason` is the server's code. */
+  | { type: "stopped"; code: HubErrorCode; reason: string };
 
 export interface OutboxDeps {
   hubId: string;
@@ -358,7 +358,7 @@ export function createOutbox(d: OutboxDeps): Outbox {
     }
     if (hubCode !== "unavailable") {
       stop(hubCode);
-      emit({ type: "stopped", code: hubCode });
+      emit({ type: "stopped", code: hubCode, reason: code });
       return;
     }
     backoff = backoff ? Math.min(backoff * 2, MAX_BACKOFF_MS) : MIN_BACKOFF_MS;

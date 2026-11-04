@@ -4,6 +4,12 @@
 export const BASE_URL = (process.env.BASE_URL || 'http://127.0.0.1:10000').replace(/\/+$/, '');
 export const ORIGIN = new URL(BASE_URL).origin;
 
+/**
+ * The store the server must run on (`memory` | `postgres`), from scripts/dev-e2e.sh; the M3
+ * restore spec checks it through /api/admin/stats. Unset: whatever the server runs.
+ */
+export const E2E_STORE: string | null = process.env.E2E_STORE || null;
+
 /** True for a server on this machine (dev, CI). A deployed site sits behind Render's edge proxy. */
 export const IS_LOCAL = ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(BASE_URL).hostname);
 

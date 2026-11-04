@@ -58,6 +58,7 @@ export const USER = {
   photo: null,
   provider: 'password',
   emailVerified: true,
+  admin: false,
 };
 
 export const ME_SIGNED_IN = {
@@ -91,6 +92,7 @@ export function mockServer(overrides: Record<string, Route | undefined> = {}) {
     'POST /api/auth/session': { user: USER },
     'POST /api/auth/logout': () => new Response(null, { status: 204 }),
     'POST /api/sync': syncHandler(),
+    'GET /api/me/progress': { hubs: [], joined: null },
     ...overrides,
   };
   const calls: Call[] = [];

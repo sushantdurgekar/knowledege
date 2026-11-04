@@ -62,6 +62,10 @@ test('S8 closing the tab right after an answer still delivers it (keepalive)', a
 
   // pagehide: the outbox sends what is pending with fetch(keepalive). A closed page's
   // requests are no longer reported to the test, so the server is the witness.
+  // watchPage's route (font stub) makes Playwright pause every request of this page until the
+  // test process lets it go; a keepalive request paused while its page closes is dropped by
+  // the harness (no browser does that), which made this test fail now and then under load.
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
   await page.close();
   await expect.poll(() => storedUpd(request, userA.uid, hub, 'main'), { message: 'the answer reached the server' }).toBe(upd);
 });

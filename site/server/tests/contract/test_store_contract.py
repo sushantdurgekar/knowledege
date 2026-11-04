@@ -12,7 +12,17 @@ from typing import Any
 
 import pytest
 
-from app.store.base import Conflict, PartIn, PartOut, PartResult, Unavailable, UserRecord, progress_doc_id
+from app.store.base import (
+    AccountDeleted,
+    Conflict,
+    PartIn,
+    PartOut,
+    PartResult,
+    Unavailable,
+    UserRecord,
+    progress_doc_id,
+    tombstone_hash,
+)
 from tests.contract.conftest import Adapter
 
 T = 1_790_000_000_000
@@ -40,6 +50,19 @@ def raw_doc(adapter: Adapter, uid: str, hub: str) -> dict[str, Any] | None:
         for name, stored in doc.parts.items():
             out[f"u_{name}"], out[f"p_{name}"], out[f"n_{name}"] = stored.upd, stored.gz, stored.raw_len
         return out
+    if adapter.kind == "postgres":
+        with adapter.store._pool.connection() as conn:  # type: ignore[attr-defined]
+            rows = conn.execute(
+                "SELECT part, upd, data, raw_len, done FROM progress WHERE uid = %s AND hub_id = %s",
+                (uid, hub),
+            ).fetchall()
+        if not rows:
+            return None
+        doc: dict[str, Any] = {"uid": uid, "hub": hub, "done": rows[0][4]}
+        assert len({r[4] for r in rows}) == 1  # done is a hub value, equal on every row
+        for name, upd, data, raw_len, _ in rows:
+            doc[f"u_{name}"], doc[f"p_{name}"], doc[f"n_{name}"] = upd, bytes(data), raw_len
+        return doc
     snap = adapter.store.db.collection("progress").document(progress_doc_id(uid, hub)).get()  # type: ignore[attr-defined]
     return snap.to_dict() if snap.exists else None
 
@@ -145,7 +168,8 @@ def _delta(adapter: Adapter, before: tuple[int, int], wire_before: tuple[int, in
 @pytest.mark.parametrize(
     ("operation", "expected"),
     [
-        ("sync 3 parts of one hub", (1, 1)),
+        ("sync 3 parts of one hub", (2, 1)),  # a hub's first write also reads the tombstone
+        ("sync newer parts", (1, 1)),  # the document exists: no tombstone read
         ("sync duplicates", (1, 0)),
         ("GET unchanged", (1, 0)),
         ("GET changed", (2, 0)),
@@ -159,7 +183,9 @@ def test_billing_per_operation(adapter: Adapter, uid: str, operation: str, expec
     if operation != "sync 3 parts of one hub":
         store.put_parts(uid, "ai103", parts, NOW_MS)
     before, wire_before = adapter.counts(), adapter.wire_counts()
-    if operation.startswith("sync"):
+    if operation == "sync newer parts":
+        store.put_parts(uid, "ai103", {"main": part(T + 4), "cards": part(T + 5)}, NOW_MS)
+    elif operation.startswith("sync"):
         store.put_parts(uid, "ai103", parts, NOW_MS)
     elif operation == "GET unchanged":
         store.get_hub(uid, "ai103", {"main": T + 1, "mocks": T + 2, "cards": T + 3})
@@ -172,6 +198,25 @@ def test_billing_per_operation(adapter: Adapter, uid: str, operation: str, expec
     counted, wire = _delta(adapter, before, wire_before)
     assert counted == expected
     assert wire == expected  # the wire agrees with what the meter is told
+
+
+def test_put_parts_refuses_a_deleted_account(adapter: Adapter, uid: str) -> None:
+    """A deleted account's other device still holds a valid cookie: its next sync must not
+    recreate documents. The tombstone is read only on a hub's first write."""
+    store = adapter.store
+    store.put_parts(uid, "ai103", {"main": part(T)}, NOW_MS)
+    store.put_tombstone(tombstone_hash(uid), datetime.now(UTC))  # DELETE /api/me: step 1
+    store.delete_user(uid)  # steps 2-3
+    for hub in ("ai103", "ai901"):
+        before, wire_before = adapter.counts(), adapter.wire_counts()
+        with pytest.raises(AccountDeleted):
+            store.put_parts(uid, hub, {"main": part(T + 1), "cards": part(T + 2)}, NOW_MS)
+        counted, wire = _delta(adapter, before, wire_before)
+        assert counted == wire == (2, 0)  # stamps + tombstone, nothing written
+        assert raw_doc(adapter, uid, hub) is None
+    assert store.list_hubs(uid) == []
+    other = "other-" + uid  # nobody else is affected
+    assert store.put_parts(other, "ai103", {"main": part(T)}, NOW_MS)["main"].status == "accepted"
 
 
 # -- concurrency ----------------------------------------------------------------------------
@@ -375,22 +420,6 @@ def test_settings_optimistic_version(adapter: Adapter) -> None:
     assert store.get_setting(key) == ({"tz": "y"}, 3)  # a put replaces the whole value
 
 
-def test_ping_and_later_methods(adapter: Adapter, uid: str) -> None:
-    store = adapter.store
-    store.ping()
-    assert store.kind == adapter.kind
-    for call in (
-        lambda: store.list_hubs(uid),
-        lambda: store.delete_user(uid),
-        lambda: store.is_tombstoned([]),
-        lambda: store.iter_users(),
-        lambda: store.iter_progress(),
-        lambda: store.iter_tombstones(),
-        lambda: store.restore_batch([], mode="merge", job_id="j", checkpoint={}),
-        lambda: store.wipe_for_replace("j"),
-        lambda: store.get_job("j"),
-        lambda: store.put_job(None),
-        lambda: store.claim_job("j", "h", set()),
-    ):
-        with pytest.raises(NotImplementedError, match="M2/M3"):
-            call()
+def test_ping(adapter: Adapter) -> None:
+    adapter.store.ping()
+    assert adapter.store.kind == adapter.kind

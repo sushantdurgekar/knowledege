@@ -388,7 +388,7 @@ describe("error mapping (spec §4.5)", () => {
     const { ob, w } = await failWith(401, { code: "unauthenticated" });
     expect(w.error.code).toBe("revoked");
     expect(ob.dead()).toBe("revoked");
-    expect(events).toContainEqual({ type: "stopped", code: "revoked" });
+    expect(events).toContainEqual({ type: "stopped", code: "revoked", reason: "unauthenticated" });
     await expect(ob.set("main", main(T0 + 1))).rejects.toMatchObject({ code: "revoked" });
     expect(localStorage.getItem(LKEY)).not.toBeNull();
   });

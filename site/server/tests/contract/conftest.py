@@ -1,6 +1,9 @@
 """One store contract suite, run on every adapter (build-contracts.md section 11).
 
 - `memory`: always.
+- `postgres`: against DATABASE_URL_TEST (a throwaway database: `sh site/scripts/dev_pg.sh`
+  starts one), skipped when it is unset, a failure when REQUIRE_PG=1. Every `fresh`
+  adapter gets a schema of its own, dropped afterwards.
 - `firestore`: against the Firestore emulator, only when FIRESTORE_EMULATOR_HOST is
   set (skipped cleanly otherwise). Start one with
       java -jar cloud-firestore-emulator-*.jar --host 127.0.0.1 --port 8080
@@ -29,6 +32,9 @@ from app.store.base import Store
 from app.store.memory import MemoryStore
 
 EMULATOR = os.environ.get("FIRESTORE_EMULATOR_HOST", "").strip()
+PG_URL = os.environ.get("DATABASE_URL_TEST", "").strip()
+REQUIRE_PG = os.environ.get("REQUIRE_PG", "").strip() == "1"
+STORES = ["memory", "postgres", "firestore"]
 PROJECT = "demo-studyhubs-contract"
 RESET_AT = datetime(2026, 10, 13, 7, tzinfo=UTC)
 
@@ -55,6 +61,37 @@ class CountingApi:
         with self._lock:
             self.writes += len(self._field(request, "writes"))
         return self._inner.commit(request=request, **kwargs)
+
+    def run_query(self, request: Any = None, **kwargs: Any) -> Any:
+        """A query bills 1 read per document returned, and 1 when it returns none."""
+        responses = self._inner.run_query(request=request, **kwargs)
+        api = self
+
+        class Counted:
+            def __init__(self) -> None:
+                self.docs = 0
+                self.done = False
+
+            def __iter__(self) -> Counted:
+                return self
+
+            def __next__(self) -> Any:
+                try:
+                    response = next(responses)
+                except StopIteration:
+                    if not self.done:
+                        self.done = True
+                        with api._lock:
+                            api.reads += max(1, self.docs)
+                    raise
+                if response._pb.HasField("document"):
+                    self.docs += 1
+                return response
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(responses, name)
+
+        return Counted()
 
     def run_aggregation_query(self, request: Any = None, **kwargs: Any) -> Any:
         with self._lock:
@@ -85,8 +122,8 @@ class Adapter:
         return self.api.snapshot() if self.api is not None else self.counts()
 
 
-def _wipe_emulator() -> None:
-    url = f"http://{EMULATOR}/emulator/v1/projects/{PROJECT}/databases/(default)/documents"
+def _wipe_emulator(project: str = PROJECT) -> None:
+    url = f"http://{EMULATOR}/emulator/v1/projects/{project}/databases/(default)/documents"
     request = urllib.request.Request(url, method="DELETE")
     with urllib.request.urlopen(request, timeout=10):  # noqa: S310
         pass
@@ -100,11 +137,11 @@ def emulator_ready() -> bool:
     return True
 
 
-def make_firestore() -> Adapter:
+def make_firestore(project: str = PROJECT) -> Adapter:
     from app.store.firestore import FirestoreStore
 
     store = FirestoreStore(
-        project_id=PROJECT,
+        project_id=project,
         reset_at=lambda: RESET_AT,
         emulator_host=EMULATOR,
     )
@@ -115,10 +152,51 @@ def make_firestore() -> Adapter:
     return Adapter("firestore", store, api)
 
 
-@pytest.fixture(params=["memory", "firestore"])
+def need_pg() -> str:
+    if not PG_URL:
+        if REQUIRE_PG:
+            pytest.fail("REQUIRE_PG=1 but DATABASE_URL_TEST is not set")
+        pytest.skip("DATABASE_URL_TEST is not set")
+    return PG_URL
+
+
+def make_postgres(schema: str) -> Adapter:
+    from app.store.postgres import PostgresStore
+
+    store = PostgresStore(need_pg(), pool_max=8, allow_reset=True, schema=schema)
+    store.wait_ready()
+    return Adapter("postgres", store)
+
+
+def drop_schema(schema: str) -> None:
+    import psycopg
+
+    with psycopg.connect(PG_URL, autocommit=True) as conn:
+        conn.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
+
+
+@pytest.fixture(scope="session")
+def pg_shared() -> Iterator[str]:
+    """The schema the non-fresh postgres adapters share (emptied once per run)."""
+    schema = "contract_shared"
+    if PG_URL:
+        drop_schema(schema)
+    yield schema
+    if PG_URL:
+        drop_schema(schema)
+
+
+@pytest.fixture(params=STORES)
 def adapter(request: pytest.FixtureRequest, emulator_ready: bool) -> Iterator[Adapter]:
     if request.param == "memory":
         yield Adapter("memory", MemoryStore())
+        return
+    if request.param == "postgres":
+        made = make_postgres(request.getfixturevalue("pg_shared"))
+        try:
+            yield made
+        finally:
+            made.store.close()
         return
     if not emulator_ready:
         pytest.skip("FIRESTORE_EMULATOR_HOST is not set")
@@ -127,6 +205,36 @@ def adapter(request: pytest.FixtureRequest, emulator_ready: bool) -> Iterator[Ad
         yield made
     finally:
         made.store.close()
+
+
+@pytest.fixture(params=STORES)
+def fresh(request: pytest.FixtureRequest, emulator_ready: bool) -> Iterator[Adapter]:
+    """An adapter on an empty database of its own (scans see only this test's documents).
+
+    On the emulator every project id is a separate database, so a new demo- project
+    isolates the test from the rest of the run; it is wiped afterwards.
+    """
+    if request.param == "memory":
+        yield Adapter("memory", MemoryStore())
+        return
+    if request.param == "postgres":
+        schema = "fresh_" + uuid.uuid4().hex[:12]
+        made = make_postgres(schema)
+        try:
+            yield made
+        finally:
+            made.store.close()
+            drop_schema(schema)
+        return
+    if not emulator_ready:
+        pytest.skip("FIRESTORE_EMULATOR_HOST is not set")
+    project = "demo-m2-" + uuid.uuid4().hex[:12]
+    made = make_firestore(project)
+    try:
+        yield made
+    finally:
+        made.store.close()
+        _wipe_emulator(project)
 
 
 @pytest.fixture

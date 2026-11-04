@@ -23,7 +23,8 @@ def test_sign_in_sync_and_read_back(adapter: Adapter, make_client: Any, uid: str
     results = response.json()["results"]
     assert {p: r["status"] for p, r in results["ai103"].items()} == dict.fromkeys(payloads, "accepted")
     reads, writes = adapter.wire_counts()
-    assert (reads - before[0], writes - before[1]) == (2, 2)  # 1 read + 1 write per hub
+    # 1 read + 1 write per hub, +1 read each: a hub's first write reads the tombstone
+    assert (reads - before[0], writes - before[1]) == (4, 2)
 
     body = client.get("/api/progress/ai103").json()
     assert body["parts"] == payloads
@@ -37,3 +38,24 @@ def test_sign_in_sync_and_read_back(adapter: Adapter, make_client: Any, uid: str
     }
     seed = client.get("/api/seed/ai901.js")
     assert '"legacy":{"upd":' in seed.text
+
+
+def test_test_routes_reset_and_dump_the_store(adapter: Adapter, make_client: Any, uid: str) -> None:
+    """`/api/test/reset` and `/api/test/store` work on both adapters (e2e on the emulator)."""
+    client = make_client(store=adapter.store, clock=FixedClock(NOW_MS))
+    test_headers = {"X-StudyHubs": "1"}
+    sign_in(client, uid)
+    payload = main(done=2)
+    assert sync(client, {"ai103": {"main": payload}}).status_code == 200
+
+    dump = client.get("/api/test/store", headers=test_headers).json()
+    mine = [
+        (p["hub"], p["part"], p["upd"], p["data"], p["done"]) for p in dump["progress"] if p["uid"] == uid
+    ]
+    assert mine == [("ai103", "main", T, payload, 2)]
+    assert uid in [u["uid"] for u in dump["users"]]
+    assert dump["meter"]["writes"] >= 1
+
+    assert client.post("/api/test/reset", headers=test_headers).status_code == 204
+    after = client.get("/api/test/store", headers=test_headers).json()
+    assert (after["users"], after["progress"], after["meter"]["writes"]) == ([], [], 0)

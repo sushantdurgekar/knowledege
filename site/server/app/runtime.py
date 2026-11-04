@@ -1,5 +1,6 @@
-"""The M1 services one process shares: clock, store, auth, quota meter and guard,
-rate limits, and the test-only fault queue.
+"""The services one process shares: clock, store, auth, quota meter and guard, rate
+limits and the test-only fault queue (M1); site settings with the maintenance mode,
+the job scheduler and backup tickets (M2).
 
 `create_app` builds one `Runtime` per app (tests can inject a store, an
 authenticator or a clock) and routes reach it through `get_runtime(request)`.
@@ -14,21 +15,21 @@ from typing import Any
 
 from starlette.requests import Request
 
+from app.admin.backups import Backups
+from app.admin.site import SiteSettingsCache
 from app.auth.fake import FakeAuthenticator
 from app.auth.identity import Authenticator
 from app.auth.ratelimit import RateLimiter
 from app.clock import Clock
 from app.config import Settings
+from app.jobs.scheduler import Scheduler
 from app.progress.service import ProgressService
 from app.quota.guard import Guard
 from app.quota.meter import Meter
+from app.restore.runner import DRAIN_S, RestoreService
+from app.restore.uploads import Uploads
 from app.store.base import Store
 from app.store.factory import make_store
-
-MAINTENANCE_MESSAGES = {
-    "read_only": "Sync is paused for maintenance. Your progress is saved in this browser.",
-    "full": "Study Hubs is under maintenance. Your progress is saved in this browser.",
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,8 +86,15 @@ class Runtime:
     auth: Authenticator
     meter: Meter
     guard: Guard
+    site: SiteSettingsCache
     limiter: RateLimiter = field(default_factory=RateLimiter)
     faults: Faults = field(default_factory=Faults)
+    # uids whose account was deleted by this process: their sessions count as signed out.
+    deleted_uids: set[str] = field(default_factory=set)
+    # Set by create_app (M2): the maintenance-window scheduler and the backup tickets.
+    scheduler: Any = None
+    backups: Any = None
+    restore: Any = None  # M3: RestoreService (uploads, validation, restore jobs)
 
     @cached_property
     def progress(self) -> ProgressService:
@@ -94,11 +102,15 @@ class Runtime:
 
     @property
     def maintenance_mode(self) -> str:
-        return self.settings.maintenance_force or "off"
+        """The effective mode: MAINTENANCE_FORCE, else the stored setting (at most 60 s old)."""
+        return self.site.mode()
 
     def maintenance(self) -> dict[str, Any]:
-        mode = self.maintenance_mode
-        return {"mode": mode, "message": MAINTENANCE_MESSAGES.get(mode), "until": None}
+        return self.site.maintenance().to_json()
+
+    def upcoming(self) -> dict[str, Any] | None:
+        """The maintenance window starting within 10 minutes, for /api/me and progress."""
+        return self.scheduler.upcoming() if self.scheduler is not None else None
 
 
 def build_runtime(
@@ -111,14 +123,35 @@ def build_runtime(
     clock = clock or Clock()
     store = store or make_store(settings, clock)
     meter = Meter(store, clock, tz=settings.quota_tz, persist_enabled=store.kind != "memory")
-    return Runtime(
+    site = SiteSettingsCache(store, settings)
+    runtime = Runtime(
         settings=settings,
         clock=clock,
         store=store,
         auth=auth or make_authenticator(settings, clock),
         meter=meter,
         guard=Guard(settings, meter, clock),
+        site=site,
     )
+    runtime.scheduler = Scheduler(store, site, clock, grace_min=settings.job_grace_min, quiet=meter.quiet)
+    runtime.backups = Backups(clock)
+    uploads = Uploads(settings.data_dir, max_bytes=settings.max_backup_bytes)
+    uploads.recover()
+    runtime.restore = RestoreService(
+        store,
+        site,
+        settings,
+        clock,
+        uploads,
+        holder=runtime.scheduler.holder,
+        writes_today=lambda: meter.today()["writes"],
+        reads_today=lambda: meter.today()["reads"],
+        batch_delay_s=settings.restore_batch_delay_ms / 1000,
+        drain_s=0.0 if settings.is_test else DRAIN_S,
+    )
+    runtime.scheduler.restores = runtime.restore
+    runtime.restore.on_change = runtime.scheduler.invalidate
+    return runtime
 
 
 def get_runtime(request: Request) -> Runtime:

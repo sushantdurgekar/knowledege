@@ -192,6 +192,120 @@
       "fieldPath": "maintenance",
       "ttl": false,
       "indexes": []
+    },
+    {
+      "collectionGroup": "meta",
+      "fieldPath": "log",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "meta",
+      "fieldPath": "storage",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "tombstones",
+      "fieldPath": "at",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "id",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "kind",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "mode",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "startAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "endAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "tz",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "durationMin",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "message",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "createdBy",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "holder",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "claimedAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "prev",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "startedAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "finishedAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "error",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "jobs",
+      "fieldPath": "updatedAt",
+      "ttl": false,
+      "indexes": []
     }
   ]
 }

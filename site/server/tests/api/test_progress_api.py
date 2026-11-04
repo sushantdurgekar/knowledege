@@ -226,13 +226,17 @@ def test_sync_cost_one_read_one_write_per_hub(api: TestClient, user: dict[str, A
     before = store(api).ops.snapshot()
     response = sync(api, {"ai103": {"main": main(), "mocks": mocks(), "cards": cards()}})
     assert response.status_code == 200
-    assert ops_delta(api, before) == (1, 1)  # 3 parts of one hub = 1 read + 1 write
+    # 3 parts of one hub = 1 read + 1 write, +1 read (the tombstone) on the hub's first write
+    assert ops_delta(api, before) == (2, 1)
     before = store(api).ops.snapshot()
     sync(api, {"ai103": {"main": main(), "mocks": mocks(), "cards": cards()}})
     assert ops_delta(api, before) == (1, 0)  # all duplicates: no write
     before = store(api).ops.snapshot()
-    sync(api, {"ai103": {"main": main(upd=T + 1)}, "ai901": {"legacy": legacy()}})
-    assert ops_delta(api, before) == (2, 2)
+    sync(api, {"ai103": {"main": main(upd=T + 1)}})
+    assert ops_delta(api, before) == (1, 1)  # the document exists: no tombstone read
+    before = store(api).ops.snapshot()
+    sync(api, {"ai103": {"main": main(upd=T + 2)}, "ai901": {"legacy": legacy()}})
+    assert ops_delta(api, before) == (3, 2)  # ai901 is a first write
 
 
 def test_sync_rejects_bad_parts_but_keeps_good_ones(api: TestClient, user: dict[str, Any]) -> None:
@@ -482,3 +486,35 @@ def test_seed_failures_are_503_js(api: TestClient, make_client: Any, user: dict[
 def test_new_session_token_for_other_user(api: TestClient) -> None:
     token = make_fake_token("x1", emailVerified=True)
     assert api.post("/api/auth/session", json={"idToken": token}, headers=API).status_code == 200
+
+
+# -- the page's account (X-StudyHubs-Account) --------------------------------------------
+
+
+def test_page_of_another_account_is_refused(api: TestClient) -> None:
+    """A hub page that booted as alice keeps sending alice's publicId. After bob signs in on
+    the same browser (the cookie is now bob's), nothing that page sends lands under bob, and
+    it reads nothing of bob's."""
+    alice = sign_in(api, "alice")["publicId"]
+    sync(api, {"ai103": {"main": main(upd=T)}})
+    bob = sign_in(api, "bob")["publicId"]
+    page_of_alice = {"X-StudyHubs-Account": alice}
+
+    late = sync(api, {"ai103": {"main": main(upd=T + 5)}}, headers=page_of_alice)
+    assert late.status_code == 409
+    assert late.json()["code"] == "account_changed"
+    read = api.get("/api/progress/ai103", headers=page_of_alice)
+    assert (read.status_code, read.json()["code"]) == (409, "account_changed")
+    assert [p for p in store(api).dump()["progress"] if p["uid"] == "bob"] == []
+
+    # bob's own pages (and the site shell, which sends no header) work as before.
+    mine = {"X-StudyHubs-Account": bob}
+    assert sync(api, {"ai103": {"main": main(upd=T + 6)}}, headers=mine).status_code == 200
+    assert api.get("/api/progress/ai103", headers=mine).json()["parts"]["main"]["upd"] == T + 6
+    assert sync(api, {"ai103": {"cards": cards()}}).status_code == 200
+
+
+def test_account_header_does_not_change_anonymous_answers(api: TestClient) -> None:
+    claimed = {"X-StudyHubs-Account": "pub_someone"}
+    assert api.get("/api/progress/ai103", headers=claimed).json() == {"signedIn": False}
+    assert sync(api, {"ai103": {"main": main()}}, headers=claimed).status_code == 401

@@ -1,7 +1,8 @@
 # Study Hubs client (React shell)
 
-The site's React shell: the catalog at `/`, the M1 account pages (`/signin`, `/signup`, `/reset`,
-`/verify`, `/signout`, `/account`), privacy and 404 pages. `/admin/*` is an M2 placeholder.
+The site's React shell: the catalog at `/`, the account pages (`/signin`, `/signup`, `/reset`,
+`/verify`, `/signout`, `/account` with export, delete and browser storage), the admin pages
+(`/admin/*`, a lazy chunk), privacy and 404 pages.
 Hubs themselves are **not** part of this app. They are full pages served by the backend at
 `/h/<slug>`, so the catalog links to them with plain `<a href>`, not router links.
 Interfaces are fixed in [`../docs/build-contracts.md`](../docs/build-contracts.md) §7.
@@ -33,8 +34,11 @@ Budgets, checked by `scripts/check-budgets.mjs` after every build (gzip level 9)
 |---|---|
 | Main JS: the entry script plus every chunk `index.html` preloads | 90 KB |
 | CSS | 10 KB |
+| Firebase chunk (`assets/firebase-*.js`) | 80 KB |
+| Admin chunk (`assets/Admin-*.js` plus the lazy chunks it imports) | 40 KB |
 
-The main JS is about 82 KB gz today (budget 90 KB; the lazy Firebase chunk is about 29 KB of its 80 KB), and React DOM is most of it. Load new pages
+The main JS is about 82 KB gz today (budget 90 KB; the lazy Firebase chunk is about 29 KB of its 80 KB,
+the admin chunk about 11 KB of its 40 KB), and React DOM is most of it. Load new pages
 (sign-in, account, admin, Firebase) lazily with `React.lazy` so the main chunk stays
 within budget.
 
@@ -46,14 +50,17 @@ src/App.tsx                route table (keep in step with SPA_ROUTES in ../serve
 src/components/            Layout (header, main, footer), AccountNav (user menu), Dialog, forms, HubCard, FilterBar
 src/context/me.tsx         MeProvider: /api/me when the sh_hint cookie is present
 src/pages/                 Catalog, SignIn (+ fake-mode test form), SignUp, ResetPassword, Verify, SignOut,
-                           Account, ComingSoon (M2 admin placeholder), Privacy, NotFound
+                           Account (profile, server vs local progress, storage, export, delete), Privacy, NotFound
+src/pages/admin/           lazy /admin chunk: Overview, Backup, Maintenance & schedule, Settings tabs (+ admin.css)
 src/hooks/                 useCatalog, useStorageVersion, useDocumentTitle, useAuth, useSignInCompletion
 src/lib/api.ts             the only door to /api (X-StudyHubs: 1, same-origin credentials, ApiProblem)
 src/lib/auth-kit.ts        lazy loader of src/lib/firebase-auth.ts (Firebase chunk; never in fake mode)
 src/lib/signin-flow.ts     session → account-switch dialog → reconcileUp → owner → broadcast → next
 src/lib/signout-flow.ts    flush broadcast → reconcileUp → (dirty choices) → logout → wipe → broadcast
 src/lib/reconcile.ts       reconcileUp: POST /api/sync batches ≤ 1 MiB / 25 hubs, gzip via CompressionStream
-src/lib/next.ts            ?next= validation
+src/lib/next.ts            ?next= validation, reauthPath (/signin?next=…&reauth=1 after 403 reauth_required)
+src/lib/account.ts         /api/me/progress, export download, DELETE /api/me, local storage use per hub
+src/lib/admin-api.ts       the /api/admin calls, meter tones, time formatting, passphrase generator
 src/lib/catalog.ts         catalog types, parsing, accent sanitising, filter/search/group
 src/lib/local-progress.ts  read-only progress summary from the hubs' localStorage keys
 src/styles/tokens.css      the hub design tokens, copied verbatim (light, dark, data-theme)

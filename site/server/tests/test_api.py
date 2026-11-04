@@ -105,7 +105,7 @@ def test_unknown_api_is_json_404(client: TestClient, method: str, url: str) -> N
     ("method", "url", "allow"),
     [
         ("POST", "/api/version", "GET"),
-        ("DELETE", "/api/me", "GET"),
+        ("POST", "/api/me/progress", "GET"),
         ("HEAD", "/api/me", "GET"),
         ("PUT", "/api/seed/ai901.js", "GET"),
         ("POST", "/healthz", "GET, HEAD"),

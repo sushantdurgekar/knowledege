@@ -8,6 +8,10 @@ FIREBASE_PROJECT_ID, FIREBASE_WEB_CONFIG, GOOGLE_APPLICATION_CREDENTIALS /
 FIREBASE_SERVICE_ACCOUNT_B64, FIRESTORE_EMULATOR_HOST, TRUSTED_PROXY_HOPS, SYNC_TIERS,
 QUOTA_*, MAX_*, CLOCK_SKEW_MS, USER_WRITES_PER_DAY and MAINTENANCE_FORCE.
 
+M2 variables (build-contracts.md section 17): ADMIN_EMAILS, ADMIN_TZ, DATA_DIR,
+JOB_GRACE_MIN and MAX_BACKUP_BYTES, plus HOST_EGRESS_MONTH (spec section 4.9, the
+Render egress allowance shown on the admin page).
+
 Every field is optional with a safe development default. Production refuses the
 test-only modes (AUTH_MODE=fake, STORE=memory), a missing or short SECRET_KEY and
 missing Firebase settings, so a misconfigured deploy fails at startup instead of
@@ -34,7 +38,7 @@ AppEnv = Literal["development", "test", "production"]
 APP_ENVS: tuple[AppEnv, ...] = ("development", "test", "production")
 LOG_LEVELS = ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG")
 AUTH_MODES = ("firebase", "fake")
-STORES = ("firestore", "memory")  # "postgres" arrives in M3
+STORES = ("firestore", "memory", "postgres")
 MAINTENANCE_MODES = ("read_only", "full")
 
 # Development/test only. Production refuses to start without its own SECRET_KEY.
@@ -43,6 +47,8 @@ MIN_SECRET_BYTES = 32
 # Firebase session cookies live 5 minutes to 2 weeks.
 MAX_SESSION_DAYS = 14
 DEFAULT_SYNC_TIERS = "0.5:120:0:60,0.8:300:60:120,1.0:900:60:300"
+# STORE=postgres: no daily write quota, so one tier with a 30 s flush (build-contracts.md section 23).
+POSTGRES_SYNC_TIERS = "1:30:0:30"
 WEB_CONFIG_KEYS = ("apiKey", "authDomain", "projectId", "appId")
 
 
@@ -177,7 +183,8 @@ class Settings:
     firestore_emulator_host: str | None = None
     trusted_proxy_hops: int | None = None
     # M1: sync tuning and quota
-    sync_tiers: tuple[SyncTier, ...] = field(default_factory=lambda: parse_sync_tiers(DEFAULT_SYNC_TIERS))
+    # None = the default for STORE (DEFAULT_SYNC_TIERS, or POSTGRES_SYNC_TIERS for postgres).
+    sync_tiers: tuple[SyncTier, ...] | None = None
     quota_enforce: bool | None = None
     quota_tz: str = "America/Los_Angeles"
     quota_reads: int = 50_000
@@ -191,6 +198,18 @@ class Settings:
     clock_skew_ms: int = 900_000
     user_writes_per_day: int = 300
     maintenance_force: str | None = None
+    # M2: admin, jobs and backups
+    admin_emails: tuple[str, ...] = ()
+    admin_tz: str = "Asia/Kolkata"
+    data_dir: Path = Path("/tmp/studyhubs")  # noqa: S108 - scratch files only
+    job_grace_min: int = 60
+    max_backup_bytes: int = 2_147_483_648
+    host_egress_month: int = 5_000_000_000
+    # M3: the Postgres store
+    database_url: str | None = field(default=None, repr=False)
+    pg_pool_max: int = 5
+    # APP_ENV=test only: a pause after each restore batch (the crash-and-resume test).
+    restore_batch_delay_ms: int = 0
 
     def __post_init__(self) -> None:
         if self.app_env not in APP_ENVS:
@@ -216,8 +235,6 @@ class Settings:
         if auth_mode not in AUTH_MODES:
             raise ConfigError(f"AUTH_MODE must be one of {', '.join(AUTH_MODES)}, got {self.auth_mode!r}")
         store = (self.store or ("firestore" if prod else "memory")).lower()
-        if store == "postgres":
-            raise ConfigError("STORE=postgres is not available yet (it arrives in M3)")
         if store not in STORES:
             raise ConfigError(f"STORE must be one of {', '.join(STORES)}, got {self.store!r}")
         set_(self, "auth_mode", auth_mode)
@@ -256,6 +273,15 @@ class Settings:
             decode_service_account_b64(self.firebase_service_account_b64)
         if prod and self.firestore_emulator_host:
             raise ConfigError("FIRESTORE_EMULATOR_HOST must not be set when APP_ENV=production")
+        if store == "firestore" and not self.firestore_emulator_host:
+            # Real data: fake sign-in (any uid) and the test-only routes never touch it, in any env.
+            if auth_mode == "fake":
+                raise ConfigError(
+                    "AUTH_MODE=fake works only with STORE=memory or the Firestore emulator "
+                    "(set AUTH_MODE=firebase, or FIRESTORE_EMULATOR_HOST)"
+                )
+            if self.is_test:
+                raise ConfigError("APP_ENV=test with STORE=firestore needs FIRESTORE_EMULATOR_HOST")
 
         hops = self.trusted_proxy_hops
         if hops is None:
@@ -264,10 +290,24 @@ class Settings:
             raise ConfigError(f"TRUSTED_PROXY_HOPS must be 0-10, got {hops}")
         set_(self, "trusted_proxy_hops", hops)
 
-        if not self.sync_tiers:
+        postgres = store == "postgres"
+        if postgres:
+            url = (self.database_url or "").strip()
+            if not url.startswith(("postgresql://", "postgres://")):
+                raise ConfigError("STORE=postgres needs DATABASE_URL (postgresql://...)")
+            set_(self, "database_url", url)
+        if not 1 <= self.pg_pool_max <= 100:
+            raise ConfigError(f"PG_POOL_MAX must be 1-100, got {self.pg_pool_max}")
+        tiers = self.sync_tiers
+        if tiers is None:
+            tiers = parse_sync_tiers(POSTGRES_SYNC_TIERS if postgres else DEFAULT_SYNC_TIERS)
+        if not tiers:
             raise ConfigError("SYNC_TIERS needs at least one tier")
-        set_(self, "sync_tiers", tuple(self.sync_tiers))
-        set_(self, "quota_enforce", True if self.quota_enforce is None else bool(self.quota_enforce))
+        set_(self, "sync_tiers", tuple(tiers))
+        enforce = self.quota_enforce
+        if enforce is None:
+            enforce = not postgres  # no Firestore quota behind a Postgres store
+        set_(self, "quota_enforce", bool(enforce))
         try:
             ZoneInfo(self.quota_tz)
         except (ZoneInfoNotFoundError, ValueError):
@@ -293,6 +333,34 @@ class Settings:
         if mode is not None and mode not in MAINTENANCE_MODES:
             raise ConfigError(f"MAINTENANCE_FORCE must be read_only or full, got {self.maintenance_force!r}")
         set_(self, "maintenance_force", mode)
+        self._check_m2()
+
+    def _check_m2(self) -> None:
+        set_ = object.__setattr__
+        emails = tuple(sorted({e.strip().lower() for e in self.admin_emails if e and e.strip()}))
+        for email in emails:
+            if "@" not in email or any(c.isspace() for c in email):
+                raise ConfigError(f"ADMIN_EMAILS has an entry that is not an email address: {email!r}")
+        set_(self, "admin_emails", emails)
+        try:
+            ZoneInfo(self.admin_tz)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ConfigError(f"ADMIN_TZ is not a known time zone: {self.admin_tz!r}") from None
+        set_(self, "data_dir", Path(self.data_dir))
+        if not 1 <= self.job_grace_min <= 24 * 60:
+            raise ConfigError(f"JOB_GRACE_MIN must be 1-1440, got {self.job_grace_min}")
+        if self.max_backup_bytes < 1_048_576:
+            raise ConfigError("MAX_BACKUP_BYTES must be at least 1 MiB")
+        if self.host_egress_month < 1:
+            raise ConfigError("HOST_EGRESS_MONTH must be positive")
+        if self.restore_batch_delay_ms and not self.is_test:
+            raise ConfigError("RESTORE_BATCH_DELAY_MS is a test setting (APP_ENV=test only)")
+        if not 0 <= self.restore_batch_delay_ms <= 60_000:
+            raise ConfigError("RESTORE_BATCH_DELAY_MS must be 0-60000")
+
+    def is_admin_email(self, email: str | None) -> bool:
+        """ADMIN_EMAILS membership, case-insensitive (empty list = no admins)."""
+        return bool(email) and str(email).strip().lower() in self.admin_emails
 
     @property
     def is_production(self) -> bool:
@@ -384,6 +452,8 @@ class Settings:
             "FIRESTORE_EMULATOR_HOST": "firestore_emulator_host",
             "QUOTA_TZ": "quota_tz",
             "MAINTENANCE_FORCE": "maintenance_force",
+            "ADMIN_TZ": "admin_tz",
+            "DATABASE_URL": "database_url",
         }
         for name, attr in strings.items():
             if (value := get(name)) is not None:
@@ -391,6 +461,10 @@ class Settings:
         # SECRET_KEY is used verbatim (no strip): whitespace counts as key material.
         if env.get("SECRET_KEY"):
             kwargs["secret_key"] = env["SECRET_KEY"]
+        if (admins := get("ADMIN_EMAILS")) is not None:
+            kwargs["admin_emails"] = tuple(admins.split(","))
+        if (data_dir := get("DATA_DIR")) is not None:
+            kwargs["data_dir"] = Path(data_dir)
         if (web := get("FIREBASE_WEB_CONFIG")) is not None:
             kwargs["firebase_web_config"] = parse_web_config(web)
         if (tiers := get("SYNC_TIERS")) is not None:
@@ -411,6 +485,11 @@ class Settings:
             "MAX_BODY_DECOMPRESSED": "max_body_decompressed",
             "CLOCK_SKEW_MS": "clock_skew_ms",
             "USER_WRITES_PER_DAY": "user_writes_per_day",
+            "JOB_GRACE_MIN": "job_grace_min",
+            "MAX_BACKUP_BYTES": "max_backup_bytes",
+            "HOST_EGRESS_MONTH": "host_egress_month",
+            "PG_POOL_MAX": "pg_pool_max",
+            "RESTORE_BATCH_DELAY_MS": "restore_batch_delay_ms",
         }
         for name, attr in integers.items():
             if (number := get_int(name)) is not None:

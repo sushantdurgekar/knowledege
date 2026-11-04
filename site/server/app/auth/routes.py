@@ -14,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
 
 from app import __version__
+from app.admin.auth import is_admin
 from app.auth import ratelimit
 from app.auth.csrf import csrf_protect
 from app.auth.deps import get_viewer
@@ -53,15 +54,19 @@ async def config(request: Request) -> JSONResponse:
 
 @router.get("/api/me")
 async def me(request: Request) -> JSONResponse:
-    """Who is signed in (0 store reads: everything comes from the verified session)."""
+    """Who is signed in (0 store reads: everything comes from the verified session, the
+    cached site settings and the scheduler's cached jobs)."""
     viewer = await get_viewer(request)
     if viewer.identity is None or viewer.public_id is None:
         return JSONResponse({"signedIn": False}, headers=NO_STORE)
     runtime = get_runtime(request)
+    user = viewer.identity.profile(viewer.public_id)
+    user["admin"] = is_admin(runtime.settings, viewer.identity)  # display only: admin routes re-check
     body = {
         "signedIn": True,
-        "user": viewer.identity.profile(viewer.public_id),
+        "user": user,
         "maintenance": runtime.maintenance(),
+        "upcoming": runtime.upcoming(),
         "policy": runtime.guard.policy(viewer.identity.uid).to_json(),
     }
     return JSONResponse(body, headers=NO_STORE)
@@ -103,17 +108,21 @@ def _upsert_user(runtime: Runtime, identity: Identity) -> None:
 async def create_session(request: Request) -> JSONResponse:
     runtime = get_runtime(request)
     settings = runtime.settings
-    if runtime.maintenance_mode == "full":
-        raise ApiError(503, "maintenance", "Signing in is paused for maintenance", retry_after=300)
+    # Full maintenance (e.g. a restore that may last days): only admins can sign in, so they
+    # can follow and finish the job; everyone else, valid token or not, gets the 503.
+    full = runtime.maintenance_mode == "full"
+    paused = ApiError(503, "maintenance", "Signing in is paused for maintenance", retry_after=300)
     _limit_sign_in(runtime, ratelimit.client_ip(request, settings.trusted_proxy_hops or 0))
 
     data: Any = loads(await read_body(request, max_wire=MAX_SESSION_BODY, max_decompressed=MAX_SESSION_BODY))
     id_token = data.get("idToken") if isinstance(data, dict) else None
     if not isinstance(id_token, str) or not id_token:
-        raise ApiError(401, "invalid_token", "Sign-in failed")
+        raise paused if full else ApiError(401, "invalid_token", "Sign-in failed")
     try:
         identity = await run_in_threadpool(runtime.auth.verify_id_token, id_token)
     except AuthError:
+        if full:
+            raise paused from None
         raise ApiError(401, "invalid_token", "Sign-in failed") from None
     except AuthUnavailable:
         raise ApiError(503, "unavailable", "Sign-in is unavailable right now", retry_after=30) from None
@@ -123,7 +132,9 @@ async def create_session(request: Request) -> JSONResponse:
     if identity.needs_verification:
         raise ApiError(403, "email_unverified", "Verify your email address, then sign in again")
 
-    if runtime.maintenance_mode != "read_only":  # read-only: the upsert is deferred
+    if full and not is_admin(settings, identity):
+        raise paused
+    if runtime.maintenance_mode not in ("read_only", "full"):  # maintenance: the upsert is deferred
         await run_in_threadpool(_upsert_user, runtime, identity)
     try:
         session = await run_in_threadpool(runtime.auth.create_session, id_token, identity)
@@ -132,6 +143,8 @@ async def create_session(request: Request) -> JSONResponse:
     except AuthUnavailable:
         raise ApiError(503, "unavailable", "Sign-in is unavailable right now", retry_after=30) from None
 
+    # A fresh ID token means the account exists again (fake mode reuses uids after DELETE /api/me).
+    runtime.deleted_uids.discard(identity.uid)
     pid = public_id(settings.secret, identity.uid)
     response = JSONResponse({"user": identity.profile(pid)}, headers=NO_STORE)
     set_session_cookies(response, settings, session, pid)

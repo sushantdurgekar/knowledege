@@ -174,3 +174,77 @@ def test_app_init_failure_is_unavailable(clock: FixedClock, tmp_path: Any) -> No
     )
     with pytest.raises(AuthUnavailable):
         _ = FirebaseAuthenticator(settings, clock).app
+
+
+# -- M2: admin re-verification and account deletion -------------------------------------------
+
+
+def test_strict_check_revokes_and_caches_for_60_s(
+    fb: FirebaseAuthenticator, monkeypatch: pytest.MonkeyPatch, clock: FixedClock
+) -> None:
+    calls: list[dict[str, Any]] = []
+
+    def verify(cookie: str, **kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs)
+        return CLAIMS
+
+    monkeypatch.setattr(fb_auth, "verify_session_cookie", verify)
+    assert fb.verify_session_strict("C1").uid == "u1"
+    assert fb.verify_session_strict("C1").uid == "u1"
+    assert calls == [{"check_revoked": True, "app": "APP", "clock_skew_seconds": 10}]
+    clock.advance(59_000)
+    fb.verify_session_strict("C1")
+    assert len(calls) == 1
+    clock.advance(1_000)  # 60 s: verified against revocation again
+    fb.verify_session_strict("C1")
+    assert len(calls) == 2
+    fb.forget("C1")  # sign-out drops both caches
+    fb.verify_session_strict("C1")
+    assert len(calls) == 3
+
+
+@pytest.mark.parametrize(
+    ("exc", "mapped"),
+    [
+        (fb_auth.RevokedSessionCookieError("revoked"), AuthError),
+        (fb_auth.ExpiredSessionCookieError("expired", None), AuthError),
+        (fb_auth.UserDisabledError("disabled"), AuthError),
+        (fb_auth.UserNotFoundError("gone"), AuthError),
+        (fb_auth.CertificateFetchError("no keys", None), AuthUnavailable),
+        (fb_exc.UnavailableError("down"), AuthUnavailable),
+    ],
+)
+def test_strict_check_errors(
+    fb: FirebaseAuthenticator, monkeypatch: pytest.MonkeyPatch, exc: Exception, mapped: type
+) -> None:
+    def verify(*_: Any, **__: Any) -> dict[str, Any]:
+        raise exc
+
+    monkeypatch.setattr(fb_auth, "verify_session_cookie", verify)
+    with pytest.raises(mapped):
+        fb.verify_session_strict("C1")
+    assert len(fb.strict_cache) == 0
+    for cookie in ("", "x" * 9000):
+        with pytest.raises(AuthError):
+            fb.verify_session_strict(cookie)
+
+
+def test_delete_user_is_safe_to_repeat(fb: FirebaseAuthenticator, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[tuple[str, Any]] = []
+
+    def delete(uid: str, *, app: Any) -> None:
+        seen.append((uid, app))
+        if len(seen) > 1:
+            raise fb_auth.UserNotFoundError("already gone")
+
+    monkeypatch.setattr(fb_auth, "delete_user", delete)
+    fb.delete_user("u1")
+    fb.delete_user("u1")  # the second run finds no user: fine
+    assert seen == [("u1", "APP"), ("u1", "APP")]
+
+    def down(*_: Any, **__: Any) -> None:
+        raise fb_exc.UnavailableError("down")
+
+    monkeypatch.setattr(fb_auth, "delete_user", down)
+    with pytest.raises(AuthUnavailable):
+        fb.delete_user("u1")

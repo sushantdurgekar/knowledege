@@ -147,6 +147,12 @@ export function fakeServer(init: Partial<Pick<FakeServer, "signedIn" | "publicId
     if (call.path === "/api/me") {
       return reply(200, server.signedIn ? { signedIn: true, user: { publicId: server.publicId, ...server.user } } : { signedIn: false });
     }
+    // The real server's account binding (app/progress/routes.py check_account).
+    const claimed = headers["x-studyhubs-account"];
+    const accountRoute = call.path === "/api/sync" || call.path.startsWith("/api/progress/");
+    if (accountRoute && server.signedIn && claimed !== undefined && claimed !== server.publicId) {
+      return reply(409, { code: "account_changed", message: "This page belongs to another account" });
+    }
     const m = /^\/api\/progress\/([^/]+)$/.exec(call.path);
     if (m && call.method === "GET") {
       if (!server.signedIn) return reply(200, { signedIn: false });

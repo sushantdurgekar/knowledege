@@ -7,11 +7,13 @@ Synchronous (store calls block): routes run these in the thread pool.
   not newer than `known`, or as None when there is none. 1 read, plus 1 only when
   some part is newer than `known` (and 1 in all when nothing is known yet).
 - `sync`: one transaction per hub (`Store.put_parts`, newest wins), then the
-  per-user write count. A hub costs 1 read + at most 1 write, however many parts.
+  per-user write count. A hub costs 1 read + at most 1 write, however many parts
+  (+1 read on its first write: the store checks the uid's tombstone).
 
 Store failures map onto API errors: `QuotaExhausted` trips the guard's breaker
 (sync: 429 `sync_paused`; reads: 503 `unavailable`), `Unavailable` is 503, and a
-`TooLarge` write rejects that hub's parts with `too_large`.
+`TooLarge` write rejects that hub's parts with `too_large`. `AccountDeleted` (a deleted
+account's other device) propagates: the route signs that session out.
 """
 
 from __future__ import annotations

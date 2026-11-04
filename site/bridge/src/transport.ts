@@ -9,6 +9,12 @@ export const API_BASE = "/api";
 /** Wire-protocol header (CSRF guard on the server). */
 export const PROTOCOL_HEADER = "X-StudyHubs";
 export const PROTOCOL_VERSION = "1";
+/**
+ * The publicId of the account this page belongs to. The server answers 409 `account_changed`
+ * when the session cookie is another account's (someone else signed in from another tab), so
+ * nothing this page holds is ever written under, or mixed with, that account.
+ */
+export const ACCOUNT_HEADER = "X-StudyHubs-Account";
 /** fetch keepalive bodies share a 64 KiB budget per page; stay under it. */
 export const KEEPALIVE_MAX_BYTES = 60_000;
 /** Lazy-load /_sh/fflate.js once the pending body passes this size. */
@@ -28,7 +34,7 @@ export type HubErrorCode = "revoked" | "not_granted" | "invalid_argument" | "quo
  * which the hub shows as "Sync paused, saved in this browser" and retries on the next change.
  */
 export function codeForResponse(status: number, serverCode?: string): HubErrorCode {
-  if (status === 401) return "revoked";
+  if (status === 401 || status === 409) return "revoked"; // 409 account_changed: this page's session is gone
   if (status === 403) return "not_granted";
   if (status === 413) return "quota_exceeded";
   if (status === 422 && serverCode === "clock_skew") return "unavailable";
@@ -52,6 +58,8 @@ export interface RequestOptions {
   body?: string | Uint8Array;
   keepalive?: boolean;
   timeoutMs?: number;
+  /** The page's account (publicId), sent as X-StudyHubs-Account. */
+  account?: string | null;
 }
 
 export interface Transport {
@@ -86,6 +94,7 @@ export function createTransport(now: () => number = Date.now): Transport {
     async request(method, path, opts = {}) {
       started++;
       const headers: Record<string, string> = { [PROTOCOL_HEADER]: PROTOCOL_VERSION };
+      if (opts.account) headers[ACCOUNT_HEADER] = opts.account;
       const init: RequestInit = { method, headers, credentials: "same-origin", cache: "no-store" };
       if (opts.body != null) {
         headers["Content-Type"] = "application/json";

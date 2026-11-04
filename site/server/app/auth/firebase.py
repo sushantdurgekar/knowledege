@@ -5,6 +5,9 @@
 - `verify_session_cookie(check_revoked=False)` on each request, cached for 5 minutes
   in an LRU of at most 1000 entries keyed by the sha256 of the cookie (never the
   cookie itself), and never past the cookie's own expiry.
+- Admin routes (M2): `verify_session_cookie(check_revoked=True)`, cached at most 60 s
+  in a second, smaller LRU.
+- `DELETE /api/me` (M2): `auth.delete_user(uid)`; a user that is already gone is fine.
 
 The firebase_admin app is created lazily on first use, so a server with broken
 credentials still starts and serves hubs. Credentials come from
@@ -30,6 +33,8 @@ logger = logging.getLogger(__name__)
 APP_NAME = "studyhubs"
 CACHE_SECONDS = 300
 CACHE_MAX = 1000
+STRICT_CACHE_SECONDS = 60
+STRICT_CACHE_MAX = 100
 CLOCK_SKEW_SECONDS = 10
 
 
@@ -97,6 +102,7 @@ class FirebaseAuthenticator:
         self._lock = threading.Lock()
         self._app: Any = None
         self.cache = SessionCache(clock)
+        self.strict_cache = SessionCache(clock, ttl_s=STRICT_CACHE_SECONDS, max_entries=STRICT_CACHE_MAX)
 
     # -- app --------------------------------------------------------------------------
 
@@ -182,8 +188,45 @@ class FirebaseAuthenticator:
         self.cache.put(cookie, identity)
         return identity
 
+    def verify_session_strict(self, cookie: str) -> Identity:
+        from firebase_admin import auth, exceptions
+
+        cached = self.strict_cache.get(cookie)
+        if cached is not None:
+            return cached
+        if not cookie or len(cookie) > 8192:
+            raise AuthError("missing or oversized session cookie")
+        try:
+            claims = auth.verify_session_cookie(
+                cookie, check_revoked=True, app=self.app, clock_skew_seconds=CLOCK_SKEW_SECONDS
+            )
+        except (
+            auth.InvalidSessionCookieError,
+            auth.UserDisabledError,
+            auth.UserNotFoundError,
+            ValueError,
+        ) as exc:  # RevokedSessionCookieError is an InvalidSessionCookieError
+            raise AuthError(f"session cookie rejected: {type(exc).__name__}", code="revoked") from exc
+        except (auth.CertificateFetchError, exceptions.FirebaseError) as exc:
+            raise AuthUnavailable(f"session check failed: {type(exc).__name__}") from exc
+        identity = identity_from_claims(claims)
+        self.strict_cache.put(cookie, identity)
+        return identity
+
+    def delete_user(self, uid: str) -> None:
+        from firebase_admin import auth, exceptions
+
+        try:
+            auth.delete_user(uid, app=self.app)
+        except auth.UserNotFoundError:
+            return  # already deleted: the step is safe to repeat
+        except exceptions.FirebaseError as exc:
+            raise AuthUnavailable(f"Auth user not deleted: {type(exc).__name__}") from exc
+
     def forget(self, cookie: str) -> None:
         self.cache.forget(cookie)
+        self.strict_cache.forget(cookie)
 
     def clear_cache(self) -> None:
         self.cache.clear()
+        self.strict_cache.clear()

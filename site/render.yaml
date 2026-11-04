@@ -72,9 +72,10 @@ services:
       - key: TRUSTED_PROXY_HOPS
         value: "1"
       # ── M2 (admin, maintenance, backups) ─────────────────────────────
-      # - key: ADMIN_EMAILS
-      #   sync: false
-      # - key: ADMIN_TZ
-      #   value: Asia/Kolkata
+      # Comma-separated Google account emails that may open /admin (README "M2").
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: ADMIN_TZ
+        value: Asia/Kolkata
       # - key: DATA_DIR
       #   value: /tmp/studyhubs

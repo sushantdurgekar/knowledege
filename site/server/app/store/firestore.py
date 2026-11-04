@@ -6,13 +6,20 @@ Data model (every field top-level and index-exempt, see site/firebase/):
     progress/{uid}~{hubId}   uid, hub, u_<part> (int), p_<part> (bytes, gzip of compact JSON),
                              n_<part> (raw length), done (int), t (server timestamp)
     usage/{YYYY-MM-DD}       reads, writes, deletes, fsEgress, appEgress  (Increment)
-    usage/m-{YYYY-MM}        the same per month
     meta/{key}               the setting's fields plus `v` (optimistic version)
+    tombstones/{sha256 hex}  at                                (M2: deleted accounts)
+    jobs/{j<ms>-<hex>}       state, kind, mode, startAt, ...   (M2: scheduled jobs)
+
+M2 scans (`iter_*`, `storage_scan`) are document-id cursors: `order_by(__name__)`,
+`start_after(<last id>)`, `limit(page)`, never offsets, so a page costs exactly its
+documents (1 read for an empty page). `list_hubs` and `delete_user` are one id-range
+query over `{uid}~` .. `{uid}\x7f`.
 
 Cost per operation: `get_hub` 1 read (+1 only when some part is newer than a
 non-empty `known`; with nothing known it is one read with the full field mask);
 `put_parts` 1 read + at most 1 write, in one transaction that reads only the `u_*`
-stamps through a field mask.
+stamps through a field mask; a hub's first write (no document yet) also reads the
+uid's tombstone in that transaction (+1 read) and raises `AccountDeleted` if it exists.
 
 Every RPC carries `timeout=10` and a short `Retry` that never retries
 `ResourceExhausted`; the transaction's own begin/commit/rollback RPCs are bounded the
@@ -29,6 +36,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import urllib.request
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -38,26 +46,43 @@ from google.api_core import exceptions as gexc
 from google.api_core.retry import Retry, if_exception_type
 from google.auth import exceptions as auth_exc
 from google.cloud.firestore_v1 import Increment
+from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1.client import Client
+from google.cloud.firestore_v1.field_path import FieldPath
+from google.cloud.firestore_v1.query import Query
 from google.cloud.firestore_v1.transaction import Transaction, transactional
 from google.cloud.firestore_v1.transforms import SERVER_TIMESTAMP
 
 from app.progress.decide import decide
 from app.store.base import (
+    COUNT_KINDS,
     PARTS,
-    LaterMethods,
+    AccountDeleted,
+    BatchResult,
+    Conflict,
+    HubSummary,
     OpCounter,
     PartIn,
+    PartInfo,
     PartOut,
     PartResult,
     QuotaExhausted,
+    RestoreItem,
     StoreError,
+    Tombstone,
     TooLarge,
     Unavailable,
+    Unsupported,
     UserRecord,
+    check_batch,
     check_setting_version,
+    empty_counts,
     merged_done,
+    newest_parts,
     progress_doc_id,
+    progress_range,
+    tombstone_hash,
+    with_counts,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,6 +99,10 @@ TX_ATTEMPTS = 3
 LOGIN_TOUCH_INTERVAL = timedelta(hours=24)
 STAMP_FIELDS = [f"u_{p}" for p in PARTS]
 PAYLOAD_FIELDS = [f"p_{p}" for p in PARTS]
+SIZE_FIELDS = [f"n_{p}" for p in PARTS]
+DOC_ID = FieldPath.document_id()
+BATCH_DELETES = 400
+GET_ALL_CHUNK = 300
 USER_FIELDS = ["email", "emailVerified", "name", "photo", "provider", "createdAt", "lastLoginAt"]
 # Rough serialized size of a document read through the stamp mask (egress estimate).
 STAMPS_BYTES = 16 * len(PARTS) + 32
@@ -138,7 +167,7 @@ def _chain(exc: BaseException) -> Iterator[BaseException]:
         current = current.__cause__ or current.__context__
 
 
-class FirestoreStore(LaterMethods):
+class FirestoreStore:
     kind = "firestore"
 
     def __init__(
@@ -281,17 +310,7 @@ class FirestoreStore(LaterMethods):
         self.ops.add(reads=1, fs_egress=128)
         if not snap.exists:
             return None
-        d = snap.to_dict() or {}
-        return UserRecord(
-            uid=uid,
-            email=d.get("email"),
-            email_verified=bool(d.get("emailVerified")),
-            name=d.get("name"),
-            photo=d.get("photo"),
-            provider=d.get("provider"),
-            created_at=d.get("createdAt"),
-            last_login_at=d.get("lastLoginAt"),
-        )
+        return _user_record(uid, snap.to_dict() or {})
 
     def count_users(self) -> int:
         with self._mapped("reads"):
@@ -353,12 +372,18 @@ class FirestoreStore(LaterMethods):
 
     def put_parts(self, uid: str, hub: str, parts: dict[str, PartIn], now_ms: int) -> dict[str, PartResult]:
         ref = self._progress_ref(uid, hub)
+        tomb_ref = self.db.collection("tombstones").document(tombstone_hash(uid))
         outcome: dict[str, Any] = {}
 
         def run(tx: Transaction) -> dict[str, PartResult]:
             outcome["phase"] = "reads"
             snap = ref.get(field_paths=STAMP_FIELDS, transaction=tx, retry=RETRY, timeout=TIMEOUT)
             self.ops.add(reads=1, fs_egress=STAMPS_BYTES if snap.exists else 0)
+            if not snap.exists:  # a hub's first write: refuse a deleted account (+1 read)
+                tomb = tomb_ref.get(field_paths=["at"], transaction=tx, retry=RETRY, timeout=TIMEOUT)
+                self.ops.add(reads=1)
+                if tomb.exists:
+                    raise AccountDeleted("the account was deleted")
             stored = _stamps(snap.to_dict()) if snap.exists else {}
             results: dict[str, PartResult] = {}
             accepted: set[str] = set()
@@ -453,6 +478,460 @@ class FirestoreStore(LaterMethods):
             raise self._translate(exc, outcome.get("phase", "reads")) from exc
         self.ops.add(writes=1)
         return version
+
+    # -- M2: account ----------------------------------------------------------------------
+
+    def _user_range(self, uid: str, fields: list[str]) -> Query:
+        start, end = progress_range(uid)
+        return (
+            self.db.collection("progress")
+            .order_by(DOC_ID)
+            .start_at({DOC_ID: start})
+            .end_before({DOC_ID: end})
+            .select(fields)
+        )
+
+    def list_hubs(self, uid: str, *, payloads: bool = False) -> list[HubSummary]:
+        fields = ["hub", "done", *STAMP_FIELDS, *SIZE_FIELDS, *(PAYLOAD_FIELDS if payloads else [])]
+        with self._mapped("reads"):
+            snaps = self._user_range(uid, fields).get(retry=RETRY, timeout=TIMEOUT)
+        out: list[HubSummary] = []
+        egress = 0
+        for snap in snaps:
+            d = snap.to_dict() or {}
+            parts: dict[str, PartInfo] = {}
+            for part, upd in _stamps(d).items():
+                blob = d.get(f"p_{part}") if payloads else None
+                size = d.get(f"n_{part}")
+                parts[part] = PartInfo(
+                    upd, int(size) if isinstance(size, int) else 0, blob if isinstance(blob, bytes) else None
+                )
+                egress += 24 + (len(blob) if isinstance(blob, bytes) else 0)
+            done = d.get("done")
+            hub = d.get("hub") or snap.id.split("~", 1)[-1]
+            out.append(HubSummary(str(hub), parts, done if isinstance(done, int) else None))
+        self.ops.add(reads=max(1, len(snaps)), fs_egress=egress)
+        return out
+
+    def delete_user(self, uid: str) -> int:
+        with self._mapped("reads"):
+            snaps = self._user_range(uid, []).get(retry=RETRY, timeout=TIMEOUT)
+        self.ops.add(reads=max(1, len(snaps)))
+        refs = [snap.reference for snap in snaps]
+        refs.append(self.db.collection("users").document(uid))  # last: the account goes after its data
+        with self._mapped("deletes"):
+            for start in range(0, len(refs), BATCH_DELETES):
+                batch = self.db.batch()
+                for ref in refs[start : start + BATCH_DELETES]:
+                    batch.delete(ref)
+                batch.commit(retry=RETRY, timeout=TIMEOUT)
+                self.ops.add(deletes=len(refs[start : start + BATCH_DELETES]))
+        return len(snaps)
+
+    def put_tombstone(self, h: str, at: datetime) -> None:
+        with self._mapped("writes"):
+            self.db.collection("tombstones").document(h).set({"at": at}, retry=RETRY, timeout=TIMEOUT)
+        self.ops.add(writes=1)
+
+    def is_tombstoned(self, uid_hashes: list[str]) -> set[str]:
+        if not uid_hashes:
+            return set()
+        refs = [self.db.collection("tombstones").document(h) for h in uid_hashes]
+        with self._mapped("reads"):
+            found = {
+                snap.id
+                for snap in self.db.get_all(refs, field_paths=["at"], retry=RETRY, timeout=TIMEOUT)
+                if snap.exists
+            }
+        self.ops.add(reads=len(uid_hashes))
+        return found
+
+    def count_docs(self, kind: str) -> int:
+        if kind not in COUNT_KINDS:
+            raise ValueError(f"unknown collection {kind!r}")
+        with self._mapped("reads"):
+            result = self.db.collection(kind).count().get(retry=RETRY, timeout=TIMEOUT)
+        n = int(result[0][0].value)
+        self.ops.add(reads=max(1, -(-n // 1000)))
+        return n
+
+    # -- M2: scans by document id ------------------------------------------------------------
+
+    def _pages(self, collection: str, page: int, fields: list[str] | None) -> Iterator[list[Any]]:
+        if page < 1:
+            raise ValueError("page must be positive")
+        cursor: str | None = None
+        while True:
+            query = self.db.collection(collection).order_by(DOC_ID)
+            if fields is not None:
+                query = query.select(fields)
+            if cursor is not None:
+                query = query.start_after({DOC_ID: cursor})
+            with self._mapped("reads"):
+                snaps = query.limit(page).get(retry=RETRY, timeout=TIMEOUT)
+            self.ops.add(reads=max(1, len(snaps)))
+            if snaps:
+                yield snaps
+            if len(snaps) < page:
+                return
+            cursor = snaps[-1].id
+
+    def iter_users(self, page: int = 300) -> Iterator[UserRecord]:
+        for snaps in self._pages("users", page, USER_FIELDS):
+            self.ops.add(fs_egress=128 * len(snaps))
+            for snap in snaps:
+                yield _user_record(snap.id, snap.to_dict() or {})
+
+    def iter_progress(self, page: int = 300) -> Iterator[tuple[str, str, dict[str, PartOut]]]:
+        for snaps in self._pages("progress", page, ["uid", "hub", *STAMP_FIELDS, *PAYLOAD_FIELDS]):
+            batch = []
+            egress = 0
+            for snap in snaps:
+                d = snap.to_dict() or {}
+                parts: dict[str, PartOut] = {}
+                for part, upd in _stamps(d).items():
+                    blob = d.get(f"p_{part}")
+                    if isinstance(blob, bytes):
+                        parts[part] = PartOut(upd, blob)
+                        egress += len(blob)
+                uid, _, hub = snap.id.partition("~")
+                batch.append((str(d.get("uid") or uid), str(d.get("hub") or hub), parts))
+            self.ops.add(fs_egress=egress + STAMPS_BYTES * len(snaps))
+            yield from batch
+
+    def iter_tombstones(self, page: int = 300) -> Iterator[Tombstone]:
+        for snaps in self._pages("tombstones", page, ["at"]):
+            for snap in snaps:
+                at = (snap.to_dict() or {}).get("at")
+                yield Tombstone(snap.id, at if isinstance(at, datetime) else datetime.fromtimestamp(0, UTC))
+
+    def storage_scan(self, page: int = 300) -> tuple[int, int]:
+        docs = total = 0
+        for snaps in self._pages("progress", page, SIZE_FIELDS):
+            for snap in snaps:
+                docs += 1
+                total += sum(v for v in (snap.to_dict() or {}).values() if isinstance(v, int))
+        return docs, total
+
+    # -- M2: jobs -------------------------------------------------------------------------
+
+    def get_job(self, id: str) -> dict[str, Any] | None:
+        with self._mapped("reads"):
+            snap = self.db.collection("jobs").document(id).get(retry=RETRY, timeout=TIMEOUT)
+        self.ops.add(reads=1, fs_egress=512 if snap.exists else 0)
+        return {**(snap.to_dict() or {}), "id": snap.id} if snap.exists else None
+
+    def put_job(self, job: dict[str, Any]) -> None:
+        ref = self.db.collection("jobs").document(str(job["id"]))
+        with self._mapped("writes"):
+            ref.set(dict(job), retry=RETRY, timeout=TIMEOUT)
+        self.ops.add(writes=1)
+
+    def claim_job(self, id: str, holder: str, from_states: set[str], *, to_state: str = "running") -> bool:
+        ref = self.db.collection("jobs").document(id)
+        outcome: dict[str, Any] = {}
+
+        def run(tx: Transaction) -> bool:
+            outcome["phase"] = "reads"
+            snap = ref.get(field_paths=["state"], transaction=tx, retry=RETRY, timeout=TIMEOUT)
+            self.ops.add(reads=1)
+            state = (snap.to_dict() or {}).get("state") if snap.exists else None
+            if state not in from_states:
+                outcome["write"] = False
+                return False
+            now = _iso(datetime.now(UTC))
+            fields = {"state": to_state, "holder": holder, "updatedAt": now}
+            if to_state == "running":
+                fields["claimedAt"] = now
+            tx.update(ref, fields)
+            outcome["write"] = True
+            outcome["phase"] = "writes"
+            return True
+
+        tx = _BoundedTransaction(self.db, max_attempts=TX_ATTEMPTS)
+        try:
+            claimed = transactional(run)(tx)
+        except StoreError:
+            raise
+        except Exception as exc:
+            raise self._translate(exc, outcome.get("phase", "reads")) from exc
+        if outcome.get("write"):
+            self.ops.add(writes=1)
+        return bool(claimed)
+
+    def list_jobs(self, states: set[str] | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        jobs = self.db.collection("jobs")
+        if states:
+            query = jobs.where(filter=FieldFilter("state", "in", sorted(states))).limit(limit)
+        else:
+            # No descending key scans in Firestore: newest first by `createdAt` (ISO, indexed).
+            query = jobs.order_by("createdAt", direction=Query.DESCENDING).limit(limit)
+        with self._mapped("reads"):
+            snaps = query.get(retry=RETRY, timeout=TIMEOUT)
+        self.ops.add(reads=max(1, len(snaps)), fs_egress=512 * len(snaps))
+        out = [{**(snap.to_dict() or {}), "id": snap.id} for snap in snaps]
+        if states:
+            out.sort(key=lambda job: job["id"])
+        return out
+
+    def update_job(self, id: str, fields: dict[str, Any], *, expect: dict[str, Any]) -> bool:
+        """Merge `fields` into the job if every `expect` field has that value (a transaction)."""
+        ref = self.db.collection("jobs").document(id)
+        outcome: dict[str, Any] = {}
+
+        def run(tx: Transaction) -> bool:
+            outcome["phase"] = "reads"
+            snap = ref.get(transaction=tx, retry=RETRY, timeout=TIMEOUT)
+            self.ops.add(reads=1)
+            current = (snap.to_dict() or {}) if snap.exists else None
+            if current is None or any(current.get(k) != v for k, v in expect.items()):
+                outcome["write"] = False
+                return False
+            tx.set(ref, dict(fields), merge=True)
+            outcome["write"] = True
+            outcome["phase"] = "writes"
+            return True
+
+        tx = _BoundedTransaction(self.db, max_attempts=TX_ATTEMPTS)
+        try:
+            done = transactional(run)(tx)
+        except StoreError:
+            raise
+        except Exception as exc:
+            raise self._translate(exc, outcome.get("phase", "reads")) from exc
+        if outcome.get("write"):
+            self.ops.add(writes=1)
+        return bool(done)
+
+    # -- M3: restore -------------------------------------------------------------------------
+
+    def _get_all(self, refs: list[Any], fields: list[str]) -> list[Any]:
+        snaps: list[Any] = []
+        for start in range(0, len(refs), GET_ALL_CHUNK):
+            chunk = refs[start : start + GET_ALL_CHUNK]
+            with self._mapped("reads"):
+                snaps.extend(self.db.get_all(chunk, field_paths=fields, retry=RETRY, timeout=TIMEOUT))
+            self.ops.add(reads=len(chunk))
+        return snaps
+
+    def restore_lookup(
+        self, uids: list[str], docs: list[tuple[str, str]]
+    ) -> tuple[set[str], dict[tuple[str, str], dict[str, int]]]:
+        """Existing users and stored stamps: 1 read per uid and per hub document."""
+        users = self._get_all([self.db.collection("users").document(u) for u in uids], ["createdAt"])
+        existing = {snap.id for snap in users if snap.exists}
+        refs = [self._progress_ref(uid, hub) for uid, hub in docs]
+        stamps: dict[tuple[str, str], dict[str, int]] = {}
+        for snap in self._get_all(refs, STAMP_FIELDS):
+            if snap.exists:
+                uid, _, hub = snap.id.partition("~")
+                stamps[(uid, hub)] = _stamps(snap.to_dict())
+        return existing, stamps
+
+    def restore_batch(
+        self,
+        recs: list[RestoreItem],
+        *,
+        mode: str,
+        job_id: str,
+        checkpoint: dict[str, Any],
+        holder: str,
+    ) -> BatchResult:
+        """One `WriteBatch` (<= 400 docs) holding the records and the job's checkpoint.
+
+        The job write carries a precondition on the job document's update time, so the
+        batch commits only if nobody touched the job since it was read (no zombie runner
+        applies a batch after a reclaim); the batch is atomic, so it applies exactly once.
+        Every record write is conditional too (`create` for a document that was missing,
+        an update time precondition for one that existed): a sign-in, sync or deletion
+        landing between the reads and the commit fails the batch (Conflict; the runner
+        re-reads and retries) instead of being overwritten by older backup data.
+        """
+        if mode != "merge":
+            raise Unsupported("replace is not supported on Firestore: use merge")
+        job_ref = self.db.collection("jobs").document(job_id)
+        with self._mapped("reads"):
+            job_snap = job_ref.get(retry=RETRY, timeout=TIMEOUT)
+        self.ops.add(reads=1, fs_egress=512)
+        stored = {**(job_snap.to_dict() or {}), "id": job_id} if job_snap.exists else None
+        if not check_batch(stored, checkpoint, holder):
+            return BatchResult(False, dict((stored or {}).get("checkpoint") or {}))
+        written, kept = empty_counts(), empty_counts()
+        batch = self.db.batch()
+        stones = [i.tombstone for i in recs if i.t == "tombstone" and i.tombstone is not None]
+        refs = [self.db.collection("tombstones").document(t.h) for t in stones]
+        found = {snap.id for snap in self._get_all(refs, ["at"]) if snap.exists}
+        for stone, ref in zip(stones, refs, strict=True):
+            if stone.h in found:
+                kept["tombstone"] += 1
+            else:
+                batch.create(ref, {"at": stone.at})
+                found.add(stone.h)
+                written["tombstone"] += 1
+        users = [i.user for i in recs if i.t == "user" and i.user is not None]
+        refs = [self.db.collection("users").document(u.uid) for u in users]
+        found = {snap.id for snap in self._get_all(refs, ["createdAt"]) if snap.exists}
+        for user, ref in zip(users, refs, strict=True):
+            if user.uid in found:
+                kept["user"] += 1
+                continue
+            batch.create(
+                ref,
+                {
+                    "email": user.email,
+                    "emailVerified": bool(user.email_verified),
+                    "name": user.name,
+                    "photo": user.photo,
+                    "provider": user.provider,
+                    "createdAt": user.created_at,
+                    "lastLoginAt": user.last_login_at,
+                },
+            )
+            found.add(user.uid)
+            written["user"] += 1
+        groups, dropped = newest_parts(recs)
+        kept["progress"] += dropped
+        keys = list(groups)
+        snaps = self._get_all([self._progress_ref(uid, hub) for uid, hub in keys], STAMP_FIELDS)
+        current = {snap.id: snap for snap in snaps if snap.exists}
+        for uid, hub in keys:
+            snap = current.get(progress_doc_id(uid, hub))
+            stamps = _stamps(snap.to_dict()) if snap is not None else {}
+            parts = groups[(uid, hub)]
+            update: dict[str, Any] = {}
+            accepted: set[str] = set()
+            for part, incoming in parts.items():
+                if decide(stamps.get(part), incoming.upd) == "accepted":
+                    accepted.add(part)
+                    update.update(
+                        {f"u_{part}": incoming.upd, f"p_{part}": incoming.gz, f"n_{part}": incoming.raw_len}
+                    )
+                    written["progress"] += 1
+                else:
+                    kept["progress"] += 1
+            if update:
+                done = merged_done(parts, accepted)
+                if done is not None:
+                    update["done"] = done
+                update.update({"uid": uid, "hub": hub, "t": SERVER_TIMESTAMP})
+                ref = self._progress_ref(uid, hub)
+                if snap is None:
+                    batch.create(ref, update)
+                else:
+                    batch.update(ref, update, option=self.db.write_option(last_update_time=snap.update_time))
+        final = with_counts(checkpoint, written, kept)
+        batch.update(
+            job_ref,
+            {"checkpoint": final},
+            option=self.db.write_option(last_update_time=job_snap.update_time),
+        )
+        writes = len(batch._write_pbs)
+        try:
+            batch.commit(retry=RETRY, timeout=TIMEOUT)
+        except (gexc.FailedPrecondition, gexc.AlreadyExists, gexc.NotFound) as exc:
+            raise Conflict("the job or a document changed while the batch was prepared") from exc
+        except Exception as exc:
+            raise self._translate(exc, "writes") from exc
+        self.ops.add(writes=writes)
+        return BatchResult(True, final, written, kept)
+
+    def swap_replace(
+        self, job_id: str, *, holder: str, expected: dict[str, int], checkpoint: dict[str, Any]
+    ) -> BatchResult:
+        raise Unsupported("replace is not supported on Firestore: use merge")
+
+    def wipe_for_replace(self, job_id: str) -> None:
+        return None  # nothing is ever staged on Firestore
+
+    # -- test support (emulator only) ----------------------------------------------------
+    # The test-only routes (`POST /api/test/reset`, `GET /api/test/store`, APP_ENV=test) use
+    # these so the M1 e2e specs can run against the Firestore emulator as well as the memory
+    # store. Both refuse to touch anything but an emulator, and neither is billed.
+
+    def _require_emulator(self) -> str:
+        if not self._emulator_host:
+            raise StoreError("only available on the Firestore emulator")
+        return self._emulator_host
+
+    def reset(self) -> None:
+        """Wipe the emulator database and the op counter (`POST /api/test/reset`)."""
+        host = self._require_emulator()
+        url = f"http://{host}/emulator/v1/projects/{self._project_id}/databases/(default)/documents"
+        request = urllib.request.Request(url, method="DELETE")  # the emulator, never a real project
+        with urllib.request.urlopen(request, timeout=TIMEOUT):  # noqa: S310
+            pass
+        self.ops.reset()
+
+    def dump(self, decode: Callable[[bytes], Any]) -> dict[str, Any]:
+        """Users, decoded progress and usage, like `MemoryStore.dump` (`GET /api/test/store`)."""
+        self._require_emulator()
+        users = []
+        for snap in self.db.collection("users").stream(timeout=TIMEOUT):
+            d = snap.to_dict() or {}
+            users.append(
+                {
+                    "uid": snap.id,
+                    "email": d.get("email"),
+                    "emailVerified": bool(d.get("emailVerified")),
+                    "name": d.get("name"),
+                    "photo": d.get("photo"),
+                    "provider": d.get("provider"),
+                    "createdAt": _iso(d.get("createdAt")),
+                    "lastLoginAt": _iso(d.get("lastLoginAt")),
+                }
+            )
+        progress = []
+        for snap in self.db.collection("progress").stream(timeout=TIMEOUT):
+            d = snap.to_dict() or {}
+            for part, upd in _stamps(d).items():
+                blob = d.get(f"p_{part}")
+                if isinstance(blob, bytes):
+                    progress.append(
+                        {
+                            "uid": d.get("uid"),
+                            "hub": d.get("hub"),
+                            "part": part,
+                            "upd": upd,
+                            "data": decode(blob),
+                            "rawLen": d.get(f"n_{part}"),
+                            "done": d.get("done"),
+                        }
+                    )
+        usage = {
+            snap.id: {k: int(v) for k, v in (snap.to_dict() or {}).items() if isinstance(v, int)}
+            for snap in self.db.collection("usage").stream(timeout=TIMEOUT)
+        }
+        tombstones = [
+            {"h": snap.id, "at": _iso((snap.to_dict() or {}).get("at"))}
+            for snap in self.db.collection("tombstones").stream(timeout=TIMEOUT)
+        ]
+        users.sort(key=lambda u: u["uid"])
+        progress.sort(key=lambda p: (str(p["uid"]), str(p["hub"]), PARTS.index(p["part"])))
+        return {
+            "users": users,
+            "progress": progress,
+            "usage": dict(sorted(usage.items())),
+            "tombstones": sorted(tombstones, key=lambda t: str(t["h"])),
+        }
+
+
+def _user_record(uid: str, d: dict[str, Any]) -> UserRecord:
+    return UserRecord(
+        uid=uid,
+        email=d.get("email"),
+        email_verified=bool(d.get("emailVerified")),
+        name=d.get("name"),
+        photo=d.get("photo"),
+        provider=d.get("provider"),
+        created_at=d.get("createdAt") if isinstance(d.get("createdAt"), datetime) else None,
+        last_login_at=d.get("lastLoginAt") if isinstance(d.get("lastLoginAt"), datetime) else None,
+    )
+
+
+def _iso(moment: Any) -> str | None:
+    if not isinstance(moment, datetime):
+        return None
+    return moment.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _stamps(data: dict[str, Any] | None) -> dict[str, int]:

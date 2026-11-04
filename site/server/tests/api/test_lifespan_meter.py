@@ -64,3 +64,22 @@ def test_memory_store_meter_is_in_process_only(api: TestClient) -> None:
 def store_usage(client: TestClient) -> dict[str, Any]:
     usage: dict[str, Any] = runtime(client).store.dump()["usage"]  # type: ignore[attr-defined]
     return usage
+
+
+def test_uptime_pings_cost_no_store_writes(build: Any, public: Any) -> None:
+    """An idle site kept awake by an uptime monitor (/healthz every 5 min) persists nothing:
+    the pings are not user traffic, so the 10-minute persist has nothing to write."""
+    store = PersistentStore()
+    settings = Settings(app_env="test", public_dir=public.root, hubs_dir=build.root)
+    with TestClient(create_app(settings, store=store, clock=FixedClock(NOW_MS))) as client:
+        _wait_loaded(client)
+        meter = runtime(client).meter
+        meter.persist()  # records the boot-time usage read (once per boot)
+        for _ in range(3):
+            assert client.get("/healthz").status_code == 200
+            assert client.head("/healthz").status_code == 200
+            assert meter.persist() is False
+        writes = store.ops.snapshot().writes
+        assert client.get("/catalog.json").status_code == 200  # real traffic is still metered
+        assert meter.persist() is True
+        assert store.ops.snapshot().writes == writes + 1

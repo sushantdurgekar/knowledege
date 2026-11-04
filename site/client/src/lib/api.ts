@@ -30,7 +30,7 @@ export function isApiProblem(value: unknown): value is ApiProblem {
 }
 
 export interface ApiOptions {
-  method?: 'GET' | 'POST';
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   /** A JSON body (serialised here, sent as application/json). */
   json?: unknown;
   /** A prepared body (for example gzip bytes); pair it with the right headers. */
@@ -78,11 +78,11 @@ function problemFrom(response: Response, body: unknown): ApiProblem {
 }
 
 /**
- * `fetch` an /api path and return its parsed JSON body (null for an empty body, e.g. 204).
+ * `fetch` an /api path and return the 2xx `Response` itself (for downloads that are not JSON).
  * Throws `ApiProblem` for any non-2xx answer, a network failure or a timeout; an abort through
- * `opts.signal` rethrows the AbortError.
+ * `opts.signal` rethrows the AbortError. The timeout covers the response headers only.
  */
-export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Promise<T> {
+export async function apiResponse(path: string, opts: ApiOptions = {}): Promise<Response> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
     [PROTOCOL_HEADER]: PROTOCOL_VERSION,
@@ -127,9 +127,16 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
     outer?.removeEventListener('abort', onOuterAbort);
   }
 
-  const data = await readJson(response);
-  if (!response.ok) throw problemFrom(response, data);
-  return data as T;
+  if (!response.ok) throw problemFrom(response, await readJson(response));
+  return response;
+}
+
+/**
+ * `fetch` an /api path and return its parsed JSON body (null for an empty body, e.g. 204).
+ * Throws like `apiResponse`.
+ */
+export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Promise<T> {
+  return (await readJson(await apiResponse(path, opts))) as T;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -157,6 +164,8 @@ export interface MeUser {
   photo: string | null;
   provider: string | null;
   emailVerified: boolean;
+  /** Display only (the menu's Admin link): every /api/admin route checks again on the server. */
+  admin: boolean;
 }
 
 export interface Maintenance {
@@ -182,6 +191,7 @@ export function parseUser(raw: unknown): MeUser | null {
     photo: text(raw.photo),
     provider: text(raw.provider),
     emailVerified: raw.emailVerified === true,
+    admin: raw.admin === true,
   };
 }
 

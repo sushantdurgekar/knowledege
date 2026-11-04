@@ -7,7 +7,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { hubPath, progressKey } from './support/catalog';
-import { openQuizModule, readItem, settle, watchPage } from './support/hub';
+import { openQuizModule, readItem, readJson, settle, watchPage, type HubRecord } from './support/hub';
 import {
   PILL,
   V2_HUB,
@@ -65,8 +65,12 @@ test('S10 sign-out wipes hub progress but keeps the code language; signing back 
   expect(await storedUpd(request, userA.uid, hub, 'main'), 'the server has the last answer').toBe(upd);
 
   const keys = await allKeys(shell);
-  expect(keys, 'hub progress and bridge state are wiped').not.toContain(progressKey(hub));
-  expect(keys.filter((k) => k.startsWith('studyhubs.') && !k.startsWith('studyhubs.ui.'))).toEqual([]);
+  // The hub tab reloads anonymous and may already have saved a fresh, empty record (the hub
+  // writes S.last on its first render), so "wiped" means: nothing of A's progress is left.
+  const left = await readJson<HubRecord>(shell, progressKey(hub));
+  expect(left?.U ?? { main: 0, mocks: 0, cards: 0 }, "A's progress is wiped").toEqual({ main: 0, mocks: 0, cards: 0 });
+  expect(Object.keys(left?.S.done ?? {}), 'no module is done any more').toEqual([]);
+  expect(keys.filter((k) => k.startsWith('studyhubs.') && !k.startsWith('studyhubs.ui.')), 'bridge state is wiped').toEqual([]);
   expect(await readItem(shell, 'studyhub.codeLang'), 'the code language survives').toBe('python');
   expect(await readItem(shell, 'studyhubs.ui.e2e'), 'UI preferences survive').toBe('1');
   const cookies = (await context.cookies()).map((c) => c.name);
@@ -110,7 +114,14 @@ test.describe('S13 account switch on one browser', () => {
     const dialog = shell.getByRole('dialog', { name: 'This browser has progress from another account' });
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText('1 change');
+    // While the dialog is open the cookies are B's and A's hub tab has not heard of it yet: its
+    // flush timer, a hide or a close must not send A's change with B's cookie.
+    await flushNow(page);
+    await firePagehide(page);
+    await settle(shell, 300);
     expect(await storedUpd(request, userB.uid, hub, 'main'), 'nothing is pushed before the choice').toBe(0);
+    expect((await syncStats(page)).outbox.dead, "A's tab stopped syncing").toBe('revoked');
+    expect(await notices(page)).toContain('auth');
     await dialog.getByRole('button', { name: 'Discard and continue' }).click();
     await shell.waitForURL((u) => u.pathname === '/');
 

@@ -23,7 +23,8 @@ FIREBASE_TOOLS ?= 15.31.0
 FIRESTORE_EMULATOR_HOST ?= 127.0.0.1:8080
 
 .PHONY: help install build-bridge build-client collect build test test-bridge test-client \
-        test-scripts test-server test-contract emulator lint serve e2e e2e-smoke docker clean
+        test-scripts test-server test-contract emulator pg pg-stop lint serve e2e e2e-smoke e2e-pg \
+        docker clean
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[1m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -62,8 +63,17 @@ test-server: ## Server ruff + pytest
 emulator: ## Firestore emulator on 127.0.0.1:8080, foreground (needs Java 21; Ctrl-C stops it)
 	cd $(SITE)/firebase && npx --yes firebase-tools@$(FIREBASE_TOOLS) emulators:start --only firestore --project demo-studyhubs
 
-test-contract: ## Store contract tests on memory + the Firestore emulator (run `make emulator` first)
-	cd $(SITE)/server && FIRESTORE_EMULATOR_HOST=$(FIRESTORE_EMULATOR_HOST) .venv/bin/pytest tests/contract
+pg: ## Throwaway Postgres 16 on 127.0.0.1:54329 (scripts/dev_pg.sh), in the background; prints its URL
+	sh $(SITE)/scripts/dev_pg.sh start
+
+pg-stop: ## Stop the throwaway Postgres and delete its data
+	sh $(SITE)/scripts/dev_pg.sh stop
+
+# Postgres: DATABASE_URL_TEST, else the running `make pg` instance, else skipped (REQUIRE_PG=1 fails instead).
+test-contract: ## Store contract tests on memory, the Firestore emulator and Postgres (`make emulator` and `make pg` first)
+	cd $(SITE)/server && FIRESTORE_EMULATOR_HOST=$(FIRESTORE_EMULATOR_HOST) \
+		DATABASE_URL_TEST="$${DATABASE_URL_TEST:-$$(sh $(SITE)/scripts/dev_pg.sh url 2>/dev/null)}" \
+		.venv/bin/pytest tests/contract
 
 lint: ## Type-check the e2e suite and lint the server
 	cd $(SITE)/e2e && npm run typecheck
@@ -80,6 +90,9 @@ e2e: ## Playwright suite; starts uvicorn unless BASE_URL already answers (ARGS="
 
 e2e-smoke: ## Fast subset of the e2e suite (@smoke)
 	PORT=$(PORT) BASE_URL=$(BASE_URL) sh $(SITE)/scripts/dev-e2e.sh --grep @smoke
+
+e2e-pg: ## The m3-restore spec on a Postgres-backed uvicorn (port 10010; starts `make pg` if needed; ARGS= for others)
+	sh $(SITE)/scripts/dev-e2e-pg.sh $(ARGS)
 
 docker: ## Build the production image (needs a Docker daemon) and check its contents
 	cd $(ROOT) && docker build -f site/Dockerfile -t study-hubs:local .

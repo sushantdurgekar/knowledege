@@ -64,7 +64,10 @@ async def get_viewer(request: Request) -> Viewer:
                 503, "unavailable", "Sign-in checks are unavailable right now", retry_after=30
             ) from None
         else:
-            viewer = Viewer(identity, public_id(settings.secret, identity.uid))
+            if identity.uid in runtime.deleted_uids:  # the account was deleted (DELETE /api/me)
+                flag_clear_cookies(request)
+            else:
+                viewer = Viewer(identity, public_id(settings.secret, identity.uid))
     request.state.studyhubs_viewer = viewer
     return viewer
 

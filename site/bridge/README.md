@@ -48,7 +48,7 @@ that becomes visible after `refreshMs` checks for a newer copy and offers **Relo
 | `sync.ts` | Signed-in orchestration: transport, outbox, db, prefetch decision, lifecycle listeners, notices, profile initial, legacy mid-session check |
 | `db.ts` | `DB.doc(path).get()/set()`: cache + refresh policy, stubs, read-your-writes, handover of another tab's newer record |
 | `outbox.ts` | Pending parts, waiters (resolved on the server's acknowledgement), freshen, tier timers, unload flush (keepalive / gzip), backoff, error mapping |
-| `transport.ts` | `fetch` with `X-StudyHubs: 1` and same-origin credentials, timeouts, `Retry-After`, the error-code table, lazy `/_sh/fflate.js` |
+| `transport.ts` | `fetch` with `X-StudyHubs: 1` (plus `X-StudyHubs-Account`, the page's publicId, once sync starts) and same-origin credentials, timeouts, `Retry-After`, the error-code table, lazy `/_sh/fflate.js` |
 | `auth-events.ts` | `sh_hint` / owner state, BroadcastChannel `studyhubs` (`flush`, `auth-changed`, `logout`), account-switch guard, bfcache re-check |
 | `legacy.ts` | `legacySeed()` rules for AI-901 |
 | `theme.ts` | Shadow-DOM styling that follows the hub's own tokens, `data-theme` and `prefers-color-scheme` |
