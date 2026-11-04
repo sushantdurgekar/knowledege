@@ -15,6 +15,7 @@
 import { createAiModal, createAiShim } from "./ai";
 import { clearHintCookie, cookieOf, listenAuthEvents, modeOf, readAuthState, type Mode } from "./auth-events";
 import { createChrome, type Chrome } from "./chrome";
+import { installHubHistory } from "./history";
 import { readConfig, type BridgeConfig, type ScriptLike } from "./config";
 import { USER, type HubDb } from "./db";
 import { createLegacy } from "./legacy";
@@ -176,12 +177,21 @@ export function startBridge(opts: StartOptions = {}): BridgeHandle | null {
     },
     stale: () => mode !== bootMode || (!!sync && !!sync.stats().outbox.dead),
   });
+  let disposeHistory: () => void = () => {};
   const cancelMount = onDomReady(document, () => {
     try {
       ui.mount();
     } catch (e) {
       warn("menu failed to mount", e);
     }
+    // After the hub's own boot (it runs at the end of its inline script or on DOMContentLoaded).
+    setTimeout(() => {
+      try {
+        disposeHistory = installHubHistory(window, document);
+      } catch (e) {
+        warn("hub history failed", e);
+      }
+    }, 0);
   });
 
   // 7. window.__studyhubsBridge
@@ -218,6 +228,7 @@ export function startBridge(opts: StartOptions = {}): BridgeHandle | null {
     claude,
     dispose() {
       cancelMount();
+      disposeHistory();
       unsubscribe();
       stopEvents();
       if (sync) sync.dispose();
