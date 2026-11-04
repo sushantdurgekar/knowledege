@@ -47,6 +47,7 @@ MAX_EXPLAIN = 600
 CONFIDENCE = ("sure", "unsure")
 ROOM_IDLE_S = 6 * 3600
 LEADERBOARD_SIZE = 10
+BOARD_SIZE = 50
 LOBBY_COALESCE_S = 1.0
 MAX_RESPONSES = 250
 MAX_EXTEND_S = 120
@@ -166,6 +167,9 @@ class Room:
         self.mode: Mode = mode
         self.study = study
         self.host_key = secrets.token_urlsafe(24)
+        # View-only key for the presenter screen (the host hands out the link): it follows the
+        # host but never sees an answer before the reveal, and has no controls.
+        self.present_key = secrets.token_urlsafe(18)
         self.clock = clock
         self.players: dict[str, Player] = {}
         self.phase: Phase = "lobby"
@@ -602,6 +606,7 @@ class Room:
         ranked, _ = self._rank_index()
         out = self._common(True)
         out["answeredCount"] = self.answered_count
+        out["presentKey"] = self.present_key
         out["leaderboard"] = self._board(ranked, len(ranked))
         if self.mode == "self" or self.phase in ("reveal", "finished"):
             out["insights"] = self.insights()
@@ -632,6 +637,39 @@ class Room:
             out["itemStats"] = [
                 self._stats(i) if q.answerable else None for i, q in enumerate(self.quiz.questions)
             ]
+        return out
+
+    def present_view(self) -> dict[str, Any]:
+        """The presenter screen: what the room should see. No solutions before the reveal."""
+        self.tick()
+        if self.mode == "self":
+            for p in self.players.values():
+                self.self_tick(p)
+        ranked, _ = self._rank_index()
+        out = self._common(True)
+        out["answeredCount"] = self.answered_count
+        out["question"] = self._live_question(False) if self.mode == "live" else None
+        if self.phase in ("reveal", "finished") or self.mode == "self":
+            out["leaderboard"] = self._board(ranked, LEADERBOARD_SIZE)
+        if self.phase == "lobby":
+            out["players"] = [{"id": p.id, "name": p.name} for p in self.players.values()]
+        if self.mode == "self":
+            out["doneCount"] = sum(1 for p in self.players.values() if p.stage == "done")
+        return out
+
+    def board_view(self) -> dict[str, Any]:
+        """The public leaderboard: standings and where the quiz is, nothing else."""
+        self.tick()
+        ranked, _ = self._rank_index()
+        out = self._common(False)
+        q = self.question
+        out["current"] = (
+            {"index": self.index, "type": q.type, "text": q.text[:200]}
+            if q is not None and self.mode == "live" and self.phase != "lobby"
+            else None
+        )
+        # Live: the standings as of the last reveal (answers in flight are not shown).
+        out["leaderboard"] = self._board(ranked, BOARD_SIZE)
         return out
 
     def view(self, player: Player | None = None, host: bool = False) -> dict[str, Any]:

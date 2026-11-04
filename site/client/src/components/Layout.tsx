@@ -30,6 +30,17 @@ export function Layout() {
     mainRef.current?.focus({ preventScroll: true });
   }, [pathname]);
 
+  // The presenter screen is full-bleed: no site header, back bar or footer on the projector.
+  if (pathname.startsWith('/quiz/present/')) {
+    return (
+      <main id="main" ref={mainRef} tabIndex={-1} className="present-main">
+        <Suspense fallback={<PageLoading />}>
+          <Outlet />
+        </Suspense>
+      </main>
+    );
+  }
+
   return (
     <div className="shell">
       <a className="skip-link" href="#main">

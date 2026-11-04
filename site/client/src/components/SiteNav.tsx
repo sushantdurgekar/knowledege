@@ -42,6 +42,7 @@ const LABELS: Record<string, string> = {
   host: 'Studio',
   edit: 'Edit',
   review: 'Review deck',
+  board: 'Leaderboard',
   play: 'Play',
   admin: 'Admin',
   account: 'Account',
@@ -76,7 +77,7 @@ export function BackBar() {
   const parts = pathname.split('/').filter(Boolean);
   const crumbs = parts
     .map((part, i) => ({ to: `/${parts.slice(0, i + 1).join('/')}`, label: LABELS[part] ?? part }))
-    .filter((_c, i) => !(parts[0] === 'quiz' && ((i === 1 && parts[1] === 'play') || (i === 2 && parts[2] === 'edit'))));
+    .filter((_c, i) => !(parts[0] === 'quiz' && ((i === 1 && (parts[1] === 'play' || parts[1] === 'board')) || (i === 2 && parts[2] === 'edit'))));
 
   const goBack = () => {
     const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;

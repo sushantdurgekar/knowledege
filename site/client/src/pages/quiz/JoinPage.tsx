@@ -5,6 +5,7 @@ import { useMe } from '../../context/me';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { apiMessage, joinRoom, playerToken, setPlayerToken } from '../../lib/quiz';
 import { dueCards, loadState } from '../../lib/quiz-history';
+import { WatchForm } from './Board';
 
 /** `/quiz`: enter the room PIN and a nickname. Admins also get a link to host. */
 export function JoinPage() {
@@ -86,6 +87,7 @@ export function JoinPage() {
           {busy ? 'Joining…' : 'Join'}
         </button>
       </form>
+      <WatchForm />
       {cards > 0 && (
         <div className="notice quiz-review-cta">
           <h2>Your review deck</h2>

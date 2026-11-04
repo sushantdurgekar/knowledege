@@ -5,7 +5,9 @@ import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { download } from '../../lib/quiz-doc';
 import {
   apiMessage,
+  boardLink,
   hostAction,
+  presenterLink,
   hostSecret,
   setHostSecret,
   TYPE_LABELS,
@@ -120,6 +122,25 @@ function Hosting({ pin, hostKey }: { pin: string; hostKey: string }) {
         </button>
       </div>
 
+      {view.presentKey && view.phase !== 'finished' && (
+        <details className="share-panel">
+          <summary>Present on another screen (Teams, projector) · leaderboard link</summary>
+          <div className="share-panel__body">
+            <ShareRow
+              label="Presenter screen"
+              note="Give this to whoever shares their screen. It follows you live and never shows an answer before you reveal it."
+              url={presenterLink(pin, view.presentKey)}
+              open
+            />
+            <ShareRow
+              label="Public leaderboard"
+              note="Anyone can follow the standings with this link, playing or not."
+              url={boardLink(pin)}
+            />
+          </div>
+        </details>
+      )}
+
       <div className={`host-layout${self ? ' host-layout--self' : ''}`}>
         <div className="host-stage">
           {view.phase === 'lobby' && <Lobby view={view} pin={pin} joinUrl={joinUrl} busy={busy} act={act} />}
@@ -132,6 +153,37 @@ function Hosting({ pin, hostKey }: { pin: string; hostKey: string }) {
         {!self && view.sheet && <RunSheet view={view} busy={busy} act={act} />}
       </div>
     </section>
+  );
+}
+
+function ShareRow({ label, note, url, open = false }: { label: string; note: string; url: string; open?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="share-row">
+      <div className="share-row__text">
+        <strong>{label}</strong>
+        <span className="muted small">{note}</span>
+        <code className="share-row__url">{url}</code>
+      </div>
+      <div className="share-row__actions">
+        <button
+          type="button"
+          className="btn btn--small"
+          onClick={() => {
+            void navigator.clipboard?.writeText(url);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          }}
+        >
+          {copied ? 'Copied ✓' : 'Copy link'}
+        </button>
+        {open && (
+          <a className="btn btn--small btn--primary" href={url} target="_blank" rel="noopener">
+            Open
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -351,7 +403,7 @@ function SelfDashboard({ view, act, busy }: { view: RoomView; act: Act; busy: bo
                       {p.stage === 'done' ? 'Done' : p.stage === 'ready' ? 'Not started' : `${p.position} / ${view.total}`}
                     </span>
                   </td>
-                  <td className="mono">{p.score.toLocaleString()}</td>
+                  <td className="mono">{(p.score ?? 0).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>

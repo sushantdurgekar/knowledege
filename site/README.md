@@ -441,6 +441,15 @@ Players join with a 6-digit PIN and a nickname (no account needed). Admins build
   - A run sheet opens any item next.
   - **+10 s** adds time, **Lock joining** closes the room to newcomers, and **End quiz now** finishes with the scores so far.
   - Results download as CSV.
+- **Presenter screen (for Teams or a projector):** the host opens **Present on another screen** and copies the presenter link (`/quiz/present/<pin>#k=<key>`). The link opens a full-screen, view-only display that follows the host live:
+  - the lobby, with the join address, a big PIN and the players
+  - each question with its options, a timer ring and how many have answered
+  - after the reveal, the answer counts and the leaderboard
+  - slides, presented large
+  - the final podium
+
+  The presenter never receives an answer before the host reveals it; the server leaves solutions out. Its key cannot control the room.
+- **Public leaderboard:** `/quiz/board/<pin>`, or **Just watching?** on `/quiz`. Anyone can follow the standings and where the quiz is, playing or not. It updates after each reveal.
 - **Self-paced mode:** each player has their own pace and timer, with optional **flashcards first**. The host sees a progress dashboard and insights.
 - **After a quiz:**
   - **Replay my mistakes** re-asks only the missed questions, checked in the browser.
@@ -450,6 +459,16 @@ Players join with a 6-digit PIN and a nickname (no account needed). Admins build
 - **Player data:** kept in the browser. For signed-in players it is also synced to their account through a virtual hub, `live-quiz`, in the progress API. Account export, delete, backups and the write quota therefore cover it.
 - **Scoring:** 50–100% of the points depending on speed. Multiple choice, match and order give partial credit; each hint used takes 25%; ties go to the faster player.
 - **Limits:** 250 players per room and 50 open rooms. Running rooms live in server memory, so a deploy or restart ends them; saved quizzes and player history are unaffected. Answers wake only the host, lookups are O(1), and the ranking is sorted once per change (`site/server/app/quiz/room.py`).
+
+## Look and feel
+
+The site shell uses the **Aurora** theme (`site/client/src/styles/tokens.css` and `theme.css`), styled after modern learning portals:
+- generous radii (10–28 px) and soft layered shadows
+- a violet primary with teal, coral and amber accents, also used for the quiz answer tiles
+- pill-shaped buttons that lift on hover and press down
+- a gradient hero, and a deep violet-navy dark mode
+
+Text colours pass WCAG AA in both themes. Hub pages keep their own look.
 
 ## Auto-deploy
 

@@ -190,3 +190,47 @@ test('admin builds a quiz from a study hub', async ({ browser }) => {
   await host.getByRole('button', { name: 'Check', exact: true }).click();
   await expect(host.getByText(/Ready: \d+ items/)).toBeVisible();
 });
+
+test('presenter screen follows the host without early answers; the public board shows standings', async ({ browser }) => {
+  const hostContext = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+  await signInAdmin(hostContext);
+  const host = await hostContext.newPage();
+  await host.goto('/quiz/host');
+  await host.getByRole('button', { name: 'Quick example' }).click();
+  await expect(host.getByText('Items (8)')).toBeVisible();
+  await host.getByRole('button', { name: 'Host live' }).click();
+  await host.waitForURL(/\/quiz\/host\/\d{6}$/);
+  const pin = host.url().split('/').pop()!;
+  await host.getByText(/Present on another screen/).click();
+  const link = await host.locator('.share-row__url').first().innerText();
+  expect(link).toMatch(new RegExp(`/quiz/present/${pin}#k=`));
+
+  const presenter = await (await browser.newContext({ viewport: { width: 1600, height: 900 } })).newPage();
+  await presenter.goto(link);
+  await expect(presenter.locator('.present__pin')).toHaveText(pin);
+  await expect(presenter.getByRole('banner')).toHaveCount(0); // no site header on the projector
+  const ann = await join(browser, pin, 'Ann');
+  await join(browser, pin, 'Bob');
+  await expect(presenter.locator('.present__chips li')).toHaveCount(2);
+
+  await host.getByRole('button', { name: /^Start/ }).click();
+  await host.getByRole('button', { name: /^Next: item 2/ }).click();
+  await expect(presenter.locator('.present__q')).toHaveText('Which port does HTTPS use by default?');
+  await expect(presenter.locator('.quiz-solution')).toHaveCount(0); // no answer before the reveal
+  await ann.getByRole('button', { name: /443/ }).click();
+  await expect(presenter.getByText(/1 of 2 answered/)).toBeVisible();
+  await host.getByRole('button', { name: 'Close and show answer' }).click();
+  await expect(presenter.locator('.quiz-solution__row.is-right')).toContainText('443');
+  await expect(presenter.locator('.quiz-board__row').first()).toContainText('Ann');
+
+  const watcher = await (await browser.newContext()).newPage();
+  await watcher.goto('/quiz');
+  await watcher.getByLabel('Just watching? Follow the leaderboard').fill(pin);
+  await watcher.getByRole('button', { name: 'Watch' }).click();
+  await expect(watcher.locator('.quiz-board__row').first()).toContainText('Ann');
+  await expect(watcher.getByText(/Just answered: 2 of 8/)).toBeVisible();
+
+  const bad = await (await browser.newContext()).newPage();
+  await bad.goto(`/quiz/present/${pin}#k=wrong`);
+  await expect(bad.getByText(/not valid/)).toBeVisible();
+});
