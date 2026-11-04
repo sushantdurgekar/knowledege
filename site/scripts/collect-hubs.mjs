@@ -239,14 +239,41 @@ function injectionPointOf({ headEnd, firstScript }) {
 const escAttr = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /** The exact span from build-contracts.md §4. */
+/*
+ * The site's Aurora look for hubs (site/bridge/src/aurora.css), inlined in the injected span:
+ * no extra request (anonymous hub pages make none) and nothing added to the bridge's budget.
+ * The minifier is deterministic; e2e/tests/support/catalog.ts applies the same one.
+ */
+export function minifyCss(css) {
+  return css
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([{};,])\s*/g, '$1')
+    .replace(/;}/g, '}')
+    .trim();
+}
+
+let auroraCache = null;
+export function auroraStyle() {
+  if (auroraCache === null) {
+    const file = path.join(SCRIPT_DIR, '..', 'bridge', 'src', 'aurora.css');
+    auroraCache = `<style data-studyhubs="aurora">${minifyCss(fs.readFileSync(file, 'utf8'))}</style>`;
+  }
+  return auroraCache;
+}
+
 export function injectionSpan({ id, slug, engine, legacyKeys = [] }) {
   if (engine === 'legacy') {
     return (
+      auroraStyle() +
       `<script src="/_sh/bridge.js" data-hub-id="${escAttr(id)}" data-slug="${escAttr(slug)}" data-engine="legacy" ` +
       `data-legacy-keys="${escAttr(legacyKeys.join(','))}"></script><script src="/api/seed/${escAttr(id)}.js"></script>`
     );
   }
-  return `<script src="/_sh/bridge.js" data-hub-id="${escAttr(id)}" data-slug="${escAttr(slug)}" data-engine="${escAttr(engine)}"></script>`;
+  return (
+    auroraStyle() +
+    `<script src="/_sh/bridge.js" data-hub-id="${escAttr(id)}" data-slug="${escAttr(slug)}" data-engine="${escAttr(engine)}"></script>`
+  );
 }
 
 /** Served bytes = original with `span` inserted at `at`; asserts the round trip. */

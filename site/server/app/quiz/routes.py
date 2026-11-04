@@ -50,7 +50,7 @@ from app.auth import ratelimit
 from app.auth.csrf import csrf_protect
 from app.auth.deps import Viewer
 from app.errors import ApiError
-from app.quiz import images, library
+from app.quiz import ai, images, library
 from app.quiz.bank import bank_hub, bank_index, load_bank
 from app.quiz.library import LibraryError
 from app.quiz.parse import (
@@ -483,3 +483,48 @@ async def start_saver(store: Store) -> None:
 async def stop_saver() -> None:
     if _saver is not None:
         await _saver.stop()
+
+
+# -- AI-drafted questions (optional) ------------------------------------------------------------
+AI_RULE = ratelimit.Rule.per_minute("quiz-ai", 3, burst=6)
+
+
+@router.get("/ai")
+async def ai_status(admin: Admin) -> JSONResponse:
+    return _json({"enabled": ai.enabled(), "model": ai.MODEL})
+
+
+@router.post("/ai/draft", dependencies=CSRF)
+async def ai_draft(request: Request, admin: Admin) -> JSONResponse:
+    """{hubId, moduleIds} or {notes}, count (1-15), kinds, advanced -> draft items to review."""
+    runtime = get_runtime(request)
+    wait = runtime.limiter.hit("quiz-ai:" + admin.uid, AI_RULE)
+    if wait is not None:
+        raise ApiError(
+            429, "rate_limited", "Too many AI drafts in a row; try again shortly", retry_after=wait
+        )
+    data = await _body(request)
+    count = data.get("count", 8)
+    if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 15:
+        raise ApiError(422, "invalid", "count must be 1-15")
+    kinds = [k for k in data.get("kinds") or [] if k in ai.KINDS] or ["single", "multi", "truefalse"]
+    avoid = [str(q)[:300] for q in data.get("avoid") or [] if isinstance(q, str)][:60]
+    notes = data.get("notes")
+    if isinstance(notes, str) and notes.strip():
+        source = notes.strip()[: ai.MAX_SOURCE_CHARS]
+    else:
+        hub = bank_hub(load_bank(runtime.settings.hubs_dir), str(data.get("hubId", "")))
+        module_ids = [m for m in data.get("moduleIds") or [] if isinstance(m, str)]
+        if hub is None or not module_ids:
+            raise ApiError(422, "invalid", "Pick a hub and modules, or paste notes")
+        source, bank_avoid = ai.source_from_bank(hub, module_ids)
+        avoid = avoid + bank_avoid
+        if not source.strip():
+            raise ApiError(422, "invalid", "Those modules have no key points to draft from")
+    try:
+        result = await ai.draft(
+            source, count=count, kinds=kinds, advanced=bool(data.get("advanced")), avoid=avoid
+        )
+    except ai.AiError as exc:
+        raise ApiError(exc.status, exc.code, exc.message) from None
+    return _json(result)

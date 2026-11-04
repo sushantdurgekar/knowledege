@@ -626,3 +626,77 @@ def test_quiz_library_travels_in_the_backup_settings_record() -> None:
     assert library.get_quiz(target, "pics1234")[0]["title"] == "Pics"
     assert images.load_image(target, image_id) == ("image/png", png)
     assert library.studio_snapshot(MemoryStore()) is None
+
+
+class _FakeAI:
+    """Stands in for anthropic.AsyncAnthropic: records the request, returns a canned reply."""
+
+    def __init__(self, reply: Any = None, *, stop: str = "end_turn", error: Exception | None = None) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self.reply, self.stop, self.error = reply, stop, error
+        self.beta = self
+        self.messages = self
+
+    async def create(self, **kwargs: Any) -> Any:
+        import json as _json
+        from types import SimpleNamespace
+
+        self.calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
+        text = SimpleNamespace(type="text", text=_json.dumps(self.reply))
+        usage = SimpleNamespace(input_tokens=1200, output_tokens=900)
+        return SimpleNamespace(
+            content=[text], stop_reason=self.stop, usage=usage, model="claude-opus-5-5", _request_id="req_1"
+        )
+
+
+def test_ai_draft(admin: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.quiz import ai
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert admin.get("/api/quiz/ai", headers=API).json()["enabled"] is False
+    off = admin.post("/api/quiz/ai/draft", json={"notes": "TLS"}, headers=API)
+    assert (off.status_code, off.json()["code"]) == (503, "ai_disabled")
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    good = {
+        "type": "single",
+        "text": "Which port does HTTPS use?",
+        "options": [{"text": "80", "correct": False}, {"text": "443", "correct": True}],
+        "answer": False,
+        "answers": [],
+        "explain": "443 is HTTPS.",
+        "hint": "Not 80.",
+    }
+    broken = {**good, "options": [{"text": "only one", "correct": True}]}  # fails validation
+    fake = _FakeAI({"questions": [good, broken]})
+    monkeypatch.setattr(ai, "client", lambda: fake)
+    r = admin.post(
+        "/api/quiz/ai/draft", json={"notes": "HTTPS uses 443.", "count": 2, "advanced": True}, headers=API
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["dropped"] == 1
+    assert body["items"][0]["hints"] == ["Not 80."]
+    sent = fake.calls[0]
+    assert sent["model"] == "claude-opus-5-5"
+    assert sent["fallbacks"] == "default"
+    assert sent["betas"] == ["server-side-fallback-2026-07-01"]
+    assert sent["output_config"]["effort"] == "medium"
+    assert sent["output_config"]["format"]["type"] == "json_schema"
+    assert "HTTPS uses 443." in sent["messages"][0]["content"]
+
+    monkeypatch.setattr(ai, "client", lambda: _FakeAI({"questions": []}, stop="refusal"))
+    declined = admin.post("/api/quiz/ai/draft", json={"notes": "x"}, headers=API)
+    assert (declined.status_code, declined.json()["code"]) == (422, "ai_declined")
+
+    import anthropic
+    import httpx2
+
+    req = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+    err = anthropic.APIConnectionError(request=req)
+    monkeypatch.setattr(ai, "client", lambda: _FakeAI(error=err))
+    down = admin.post("/api/quiz/ai/draft", json={"notes": "x"}, headers=API)
+    assert (down.status_code, down.json()["code"]) == (503, "ai_unavailable")
+    assert admin.post("/api/quiz/ai/draft", json={"count": 2}, headers=API).status_code == 422
