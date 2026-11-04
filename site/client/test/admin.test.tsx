@@ -87,7 +87,10 @@ describe('admin access', () => {
     asAdmin();
     const { user, unmount } = renderApp('/');
     await user.click(await screen.findByRole('button', { name: /Account menu/ }));
-    expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/admin');
+    // The header nav and the account menu both link to /admin.
+    const links = screen.getAllByRole('link', { name: 'Admin' });
+    expect(links).toHaveLength(2);
+    for (const link of links) expect(link).toHaveAttribute('href', '/admin');
     unmount();
 
     setHint(USER.publicId);

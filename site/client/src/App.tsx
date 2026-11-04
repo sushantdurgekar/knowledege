@@ -15,6 +15,8 @@ const SignOut = lazy(() => import('./pages/SignOut').then((m) => ({ default: m.S
 const Account = lazy(() => import('./pages/Account').then((m) => ({ default: m.Account })));
 const Privacy = lazy(() => import('./pages/Privacy').then((m) => ({ default: m.Privacy })));
 // The admin pages are their own chunk (≤ 40 KB gz, build-contracts §21), loaded only on /admin.
+// Live quiz: join, play and host pages in one lazy chunk.
+const QuizApp = lazy(() => import('./pages/quiz/QuizApp').then((m) => ({ default: m.QuizApp })));
 const Admin = lazy(() => import('./pages/admin/Admin').then((m) => ({ default: m.Admin })));
 
 /** Route table. Must stay in step with the server's SPA_ROUTES (site/server/app/static_routes.py). */
@@ -31,6 +33,7 @@ export function App() {
           <Route path="signout" element={<SignOut />} />
           <Route path="account" element={<Account />} />
           <Route path="admin/*" element={<Admin />} />
+          <Route path="quiz/*" element={<QuizApp />} />
           <Route path="privacy" element={<Privacy />} />
           <Route path="*" element={<NotFound />} />
         </Route>

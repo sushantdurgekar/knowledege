@@ -38,9 +38,9 @@ ROOT_FILE_CACHE = "public, max-age=3600"
 GET_HEAD = ["GET", "HEAD"]
 
 SPA_ROUTES = frozenset(
-    {"/", "/signin", "/signup", "/reset", "/verify", "/signout", "/account", "/admin", "/privacy"}
+    {"/", "/signin", "/signup", "/reset", "/verify", "/signout", "/account", "/admin", "/privacy", "/quiz"}
 )
-SPA_PREFIXES = ("/admin/",)
+SPA_PREFIXES = ("/admin/", "/quiz/")
 SHELL_INDEX = "index.html"
 # Only plain paths are echoed back in a redirect Location.
 _REDIRECTABLE_RE = re.compile(r"/[A-Za-z0-9._~/-]*")

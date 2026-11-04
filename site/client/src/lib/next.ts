@@ -7,7 +7,7 @@
 const NEXT_RE = /^\/(h\/[a-z0-9-]+)?$/;
 
 /** Shell pages a sign-in may return to. The auth flow pages are left out on purpose. */
-export const NEXT_ROUTES: ReadonlySet<string> = new Set(['/account', '/privacy', '/admin']);
+export const NEXT_ROUTES: ReadonlySet<string> = new Set(['/account', '/privacy', '/admin', '/quiz', '/quiz/host']);
 
 export function isSafeNext(next: string | null | undefined): next is string {
   return typeof next === 'string' && (NEXT_RE.test(next) || NEXT_ROUTES.has(next));
