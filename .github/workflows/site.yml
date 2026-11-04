@@ -1,4 +1,5 @@
 # Study Hubs website (site/): test -> e2e + contract -> deploy to Render.
+# FAST-DEPLOY MODE: the test jobs are skipped unless repository variable SITE_RUN_TESTS='true'.
 #
 # Runs only when the site, a published hub file, the Docker allow-list or this workflow
 # changes, so a notes-only commit to the vault tests and deploys nothing. The deploy job runs
@@ -50,6 +51,9 @@ env:
 jobs:
   test:
     name: Unit tests and collector
+    # Fast-deploy mode: tests are skipped unless the repository variable SITE_RUN_TESTS is 'true'
+    # (Settings -> Secrets and variables -> Actions -> Variables). Turn it back on once the site is up.
+    if: ${{ vars.SITE_RUN_TESTS == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -111,6 +115,7 @@ jobs:
   e2e:
     name: E2E (uvicorn + Docker image)
     needs: test
+    if: ${{ vars.SITE_RUN_TESTS == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     # For m3-restore.spec.ts on a Postgres-backed server (build-contracts.md section 26).
@@ -242,6 +247,7 @@ jobs:
   contract:
     name: Store contract on the Firestore emulator and Postgres
     needs: test
+    if: ${{ vars.SITE_RUN_TESTS == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     # The Postgres store's contract suite, S17 and S18 (build-contracts.md sections 23 and 26).
@@ -322,7 +328,8 @@ jobs:
   deploy:
     name: Deploy to Render
     needs: [test, e2e, contract]
-    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    # Runs when the test jobs passed or were skipped (fast-deploy mode), never after a failure.
+    if: ${{ !failure() && !cancelled() && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
