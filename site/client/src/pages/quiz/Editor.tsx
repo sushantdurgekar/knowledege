@@ -1,16 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { FormMessage } from '../../components/forms';
+import { BusyLine, FormMessage } from '../../components/forms';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { apiMessage, createRoom, parseQuiz, setHostSecret, TYPE_LABELS, type Mode, type QuestionType } from '../../lib/quiz';
+import { isApiProblem } from '../../lib/api';
+import {
+  apiMessage,
+  createRoom,
+  getSaved,
+  parseQuiz,
+  putSaved,
+  setHostSecret,
+  TYPE_LABELS,
+  type Mode,
+  type QuestionType,
+} from '../../lib/quiz';
 import {
   blankItem,
   download,
+  fromServer,
   ITEM_TYPES,
-  loadLibrary,
   newId,
   retype,
-  saveDoc,
   slugify,
   toServer,
   toText,
@@ -32,23 +42,46 @@ export function Editor() {
 function EditorPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const [doc, setDoc] = useState<QuizDoc | null>(() => loadLibrary().find((d) => d.id === id) ?? null);
+  const [doc, setDoc] = useState<QuizDoc | null>(null);
+  const [version, setVersion] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState(0);
   const [errors, setErrors] = useState<string[]>([]);
   const [checked, setChecked] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [study, setStudy] = useState(false);
-  const [saved, setSaved] = useState(true);
-  useDocumentTitle(doc ? `Edit: ${doc.title}` : 'Quiz not found');
+  const [saved, setSaved] = useState<'saved' | 'pending' | 'saving' | 'error'>('saved');
+  useDocumentTitle(doc ? `Edit: ${doc.title}` : 'Edit quiz');
 
-  // Autosave half a second after the last change.
   useEffect(() => {
-    if (!doc || saved) return;
-    const timer = setTimeout(() => {
-      saveDoc(doc);
-      setSaved(true);
-    }, 500);
+    getSaved(id)
+      .then((r) => {
+        setDoc(fromServer(r.doc, id));
+        setVersion(r.version);
+      })
+      .catch((e) => setLoadError(isApiProblem(e) && e.status === 404 ? 'not_found' : apiMessage(e)));
+  }, [id]);
+
+  const save = async (current: QuizDoc): Promise<boolean> => {
+    setSaved('saving');
+    try {
+      const r = await putSaved(id, toServer(current), version);
+      setVersion(r.version);
+      setSaved('saved');
+      return true;
+    } catch (e) {
+      setSaved('error');
+      setErrors([isApiProblem(e) && e.status === 409 ? `${e.message} (your changes are still here: export them first)` : apiMessage(e)]);
+      return false;
+    }
+  };
+
+  // Autosave a second after the last change.
+  useEffect(() => {
+    if (!doc || saved !== 'pending') return;
+    const timer = setTimeout(() => void save(doc), 1000);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, saved]);
 
   const errorItems = useMemo(() => {
@@ -60,11 +93,13 @@ function EditorPage() {
     return out;
   }, [errors]);
 
+  if (!doc && !loadError) return <BusyLine>Loading the quiz…</BusyLine>;
+  if (!doc && loadError !== 'not_found') return <FormMessage tone="error">{loadError}</FormMessage>;
   if (!doc) {
     return (
       <section className="page" aria-labelledby="page-title">
         <h1 id="page-title">Quiz not found</h1>
-        <p className="lede">It isn’t in this browser’s library.</p>
+        <p className="lede">It isn’t in the library (it may have been deleted).</p>
         <Link className="btn btn--primary" to="/quiz/host">
           Back to the studio
         </Link>
@@ -74,7 +109,7 @@ function EditorPage() {
 
   const update = (change: Partial<QuizDoc>) => {
     setDoc((d) => (d ? { ...d, ...change } : d));
-    setSaved(false);
+    setSaved('pending');
     setChecked(null);
   };
   const setItems = (items: DocItem[]) => update({ items });
@@ -121,9 +156,8 @@ function EditorPage() {
   };
 
   const host = async (mode: Mode) => {
-    saveDoc(doc);
-    setSaved(true);
     if (!(await check())) return;
+    if (saved !== 'saved' && !(await save(doc))) return;
     setBusy(true);
     try {
       const room = await createRoom(toServer(doc), mode, study);
@@ -168,8 +202,11 @@ function EditorPage() {
             onChange={(e) => update({ points: Number(e.target.value) })}
           />
         </div>
-        <span className="muted small editor__saved" role="status">
-          {saved ? 'Saved' : 'Saving…'}
+        <label className="studio__check editor__adv" title="Confidence ratings, hints, teach-back and host insights">
+          <input type="checkbox" checked={!!doc.advanced} onChange={(e) => update({ advanced: e.target.checked })} /> Advanced
+        </label>
+        <span className={`muted small editor__saved${saved === 'error' ? ' is-error' : ''}`} role="status">
+          {saved === 'saved' ? 'Saved' : saved === 'error' ? 'Not saved' : 'Saving…'}
         </span>
       </div>
 
@@ -243,6 +280,7 @@ function EditorPage() {
             item={item}
             number={selected + 1}
             defaults={{ time: doc.time, points: doc.points }}
+            advanced={!!doc.advanced}
             onChange={setItem}
             onDuplicate={duplicate}
             onDelete={doc.items.length > 1 ? remove : undefined}
@@ -257,6 +295,7 @@ function ItemForm({
   item,
   number,
   defaults,
+  advanced,
   onChange,
   onDuplicate,
   onDelete,
@@ -264,6 +303,7 @@ function ItemForm({
   item: DocItem;
   number: number;
   defaults: { time: number; points: number };
+  advanced: boolean;
   onChange: (item: DocItem) => void;
   onDuplicate: () => void;
   onDelete?: () => void;
@@ -387,6 +427,21 @@ function ItemForm({
         </fieldset>
       )}
 
+      {item.type === 'explain' && (
+        <fieldset className="editor__fieldset">
+          <legend>
+            Model answer <span className="muted small">(shown after players send their own explanation; not scored)</span>
+          </legend>
+          <textarea
+            aria-label="Model answer"
+            rows={3}
+            maxLength={1000}
+            value={(item.answers ?? [''])[0] ?? ''}
+            onChange={(e) => set({ answers: [e.target.value] })}
+          />
+        </fieldset>
+      )}
+
       {item.type === 'text' && (
         <fieldset className="editor__fieldset">
           <legend>
@@ -493,6 +548,37 @@ function ItemForm({
         </fieldset>
       )}
 
+      {advanced && !['slide', 'poll', 'explain'].includes(item.type) && (
+        <fieldset className="editor__fieldset">
+          <legend>
+            Hints <span className="muted small">(up to 3; each one a player opens costs 25% of the points)</span>
+          </legend>
+          {(item.hints ?? []).map((h, i) => (
+            <div key={i} className="editor__row">
+              <input
+                aria-label={`Hint ${i + 1}`}
+                value={h}
+                maxLength={200}
+                onChange={(e) => set({ hints: (item.hints ?? []).map((x, j) => (j === i ? e.target.value : x)) })}
+              />
+              <button
+                type="button"
+                className="editor__x"
+                aria-label={`Remove hint ${i + 1}`}
+                onClick={() => set({ hints: (item.hints ?? []).filter((_, j) => j !== i) })}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {(item.hints ?? []).length < 3 && (
+            <button type="button" className="btn btn--small btn--quiet" onClick={() => set({ hints: [...(item.hints ?? []), ''] })}>
+              + Add hint
+            </button>
+          )}
+        </fieldset>
+      )}
+
       {!slide && (
         <div className="editor__settings">
           <div className="field editor__num">
@@ -507,7 +593,7 @@ function ItemForm({
               onChange={(e) => set({ time: e.target.value ? Number(e.target.value) : undefined })}
             />
           </div>
-          {item.type !== 'poll' && (
+          {item.type !== 'poll' && item.type !== 'explain' && (
             <div className="field editor__num">
               <label htmlFor="item-points">Points</label>
               <input

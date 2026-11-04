@@ -2,7 +2,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, isApiProblem } from './api';
 
-export type QuestionType = 'single' | 'multi' | 'text' | 'match' | 'truefalse' | 'order' | 'poll' | 'slide';
+export type QuestionType = 'single' | 'multi' | 'text' | 'match' | 'truefalse' | 'order' | 'poll' | 'slide' | 'explain';
+export type Confidence = 'sure' | 'unsure';
 export type Mode = 'live' | 'self';
 export type Stage = 'ready' | 'question' | 'reveal' | 'done';
 export type Phase = 'lobby' | 'question' | 'reveal' | 'finished';
@@ -13,6 +14,7 @@ export interface QuestionStats {
   correct: number;
   counts?: number[];
   top?: [string, number][];
+  responses?: { name: string; text: string }[];
 }
 
 export interface QuestionView {
@@ -29,6 +31,9 @@ export interface QuestionView {
   items?: string[];
   body?: string;
   answerText?: string;
+  hintCount?: number;
+  hints?: string[];
+  model?: string[];
   solution?: { correct?: number[]; accepted?: string[]; pairs?: number[]; order?: number[] };
   explain?: string;
   stats?: QuestionStats;
@@ -55,6 +60,34 @@ export interface MeView {
   lastPoints?: number;
   lastCorrect?: boolean | null;
   lastFraction?: number;
+  lastConfidence?: Confidence | null;
+  hints?: string[];
+  calibration?: Calibration;
+}
+
+export interface Calibration {
+  sureRight: number;
+  sureWrong: number;
+  unsureRight: number;
+  unsureWrong: number;
+}
+
+export interface Insight {
+  index: number;
+  type: QuestionType;
+  text: string;
+  answered: number;
+  correct: number;
+  avgSeconds: number | null;
+  sureWrong: number;
+  hintsUsed: number;
+  topWrong?: { text: string; count: number };
+}
+
+export interface ReviewItem extends QuestionView {
+  correct: boolean;
+  answered: boolean;
+  patterns?: string[];
 }
 
 export interface SheetRow {
@@ -72,6 +105,8 @@ export interface RoomView {
   mode: Mode;
   study: boolean;
   locked: boolean;
+  advanced?: boolean;
+  insights?: Insight[];
   scoredTotal: number;
   stage?: Stage;
   sheet?: SheetRow[];
@@ -102,6 +137,7 @@ export const TYPE_LABELS: Record<QuestionType, string> = {
   order: 'Put in order',
   poll: 'Poll',
   slide: 'Slide',
+  explain: 'Explain it',
 };
 
 export interface Card {
@@ -143,9 +179,9 @@ export const joinRoom = (pin: string, name: string) =>
     json: { name },
   });
 
-export const sendAnswer = (pin: string, token: string, index: number, answer: unknown) =>
+export const sendAnswer = (pin: string, token: string, index: number, answer: unknown, confidence?: Confidence) =>
   api<RoomView>(`/api/quiz/rooms/${encodeURIComponent(pin)}/answer`, {
-    json: { index, answer },
+    json: { index, answer, confidence },
     headers: { 'X-Quiz-Token': token },
   });
 
@@ -267,4 +303,81 @@ export function useCountdown(view: RoomView | null): number {
 
 export function apiMessage(error: unknown): string {
   return isApiProblem(error) ? error.message : 'Something went wrong. Check your connection and try again.';
+}
+
+export const askHint = (pin: string, token: string, index: number) =>
+  api<{ hints: string[] }>(`/api/quiz/rooms/${encodeURIComponent(pin)}/hint`, {
+    json: { index },
+    headers: { 'X-Quiz-Token': token },
+  });
+
+export const fetchReview = (pin: string, token: string) =>
+  api<{ title: string; items: ReviewItem[]; advanced: boolean }>(`/api/quiz/rooms/${encodeURIComponent(pin)}/review`, {
+    headers: { 'X-Quiz-Token': token },
+  });
+
+// -- saved quizzes (server library) and the hubs' question bank ---------------------------
+export interface LibraryEntry {
+  id: string;
+  title: string;
+  advanced: boolean;
+  items: number;
+  questions: number;
+  updated: number;
+  by: string;
+}
+export const listLibrary = () => api<{ quizzes: LibraryEntry[] }>('/api/quiz/library');
+export const getSaved = (id: string) => api<{ doc: unknown; version: number }>(`/api/quiz/library/${encodeURIComponent(id)}`);
+export const putSaved = (id: string, doc: unknown, expect: number | null) =>
+  api<{ version: number }>(`/api/quiz/library/${encodeURIComponent(id)}`, { method: 'PUT', json: { doc, expect } });
+export const deleteSaved = (id: string) =>
+  api<{ deleted: true }>(`/api/quiz/library/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export interface BankModule {
+  id: string;
+  title: string;
+  keys: string[];
+  quiz: { q: string; o: string[]; a: number; e: string }[];
+}
+export interface BankHub {
+  id: string;
+  title: string;
+  code: string | null;
+  modules: { id: string; title: string; questions: number; keys: number }[];
+}
+export const listBank = () => api<{ hubs: BankHub[] }>('/api/quiz/bank');
+export const getBankHub = (id: string) =>
+  api<{ id: string; title: string; modules: BankModule[] }>(`/api/quiz/bank/${encodeURIComponent(id)}`);
+
+/** Check a practice answer locally (replay mode), from a reviewed item's solution. */
+export function checkLocally(item: ReviewItem, value: unknown): boolean {
+  const s = item.solution ?? {};
+  const norm = (v: string) => v.split(/\s+/).filter(Boolean).join(' ').toLowerCase();
+  switch (item.type) {
+    case 'single':
+    case 'truefalse':
+      return (s.correct ?? []).includes(value as number);
+    case 'multi': {
+      const picked = [...((value as number[]) ?? [])].sort().join(',');
+      return picked === [...(s.correct ?? [])].sort().join(',');
+    }
+    case 'text': {
+      const text = String(value ?? '');
+      return (item.patterns ?? s.accepted ?? []).some((raw) => {
+        const m = /^\/(.*)\/([a-z]*)$/s.exec(raw);
+        if (!m) return norm(raw) === norm(text);
+        try {
+          return new RegExp(`^(?:${m[1]})$`, m[2]!.includes('i') ? 'i' : '').test(text.trim());
+        } catch {
+          return false;
+        }
+      });
+    }
+    case 'match':
+      return JSON.stringify(value) === JSON.stringify(s.pairs);
+    case 'order':
+      return JSON.stringify(value) === JSON.stringify(s.order);
+    default:
+      return false;
+  }
 }

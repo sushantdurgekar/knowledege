@@ -12,6 +12,12 @@ Item types
   order      `item:` lines in the correct order (players drag them into order)
   poll       options without a right answer; no points
   slide      a content screen (title + body) the host presents; no answer
+  explain    teach-back: players explain in their own words (no score); `answer:` lines are the
+             model answer shown afterwards, and the host sees every response
+
+Advanced quizzes (`advanced: true` at the top, or "advanced" in the builder) add confidence
+ratings on answers and `hint:` lines (up to 3 per question; each hint used costs 25% of the
+question's points). Simple quizzes stay quick to make: no hints, no confidence step.
 
 Text format (one block per item; `#` starts a comment):
 
@@ -39,8 +45,18 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-QuestionType = Literal["single", "multi", "text", "match", "truefalse", "order", "poll", "slide"]
-TYPES: tuple[QuestionType, ...] = ("single", "multi", "text", "match", "truefalse", "order", "poll", "slide")
+QuestionType = Literal["single", "multi", "text", "match", "truefalse", "order", "poll", "slide", "explain"]
+TYPES: tuple[QuestionType, ...] = (
+    "single",
+    "multi",
+    "text",
+    "match",
+    "truefalse",
+    "order",
+    "poll",
+    "slide",
+    "explain",
+)
 SCORED: frozenset[str] = frozenset({"single", "multi", "text", "match", "truefalse", "order"})
 
 MAX_SOURCE_CHARS = 200_000
@@ -53,10 +69,13 @@ MAX_OPTIONS = 8
 MAX_PAIRS = 8
 MAX_ITEMS = 8
 MAX_ANSWERS = 20
+MAX_HINTS = 3
 MIN_TIME, MAX_TIME, DEFAULT_TIME = 5, 300, 20
 MIN_POINTS, MAX_POINTS, DEFAULT_POINTS = 0, 5000, 1000
 
-_KEY = re.compile(r"^(title|time|points|type|answer|pair|item|explain)\s*:\s*(.*)$", re.IGNORECASE)
+_KEY = re.compile(
+    r"^(title|time|points|type|answer|pair|item|explain|hint|advanced)\s*:\s*(.*)$", re.IGNORECASE
+)
 _Q = re.compile(r"^(?:q|question)\s*\d*\s*[:.)]\s*(.*)$", re.IGNORECASE)
 _SLIDE = re.compile(r"^slide\s*[:.)]\s*(.*)$", re.IGNORECASE)
 _REGEX = re.compile(r"^/(.*)/([a-z]*)$", re.DOTALL)
@@ -92,6 +111,8 @@ class Question:
     items: list[str] = field(default_factory=list)  # order: in the correct order
     body: str = ""  # slide
     explain: str = ""
+    hints: list[str] = field(default_factory=list)
+    model: list[str] = field(default_factory=list)  # explain: the model answer
 
     @property
     def scored(self) -> bool:
@@ -106,6 +127,7 @@ class Question:
 class Quiz:
     title: str
     questions: list[Question]
+    advanced: bool = False
 
 
 def normalise(value: str) -> str:
@@ -125,6 +147,7 @@ class _Draft:
     items: list[str] = field(default_factory=list)
     body: list[str] = field(default_factory=list)
     explain: list[str] = field(default_factory=list)
+    hints: list[str] = field(default_factory=list)
 
 
 def _int(value: str, low: int, high: int, what: str, where: str, errors: list[str]) -> int | None:
@@ -194,11 +217,16 @@ def _build(d: _Draft, default_time: int, default_points: int, errors: list[str])
         if d.points in (None, "")
         else _int(d.points, MIN_POINTS, MAX_POINTS, "points", where, errors)
     )
-    if kind in ("poll", "slide"):
+    if kind in ("poll", "slide", "explain"):
         points = 0
     q = Question(text=text, type=kind, time_limit=time_limit or default_time, points=points or 0)  # type: ignore[arg-type]
     q.explain = "\n".join(d.explain).strip()[:MAX_TEXT]
     q.body = "\n".join(d.body).strip()
+    q.hints = [h.strip()[:MAX_OPTION] for h in d.hints if h.strip()]
+    if len(q.hints) > MAX_HINTS:
+        errors.append(f"{where}: at most {MAX_HINTS} hints")
+    if q.hints and kind in ("slide", "poll", "explain"):
+        errors.append(f"{where}: hints only apply to questions with a right answer")
     if len(q.body) > MAX_BODY:
         errors.append(f"{where}: the slide body is longer than {MAX_BODY} characters")
 
@@ -243,6 +271,8 @@ def _build(d: _Draft, default_time: int, default_points: int, errors: list[str])
         rights = [normalise(r) for _, r in q.pairs]
         if len(set(rights)) != len(rights):
             errors.append(f"{where}: the right-hand sides of pairs must all differ")
+    elif kind == "explain":
+        q.model = [a.strip()[:MAX_TEXT] for a in d.answers if a.strip()][:3]
     elif kind == "order":
         q.items = [i.strip()[:MAX_OPTION] for i in d.items if i.strip()]
         if not 2 <= len(q.items) <= MAX_ITEMS:
@@ -252,7 +282,9 @@ def _build(d: _Draft, default_time: int, default_points: int, errors: list[str])
     return q if len(errors) == before else None
 
 
-def _finish(title: str, drafts: list[_Draft], time: int, points: int, errors: list[str]) -> Quiz:
+def _finish(
+    title: str, drafts: list[_Draft], time: int, points: int, errors: list[str], advanced: bool = False
+) -> Quiz:
     if not drafts:
         errors.append("no questions found: add at least one item")
     if len(drafts) > MAX_QUESTIONS:
@@ -260,7 +292,10 @@ def _finish(title: str, drafts: list[_Draft], time: int, points: int, errors: li
     questions = [q for d in drafts[:MAX_QUESTIONS] if (q := _build(d, time, points, errors)) is not None]
     if errors:
         raise QuizFormatError(errors[:50])
-    return Quiz(title=(title.strip() or "Live quiz")[:MAX_TITLE], questions=questions)
+    if not advanced and any(q.hints for q in questions):
+        errors.append("hints need an advanced quiz (add 'advanced: true' at the top)")
+        raise QuizFormatError(errors)
+    return Quiz(title=(title.strip() or "Live quiz")[:MAX_TITLE], questions=questions, advanced=advanced)
 
 
 def parse_quiz(source: str) -> Quiz:
@@ -269,6 +304,7 @@ def parse_quiz(source: str) -> Quiz:
         raise QuizFormatError([f"the file is longer than {MAX_SOURCE_CHARS} characters"])
     errors: list[str] = []
     title = ""
+    advanced = False
     default_time, default_points = DEFAULT_TIME, DEFAULT_POINTS
     drafts: list[_Draft] = []
     current: _Draft | None = None
@@ -307,6 +343,8 @@ def parse_quiz(source: str) -> Quiz:
             if current is None:
                 if name == "title":
                     title = value.strip()
+                elif name == "advanced":
+                    advanced = value.strip().lower() in ("true", "yes", "1", "on")
                 elif name == "time":
                     default_time = (
                         _int(value, MIN_TIME, MAX_TIME, "time", f"line {number}", errors) or DEFAULT_TIME
@@ -327,6 +365,10 @@ def parse_quiz(source: str) -> Quiz:
                 current.pairs.append(value)
             elif name == "item":
                 current.items.append(value)
+            elif name == "hint":
+                current.hints.append(value)
+            elif name == "advanced":
+                errors.append(f"line {number}: advanced: belongs at the top of the file")
             elif name == "explain":
                 current.explain.append(value.strip())
             last_key = name
@@ -345,7 +387,7 @@ def parse_quiz(source: str) -> Quiz:
     for d in drafts:  # trim the blank lines kept for slide paragraphs
         while d.body and not d.body[-1]:
             d.body.pop()
-    return _finish(title, drafts, default_time, default_points, errors)
+    return _finish(title, drafts, default_time, default_points, errors, advanced)
 
 
 # -- JSON (the builder) -------------------------------------------------------------------------
@@ -393,8 +435,16 @@ def quiz_from_json(data: Any) -> Quiz:
         d.items = [_str(i, MAX_OPTION) for i in item.get("items") or [] if isinstance(i, str)]
         d.body = [_str(item.get("body"), MAX_BODY + 1)] if item.get("body") else []
         d.explain = [_str(item.get("explain"), MAX_TEXT)] if item.get("explain") else []
+        d.hints = [_str(h, MAX_OPTION) for h in item.get("hints") or [] if isinstance(h, str)]
         drafts.append(d)
-    return _finish(_str(data.get("title"), MAX_TITLE), drafts, default_time, default_points, errors)
+    return _finish(
+        _str(data.get("title"), MAX_TITLE),
+        drafts,
+        default_time,
+        default_points,
+        errors,
+        bool(data.get("advanced")),
+    )
 
 
 def quiz_to_json(quiz: Quiz) -> dict[str, Any]:
@@ -414,10 +464,17 @@ def quiz_to_json(quiz: Quiz) -> dict[str, Any]:
             item["items"] = list(q.items)
         elif q.type == "slide":
             item["body"] = q.body
+        elif q.type == "explain":
+            item["answers"] = list(q.model)
         if q.explain:
             item["explain"] = q.explain
+        if q.hints:
+            item["hints"] = list(q.hints)
         items.append(item)
-    return {"title": quiz.title, "items": items}
+    out: dict[str, Any] = {"title": quiz.title, "items": items}
+    if quiz.advanced:
+        out["advanced"] = True
+    return out
 
 
 def answer_text(q: Question) -> str:
@@ -433,6 +490,8 @@ def answer_text(q: Question) -> str:
         return " → ".join(q.items)
     if q.type == "slide":
         return q.body
+    if q.type == "explain":
+        return " / ".join(q.model)
     return ""
 
 
@@ -487,4 +546,30 @@ type: poll
 - Very
 - Somewhat
 - Not yet
+"""
+
+
+ADVANCED_TEMPLATE = """title: Networking basics (advanced)
+advanced: true
+time: 30
+
+Slide: How a browser reaches a website
+DNS turns a name into an IP address; the browser then opens TCP (port 443 for HTTPS) and speaks TLS.
+
+Q: Which port does HTTPS use by default?
+- 80
+* 443
+- 22
+hint: The S stands for secure; it is not the plain web port.
+explain: 80 is plain HTTP, 22 is SSH.
+
+Q: Put the TCP handshake in order
+item: SYN
+item: SYN-ACK
+item: ACK
+hint: The client speaks first.
+
+Q: In your own words: why does HTTPS need TLS on top of TCP?
+type: explain
+answer: TCP only delivers bytes reliably; TLS adds encryption, integrity and server authentication.
 """

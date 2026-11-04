@@ -5,6 +5,10 @@ Admin (signed-in admin, CSRF on writes):
   POST /api/quiz/parse               {source} or {quiz} -> {ok, title, questions, quiz} | {ok:false, errors}
   POST /api/quiz/rooms               {source|quiz, mode: live|self, study} -> {pin, hostKey}
   GET  /api/quiz/rooms               the admin's open rooms
+  GET  /api/quiz/library             saved quizzes (shared by admins)
+  GET|PUT|DELETE /api/quiz/library/{id}   one saved quiz ({doc, version}; PUT {doc, expect})
+  GET  /api/quiz/bank                hubs and modules with practice questions
+  GET  /api/quiz/bank/{hubId}        one hub's modules: key points and questions
 
 Host (X-Quiz-Host: the room's hostKey; no admin re-check per poll):
   GET  /api/quiz/rooms/{pin}/host?since=N      long-poll, full view with solutions and run sheet
@@ -16,6 +20,8 @@ Players (no account needed; X-Quiz-Token from join):
   GET  /api/quiz/rooms/{pin}?since=N           long-poll, the player's view
   POST /api/quiz/rooms/{pin}/answer            {index, answer}
   POST /api/quiz/rooms/{pin}/advance           self-paced: open my next item
+  POST /api/quiz/rooms/{pin}/hint              {index} -> {hints} (advanced; each hint costs points)
+  GET  /api/quiz/rooms/{pin}/review            every question with its solution and my result
   GET  /api/quiz/rooms/{pin}/cards             flashcards (study rooms, or once finished)
 
 Long-polls answer at once when the room's version is above `since`, otherwise within 20 s
@@ -31,15 +37,28 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
+from starlette.concurrency import run_in_threadpool
 
 from app.admin.auth import require_admin
 from app.auth import ratelimit
 from app.auth.csrf import csrf_protect
 from app.auth.deps import Viewer
 from app.errors import ApiError
-from app.quiz.parse import TEMPLATE, Quiz, QuizFormatError, parse_quiz, quiz_from_json, quiz_to_json
+from app.quiz import library
+from app.quiz.bank import bank_hub, bank_index, load_bank
+from app.quiz.library import LibraryError
+from app.quiz.parse import (
+    ADVANCED_TEMPLATE,
+    TEMPLATE,
+    Quiz,
+    QuizFormatError,
+    parse_quiz,
+    quiz_from_json,
+    quiz_to_json,
+)
 from app.quiz.room import QuizError, Room, RoomManager
 from app.runtime import get_runtime
+from app.store.base import StoreError
 
 router = APIRouter(prefix="/api/quiz")
 Admin = Annotated[Viewer, Depends(require_admin)]
@@ -126,9 +145,10 @@ def _summary(quiz: Quiz) -> dict[str, Any]:
 
 # -- admin ---------------------------------------------------------------------------------
 @router.get("/template")
-async def template(admin: Admin) -> Response:
+async def template(request: Request, admin: Admin) -> Response:
+    advanced = request.query_params.get("advanced") == "1"
     return Response(
-        TEMPLATE,
+        ADVANCED_TEMPLATE if advanced else TEMPLATE,
         media_type="text/plain; charset=utf-8",
         headers={**NO_STORE, "Content-Disposition": 'attachment; filename="quiz-template.txt"'},
     )
@@ -261,7 +281,7 @@ async def answer(request: Request, pin: str) -> JSONResponse:
         raise ApiError(422, "invalid", "index must be a number")
     try:
         player = room.player_by_token(request.headers.get("x-quiz-token"))
-        room.answer(player, index, data.get("answer"))
+        room.answer(player, index, data.get("answer"), data.get("confidence"))
     except QuizError as exc:
         raise _err(exc) from None
     return _json(room.view(player=player))
@@ -288,3 +308,81 @@ async def cards(request: Request, pin: str) -> JSONResponse:
     if not room.cards_open_to(player):
         raise ApiError(403, "cards_closed", "Flashcards open once the quiz is over")
     return _json({"title": room.quiz.title, "cards": room.cards()})
+
+
+@router.post("/rooms/{pin}/hint", dependencies=CSRF)
+async def hint(request: Request, pin: str) -> JSONResponse:
+    room = _room(pin)
+    index = (await _body(request)).get("index")
+    if not isinstance(index, int) or isinstance(index, bool):
+        raise ApiError(422, "invalid", "index must be a number")
+    try:
+        player = room.player_by_token(request.headers.get("x-quiz-token"))
+        hints = room.hint(player, index)
+    except QuizError as exc:
+        raise _err(exc) from None
+    return _json({"hints": hints})
+
+
+@router.get("/rooms/{pin}/review")
+async def review(request: Request, pin: str) -> JSONResponse:
+    room = _room(pin)
+    try:
+        player = room.player_by_token(request.headers.get("x-quiz-token"))
+    except QuizError as exc:
+        raise _err(exc) from None
+    if not (room.phase == "finished" or player.stage == "done"):
+        raise ApiError(403, "review_closed", "Review opens once you have finished")
+    return _json({"title": room.quiz.title, "items": room.review(player), "advanced": room.quiz.advanced})
+
+
+# -- saved quizzes (library) and the hubs' question bank ------------------------------------
+async def _library(call: Any, *args: Any) -> Any:
+    try:
+        return await run_in_threadpool(call, *args)
+    except LibraryError as exc:
+        raise ApiError(exc.status, exc.code, exc.message) from None
+    except StoreError as exc:
+        raise ApiError(503, "unavailable", "Saved quizzes are unavailable right now", retry_after=30) from exc
+
+
+@router.get("/library")
+async def library_list(request: Request, admin: Admin) -> JSONResponse:
+    return _json({"quizzes": await _library(library.list_quizzes, get_runtime(request).store)})
+
+
+@router.get("/library/{quiz_id}")
+async def library_get(request: Request, quiz_id: str, admin: Admin) -> JSONResponse:
+    doc, version = await _library(library.get_quiz, get_runtime(request).store, quiz_id)
+    return _json({"doc": doc, "version": version})
+
+
+@router.put("/library/{quiz_id}", dependencies=CSRF)
+async def library_put(request: Request, quiz_id: str, admin: Admin) -> JSONResponse:
+    data = await _body(request)
+    expect = data.get("expect")
+    expect = expect if isinstance(expect, int) and not isinstance(expect, bool) else None
+    by = (admin.identity.email if admin.identity else "") or ""
+    version = await _library(
+        library.save_quiz, get_runtime(request).store, quiz_id, data.get("doc"), expect, by
+    )
+    return _json({"version": version})
+
+
+@router.delete("/library/{quiz_id}", dependencies=CSRF)
+async def library_delete(request: Request, quiz_id: str, admin: Admin) -> JSONResponse:
+    await _library(library.delete_quiz, get_runtime(request).store, quiz_id)
+    return _json({"deleted": True})
+
+
+@router.get("/bank")
+async def bank_list(request: Request, admin: Admin) -> JSONResponse:
+    return _json({"hubs": bank_index(load_bank(get_runtime(request).settings.hubs_dir))})
+
+
+@router.get("/bank/{hub_id}")
+async def bank_get(request: Request, hub_id: str, admin: Admin) -> JSONResponse:
+    hub = bank_hub(load_bank(get_runtime(request).settings.hubs_dir), hub_id)
+    if hub is None:
+        raise ApiError(404, "not_found", "No such hub in the question bank")
+    return _json(hub)

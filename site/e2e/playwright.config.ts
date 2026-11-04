@@ -4,6 +4,7 @@
  * Two projects:
  *   - chromium: the M0 specs (static site, anonymous visitors), fully parallel.
  *   - sync:     the M1, M2 and M3 specs (tests/sync-*.spec.ts: fake sign-in, signed-in sync;
+ *               tests/m4-*.spec.ts: live-quiz studio and rooms (admin sign-in, saved quizzes);
  *               tests/m2-*.spec.ts: admin, maintenance, scheduler, backups, account export and
  *               delete; tests/m3-*.spec.ts: the admin restore wizard). They reset the server's
  *               store and set faults, quota, clock offsets and maintenance that the whole server
@@ -33,8 +34,8 @@ if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync(PREINSTALLED)) {
 
 const CI = !!process.env.CI;
 
-/** M1, M2 and M3 specs: they change state the whole server shares (see the header). */
-const SYNC_SPECS = ['**/sync-*.spec.ts', '**/m2-*.spec.ts', '**/m3-*.spec.ts'];
+/** M1-M4 specs: they change state the whole server shares (see the header). */
+const SYNC_SPECS = ['**/sync-*.spec.ts', '**/m2-*.spec.ts', '**/m3-*.spec.ts', '**/m4-*.spec.ts'];
 
 export default defineConfig({
   testDir: './tests',

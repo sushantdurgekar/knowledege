@@ -19,6 +19,7 @@ export interface DocItem {
   pairs?: [string, string][]; // match
   items?: string[]; // order
   explain?: string;
+  hints?: string[]; // advanced quizzes
 }
 
 export interface QuizDoc {
@@ -28,6 +29,8 @@ export interface QuizDoc {
   points: number;
   items: DocItem[];
   updated: number;
+  /** Advanced: confidence ratings, hints, teach-back insights. Simple quizzes stay quick. */
+  advanced?: boolean;
 }
 
 export const ITEM_TYPES: { type: QuestionType; label: string; hint: string }[] = [
@@ -39,6 +42,7 @@ export const ITEM_TYPES: { type: QuestionType; label: string; hint: string }[] =
   { type: 'order', label: 'Put in order', hint: 'Drag into sequence' },
   { type: 'poll', label: 'Poll', hint: 'No right answer' },
   { type: 'slide', label: 'Slide', hint: 'Present content' },
+  { type: 'explain', label: 'Explain it', hint: 'Teach-back, no score' },
 ];
 
 export const newId = () => Math.random().toString(36).slice(2, 10);
@@ -61,13 +65,15 @@ export function blankItem(type: QuestionType): DocItem {
       return { ...base, items: ['', '', ''] };
     case 'slide':
       return { ...base, body: '' };
+    case 'explain':
+      return { ...base, answers: [''] };
   }
 }
 
 /** Switch an item to another type, keeping the text and whatever carries over. */
 export function retype(item: DocItem, type: QuestionType): DocItem {
   const fresh = blankItem(type);
-  const keep = { id: item.id, text: item.text, time: item.time, points: item.points, explain: item.explain };
+  const keep = { id: item.id, text: item.text, time: item.time, points: item.points, explain: item.explain, hints: item.hints };
   if (item.options && fresh.options) {
     const options = item.options.map((o) => ({ text: o.text, correct: type === 'poll' ? false : o.correct }));
     if (type === 'single' && options.filter((o) => o.correct).length !== 1) options.forEach((o, i) => (o.correct = i === 0));
@@ -76,8 +82,16 @@ export function retype(item: DocItem, type: QuestionType): DocItem {
   return { ...fresh, ...keep };
 }
 
-export function blankDoc(): QuizDoc {
-  return { id: newId(), title: 'Untitled quiz', time: 20, points: 1000, items: [blankItem('single')], updated: Date.now() };
+export function blankDoc(advanced = false): QuizDoc {
+  return {
+    id: newId(),
+    title: advanced ? 'Untitled advanced quiz' : 'Untitled quiz',
+    time: advanced ? 30 : 20,
+    points: 1000,
+    items: [blankItem('single')],
+    updated: Date.now(),
+    advanced,
+  };
 }
 
 /** The JSON the server reads (`quiz_from_json`). */
@@ -86,23 +100,32 @@ export function toServer(doc: QuizDoc): unknown {
     title: doc.title,
     time: doc.time,
     points: doc.points,
-    items: doc.items.map(({ id: _id, ...item }) => item),
+    advanced: !!doc.advanced,
+    items: doc.items.map(({ id: _id, ...item }) => {
+      // Simple quizzes carry no hints (the server refuses them there).
+      if (!doc.advanced || !item.hints?.some((h) => h.trim())) {
+        const { hints: _h, ...rest } = item;
+        return rest;
+      }
+      return { ...item, hints: item.hints.filter((h) => h.trim()) };
+    }),
   };
 }
 
 /** A quiz the server sent back (`quiz_to_json`) as a builder document. */
 export function fromServer(data: unknown, id = newId()): QuizDoc {
-  const raw = (data ?? {}) as { title?: string; items?: Omit<DocItem, 'id'>[] };
+  const raw = (data ?? {}) as { title?: string; items?: Omit<DocItem, 'id'>[]; advanced?: boolean; time?: number; points?: number };
   const items = (raw.items ?? []).map((item) => ({ ...item, id: newId() }) as DocItem);
   const times = items.map((i) => i.time).filter((t): t is number => typeof t === 'number');
   const points = items.map((i) => i.points).filter((p): p is number => typeof p === 'number' && p > 0);
   return {
     id,
     title: raw.title || 'Imported quiz',
-    time: mode(times) ?? 20,
-    points: mode(points) ?? 1000,
+    time: raw.time ?? mode(times) ?? 20,
+    points: raw.points ?? mode(points) ?? 1000,
     items,
     updated: Date.now(),
+    advanced: !!raw.advanced,
   };
 }
 
@@ -116,7 +139,7 @@ function mode(values: number[]): number | undefined {
 
 /** The plain-text import format (what `parse_quiz` reads). */
 export function toText(doc: QuizDoc): string {
-  const lines = [`title: ${doc.title}`, `time: ${doc.time}`, `points: ${doc.points}`, ''];
+  const lines = [`title: ${doc.title}`, ...(doc.advanced ? ['advanced: true'] : []), `time: ${doc.time}`, `points: ${doc.points}`, ''];
   for (const item of doc.items) {
     if (item.type === 'slide') {
       lines.push(`Slide: ${item.text}`);
@@ -133,16 +156,18 @@ export function toText(doc: QuizDoc): string {
     for (const a of item.answers ?? []) lines.push(`answer: ${a}`);
     for (const [l, r] of item.pairs ?? []) lines.push(`pair: ${l.replace(/=/g, ' ')} = ${r}`);
     for (const i of item.items ?? []) lines.push(`item: ${i}`);
+    if (doc.advanced) for (const h of item.hints ?? []) if (h.trim()) lines.push(`hint: ${h}`);
     if (item.explain) lines.push(`explain: ${item.explain.replace(/\n/g, ' ')}`);
     lines.push('');
   }
   return lines.join('\n');
 }
 
-// -- library (localStorage) ------------------------------------------------------------------
+// -- the old browser-only library (before quizzes were saved on the server) --------------------
+// Kept only so the studio can offer to upload what is still stored here.
 const LIBRARY_KEY = 'studyhubs.quiz.library';
 
-export function loadLibrary(): QuizDoc[] {
+export function loadLocalLibrary(): QuizDoc[] {
   try {
     const raw = window.localStorage.getItem(LIBRARY_KEY);
     const docs = raw ? (JSON.parse(raw) as QuizDoc[]) : [];
@@ -152,25 +177,39 @@ export function loadLibrary(): QuizDoc[] {
   }
 }
 
-export function saveDoc(doc: QuizDoc): QuizDoc[] {
-  const docs = loadLibrary().filter((d) => d.id !== doc.id);
-  docs.unshift({ ...doc, updated: Date.now() });
-  writeLibrary(docs);
-  return docs;
-}
-
-export function deleteDoc(id: string): QuizDoc[] {
-  const docs = loadLibrary().filter((d) => d.id !== id);
-  writeLibrary(docs);
-  return docs;
-}
-
-function writeLibrary(docs: QuizDoc[]): void {
+export function forgetLocalDoc(id: string): void {
   try {
-    window.localStorage.setItem(LIBRARY_KEY, JSON.stringify(docs));
+    const left = loadLocalLibrary().filter((d) => d.id !== id);
+    if (left.length) window.localStorage.setItem(LIBRARY_KEY, JSON.stringify(left));
+    else window.localStorage.removeItem(LIBRARY_KEY);
   } catch {
-    /* storage full or blocked: the editor still works for this session */
+    /* ignore */
   }
+}
+
+/** A quiz built from a hub's question bank: key points as slides, then the practice questions. */
+export function fromBank(
+  hubTitle: string,
+  modules: { title: string; keys: string[]; quiz: { q: string; o: string[]; a: number; e: string }[] }[],
+  opts: { slides: boolean; advanced: boolean },
+): QuizDoc {
+  const items: DocItem[] = [];
+  for (const m of modules) {
+    if (opts.slides && m.keys.length) {
+      items.push({ id: newId(), type: 'slide', text: m.title, body: m.keys.slice(0, 6).map((k) => `- ${k}`).join('\n') });
+    }
+    for (const x of m.quiz) {
+      items.push({
+        id: newId(),
+        type: 'single',
+        text: x.q.slice(0, 1000),
+        options: x.o.slice(0, 8).map((o, i) => ({ text: o.slice(0, 200), correct: i === x.a })),
+        explain: x.e ? x.e.slice(0, 1000) : undefined,
+      });
+    }
+  }
+  const title = modules.length === 1 ? `${hubTitle}: ${modules[0]!.title}` : `${hubTitle} (${modules.length} modules)`;
+  return { ...blankDoc(opts.advanced), title: title.slice(0, 200), time: opts.advanced ? 45 : 30, items };
 }
 
 export function download(name: string, text: string, type: string): void {

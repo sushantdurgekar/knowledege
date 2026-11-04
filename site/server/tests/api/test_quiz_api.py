@@ -342,3 +342,110 @@ def test_api_builder_json_self_mode_and_cards(admin: TestClient) -> None:
     assert good.json()["stage"] == "reveal"
     goto = admin.post(f"/api/quiz/rooms/{pin}/host/action", json={"action": "goto", "index": 1}, headers=host)
     assert goto.status_code == 409  # self-paced rooms have no host-driven items
+
+
+def test_advanced_confidence_hints_explain_and_insights() -> None:
+    from app.quiz.parse import ADVANCED_TEMPLATE
+
+    now = [0.0]
+    room = Room("1", parse_quiz(ADVANCED_TEMPLATE), "boss", lambda: now[0])
+    ann, bob = room.join("Ann"), room.join("Bob")
+    room.act("start")  # slide
+    room.act("next")  # single, with a hint
+    assert room.view(player=ann)["question"]["hintCount"] == 1
+    assert room.hint(ann, 1) == ["The S stands for secure; it is not the plain web port."]
+    room.answer(ann, 1, 1, "sure")  # right, one hint: 75% of the points
+    room.answer(bob, 1, 0, "sure")  # wrong and sure: the dangerous quadrant
+    assert ann.answers[1].points == 750
+    insight = room.insights()[0]
+    assert (insight["sureWrong"], insight["hintsUsed"], insight["topWrong"]["text"]) == (1, 1, "80")
+    room.act("goto", index=3)  # teach-back
+    room.answer(ann, 3, "TLS encrypts what TCP carries", "sure")
+    room.answer(bob, 3, "no idea")
+    responses = room.view(host=True)["question"]["stats"]["responses"]
+    assert [r["name"] for r in responses] == ["Ann", "Bob"]
+    assert ann.answers[3].confidence is None  # not scored: no confidence
+    assert room.view(player=ann)["question"]["model"][0].startswith("TCP only")
+    room.act("end")
+    me = room.view(player=bob)["me"]
+    assert me["calibration"] == {"sureRight": 0, "sureWrong": 1, "unsureRight": 0, "unsureWrong": 0}
+    review = room.review(bob)
+    assert [(r["type"], r["correct"]) for r in review] == [("single", False), ("order", False)]
+    assert review[0]["solution"] == {"correct": [1]}
+
+
+def test_simple_quiz_ignores_confidence_and_has_no_hints() -> None:
+    room = Room("1", parse_quiz(SOURCE), "boss", lambda: 0.0)
+    ann = room.join("Ann")
+    room.act("start")
+    with pytest.raises(QuizError, match="no hints"):
+        room.hint(ann, 0)
+    room.answer(ann, 0, 1, "sure")
+    assert ann.answers[0].confidence is None
+
+
+def test_library_bank_and_quiz_history_sync(admin: TestClient, tmp_path: Any) -> None:
+    import json as _json
+
+    from app.quiz import bank as bank_module
+
+    doc = {
+        "title": "Saved",
+        "items": [
+            {"type": "single", "text": "q", "options": [{"text": "a", "correct": True}, {"text": "b"}]}
+        ],
+    }
+    put = admin.put("/api/quiz/library/abc12345", json={"doc": doc}, headers=API)
+    assert put.status_code == 200
+    version = put.json()["version"]
+    listed = admin.get("/api/quiz/library", headers=API).json()["quizzes"]
+    assert [(q["id"], q["title"], q["questions"]) for q in listed] == [("abc12345", "Saved", 1)]
+    stale = admin.put("/api/quiz/library/abc12345", json={"doc": doc, "expect": version - 1}, headers=API)
+    assert stale.status_code == 409
+    again = admin.put(
+        "/api/quiz/library/abc12345",
+        json={"doc": {**doc, "title": "Renamed"}, "expect": version},
+        headers=API,
+    )
+    assert again.status_code == 200
+    assert admin.get("/api/quiz/library/abc12345", headers=API).json()["doc"]["title"] == "Renamed"
+    assert admin.delete("/api/quiz/library/abc12345", headers=API).status_code == 200
+    assert admin.get("/api/quiz/library", headers=API).json()["quizzes"] == []
+    assert admin.get("/api/quiz/library/abc12345", headers=API).status_code == 404
+    assert admin.put("/api/quiz/library/BAD!", json={"doc": doc}, headers=API).status_code == 422
+
+    # The bank comes from HUBS_DIR/quiz-bank.json (written by the collector).
+    hubs_dir = admin.app.state.studyhubs.settings.hubs_dir  # type: ignore[attr-defined]
+    bank = {
+        "hubs": [
+            {
+                "id": "h1",
+                "title": "Hub",
+                "modules": [
+                    {
+                        "id": "m1",
+                        "title": "Mod",
+                        "keys": ["k"],
+                        "quiz": [{"q": "Q?", "o": ["a", "b"], "a": 0, "e": ""}],
+                    }
+                ],
+            }
+        ]
+    }
+    (hubs_dir / bank_module.BANK_FILE).write_text(_json.dumps(bank))
+    index = admin.get("/api/quiz/bank", headers=API).json()["hubs"]
+    assert index[0]["modules"][0]["questions"] == 1
+    assert admin.get("/api/quiz/bank/h1", headers=API).json()["modules"][0]["quiz"][0]["q"] == "Q?"
+    assert admin.get("/api/quiz/bank/nope", headers=API).status_code == 404
+
+    # A signed-in player's quiz history syncs through the virtual "live-quiz" hub.
+    now_ms = int(admin.app.state.studyhubs.runtime.clock.now_s() * 1000)  # type: ignore[attr-defined]
+    body = {
+        "hubs": {"live-quiz": {"main": {"hub": "live-quiz", "upd": now_ms, "S": {"deck": {}, "history": []}}}}
+    }
+    synced = admin.post("/api/sync", json=body, headers=API)
+    assert synced.status_code == 200, synced.text
+    got = admin.get("/api/progress/live-quiz", headers=API).json()
+    assert got["parts"]["main"]["S"] == {"deck": {}, "history": []}
+    hubs = admin.get("/api/me/progress", headers=API).json()["hubs"]
+    assert any(h["hub"] == "live-quiz" and h["title"] == "Live quiz history" for h in hubs)

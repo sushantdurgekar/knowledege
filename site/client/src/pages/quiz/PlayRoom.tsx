@@ -1,10 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { BusyLine, FormMessage } from '../../components/forms';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { useMe } from '../../context/me';
 import {
   advance,
   apiMessage,
+  askHint,
+  fetchCards,
+  fetchReview,
+  type Confidence,
   playerToken,
   sendAnswer,
   setPlayerToken,
@@ -13,8 +18,11 @@ import {
   useRoomPoll,
   type RoomView,
 } from '../../lib/quiz';
+import { commit, dueCards, loadState, recordQuiz } from '../../lib/quiz-history';
 import { Answering, Leaderboard, SlideBody, Solution } from './Answering';
+import { Calibration } from './Calibration';
 import { Flashcards } from './Flashcards';
+import { Replay } from './Replay';
 
 /** `/quiz/play/:pin`: the player's screen, live or self-paced, from the lobby to the results. */
 export function PlayRoom() {
@@ -30,9 +38,9 @@ function resultClass(me: NonNullable<RoomView['me']>): string {
   return me.lastPoints ? 'is-part' : 'is-wrong';
 }
 
-function resultText(me: NonNullable<RoomView['me']>): string {
+function resultText(me: NonNullable<RoomView['me']>, type?: string): string {
   if (!me.answered) return 'Time’s up';
-  if (me.lastCorrect === null || me.lastCorrect === undefined) return 'Thanks for voting';
+  if (me.lastCorrect === null || me.lastCorrect === undefined) return type === 'poll' ? 'Thanks for voting' : 'Thanks, answer sent';
   if (me.lastCorrect) return 'Correct!';
   return me.lastPoints ? 'Partly right' : 'Not this time';
 }
@@ -46,6 +54,49 @@ function Playing({ pin, token }: { pin: string; token: string }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [studying, setStudying] = useState(false);
+  const [replaying, setReplaying] = useState(false);
+  const [confidence, setConfidence] = useState<{ index: number; value: Confidence } | null>(null);
+  const [hints, setHints] = useState<{ index: number; list: string[] } | null>(null);
+  const [saved, setSaved] = useState<{ added: number; due: number } | null>(null);
+  const recorded = useRef(false);
+  const { me: account } = useMe();
+  const signedIn = account.status === 'signed-in';
+  const finishedNow = !!view && (view.phase === 'finished' || (view.mode === 'self' && view.stage === 'done'));
+
+  // When this player is done: add the quiz to their history and its questions to the review
+  // deck (missed ones due now). Once per room.
+  useEffect(() => {
+    if (!finishedNow || !view?.me || recorded.current) return;
+    recorded.current = true;
+    const me = view.me;
+    void (async () => {
+      try {
+        const [{ cards }, review] = await Promise.all([fetchCards(pin, token), fetchReview(pin, token)]);
+        const missed = new Set(review.items.filter((i) => !i.correct).map((i) => i.text));
+        const before = loadState();
+        const state = recordQuiz(
+          before,
+          {
+            id: `${pin}:${me.id}`,
+            title: view.title,
+            at: Date.now(),
+            score: me.score,
+            rank: me.rank,
+            players: view.playerCount,
+            correct: me.correctCount,
+            total: view.scoredTotal,
+            calibration: me.calibration,
+          },
+          cards,
+          missed,
+        );
+        commit(state, signedIn);
+        setSaved({ added: Object.keys(state.deck).length - Object.keys(before.deck).length, due: dueCards(state).length });
+      } catch {
+        /* the room closed meanwhile: nothing to record */
+      }
+    })();
+  }, [finishedNow, view, pin, token, signedIn]);
 
   if (fatal) {
     setPlayerToken(pin, null);
@@ -81,7 +132,20 @@ function Playing({ pin, token }: { pin: string; token: string }) {
       setSending(false);
     }
   };
-  const answer = (value: unknown) => q && run(() => sendAnswer(pin, token, q.index, value));
+  const needsConfidence = !!view.advanced && !!q && !['poll', 'explain', 'slide'].includes(q.type);
+  const myConfidence = confidence && q && confidence.index === q.index ? confidence.value : null;
+  const myHints = q && hints?.index === q.index ? hints.list : (me.hints ?? []);
+  const answer = (value: unknown) =>
+    q && run(() => sendAnswer(pin, token, q.index, value, needsConfidence ? (myConfidence ?? undefined) : undefined));
+  const takeHint = async () => {
+    if (!q) return;
+    try {
+      const r = await askHint(pin, token, q.index);
+      setHints({ index: q.index, list: r.hints });
+    } catch (e) {
+      setError(apiMessage(e));
+    }
+  };
   const next = () => run(() => advance(pin, token));
 
   const bar = (
@@ -94,6 +158,15 @@ function Playing({ pin, token }: { pin: string; token: string }) {
       </span>
     </header>
   );
+
+  if (replaying) {
+    return (
+      <section className="page quiz-play" aria-labelledby="page-title">
+        {bar}
+        <Replay pin={pin} token={token} onClose={() => setReplaying(false)} />
+      </section>
+    );
+  }
 
   if (studying) {
     return (
@@ -184,7 +257,45 @@ function Playing({ pin, token }: { pin: string; token: string }) {
               <p className="muted">Waiting for the others…</p>
             </div>
           ) : (
-            <Answering key={`${q.index}`} q={q} disabled={sending || seconds === 0} onAnswer={answer} />
+            <>
+              {(q.hintCount ?? 0) > 0 && (
+                <div className="quiz-hints">
+                  {myHints.map((h, i) => (
+                    <p key={i} className="quiz-hint">
+                      💡 {h}
+                    </p>
+                  ))}
+                  {myHints.length < (q.hintCount ?? 0) && (
+                    <button type="button" className="btn btn--small btn--quiet" onClick={takeHint}>
+                      {myHints.length ? 'Another hint' : 'Show a hint'} (−25% points)
+                    </button>
+                  )}
+                </div>
+              )}
+              {needsConfidence && (
+                <div className="quiz-confidence" role="radiogroup" aria-label="How sure are you?">
+                  <span className="quiz-confidence__label">{myConfidence ? 'Confidence:' : 'First: how sure are you?'}</span>
+                  {(['sure', 'unsure'] as const).map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      role="radio"
+                      aria-checked={myConfidence === c}
+                      className={`quiz-confidence__btn${myConfidence === c ? ' is-on' : ''}`}
+                      onClick={() => setConfidence({ index: q.index, value: c })}
+                    >
+                      {c === 'sure' ? 'I’m sure' : 'Not sure'}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <Answering
+                key={`${q.index}`}
+                q={q}
+                disabled={sending || seconds === 0 || (needsConfidence && !myConfidence)}
+                onAnswer={answer}
+              />
+            </>
           )}
         </div>
       )}
@@ -193,7 +304,7 @@ function Playing({ pin, token }: { pin: string; token: string }) {
         <div className="quiz-q">
           {q.type !== 'slide' && (
             <div className={`quiz-result ${resultClass(me)}`} role="status">
-              <p className="quiz-big">{resultText(me)}</p>
+              <p className="quiz-big">{resultText(me, q.type)}</p>
               {me.lastCorrect !== null && (
                 <p>
                   +{(me.lastPoints ?? 0).toLocaleString()} points · you are <strong>#{me.rank}</strong>
@@ -222,11 +333,24 @@ function Playing({ pin, token }: { pin: string; token: string }) {
             {me.score.toLocaleString()} points · {me.correctCount} of {view.scoredTotal} correct
             {view.phase !== 'finished' ? ` · #${me.rank} so far` : ''}
           </p>
+          {me.calibration && <Calibration c={me.calibration} />}
+          {saved && (
+            <p className="quiz-saved">
+              {saved.added > 0 ? `${saved.added} new card(s) added to your review deck. ` : ''}
+              <Link to="/quiz/review">{saved.due} due for review now</Link>
+              {signedIn ? ' · synced to your account' : ' · saved in this browser (sign in to keep it everywhere)'}
+            </p>
+          )}
           <h2>Top players</h2>
           <Leaderboard rows={view.leaderboard ?? []} highlight={me.id} />
           <p className="actions quiz-center">
+            {me.correctCount < view.scoredTotal && (
+              <button type="button" className="btn btn--primary" onClick={() => setReplaying(true)}>
+                Replay my mistakes
+              </button>
+            )}
             {canStudy && (
-              <button type="button" className="btn btn--primary" onClick={() => setStudying(true)}>
+              <button type="button" className="btn" onClick={() => setStudying(true)}>
                 Review with flashcards
               </button>
             )}

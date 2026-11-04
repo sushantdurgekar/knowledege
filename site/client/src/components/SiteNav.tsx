@@ -41,6 +41,7 @@ const LABELS: Record<string, string> = {
   quiz: 'Live quiz',
   host: 'Studio',
   edit: 'Edit',
+  review: 'Review deck',
   play: 'Play',
   admin: 'Admin',
   account: 'Account',

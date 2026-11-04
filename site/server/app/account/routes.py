@@ -31,7 +31,7 @@ from app.auth.identity import AuthUnavailable
 from app.auth.session import clear_session_cookies, session_cookie_name
 from app.errors import ApiError
 from app.progress.routes import maintenance_error, rate_limit
-from app.progress.validate import decode_gz, loads, read_body
+from app.progress.validate import QUIZ_HUB, QUIZ_HUB_ID, decode_gz, loads, read_body
 from app.quota.pacific import iso_utc
 from app.runtime import Runtime, get_runtime
 from app.state import get_state
@@ -79,10 +79,12 @@ async def my_progress(request: Request, viewer: User) -> JSONResponse:
     hubs = []
     for summary in summaries:
         hub = catalog.by_id.get(summary.hub) if catalog is not None else None
+        if summary.hub == QUIZ_HUB_ID:
+            hub = QUIZ_HUB
         hubs.append(
             {
                 "hub": summary.hub,
-                "slug": hub.slug if hub is not None else None,
+                "slug": hub.slug or None if hub is not None else None,
                 "title": hub.title if hub is not None else None,
                 "parts": {
                     part: {"upd": info.upd, "bytes": info.bytes}

@@ -281,7 +281,7 @@ const EXTRACT_SRC = `(function () {
  * code. With a plain `{}`, `this.constructor.constructor` would be the HOST's Function,
  * which ignores `codeGeneration` and hands out `process` (a test pins this down).
  */
-export function extractHubMetadata(scripts, label) {
+export function extractHubMetadata(scripts, label, extract = EXTRACT_SRC, { tolerant = false } = {}) {
   const ctx = vm.createContext(Object.create(null), {
     name: `hub ${label}`,
     codeGeneration: { strings: false, wasm: false },
@@ -299,9 +299,58 @@ export function extractHubMetadata(scripts, label) {
     if (!isJsScript(s.attrs)) continue;
     if (isEngineScript(s.code)) break;
     n++;
-    vm.runInContext(s.code, ctx, { timeout: budget(), filename: `${label}#inline-script-${n}` });
+    try {
+      vm.runInContext(s.code, ctx, { timeout: budget(), filename: `${label}#inline-script-${n}` });
+    } catch (e) {
+      // The bank only needs the data scripts; a page script that touches the DOM is skipped.
+      if (!tolerant || /exceeded/.test(String(e && e.message))) throw e;
+    }
   }
-  return JSON.parse(vm.runInContext(EXTRACT_SRC, ctx, { timeout: budget() }));
+  return JSON.parse(vm.runInContext(extract, ctx, { timeout: budget() }));
+}
+
+/*
+ * The quiz bank: each module's practice questions (single answer: {q, o, a: index, e}) and key
+ * points, for the live-quiz studio's "import from a hub". v2 hubs keep modules in
+ * window.HUB.modules, the legacy hub in window.M. Only the data is read, never the engine.
+ */
+const BANK_SRC = `(function () {
+  var H = globalThis.HUB;
+  var mods = H && Array.isArray(H.modules) ? H.modules : (Array.isArray(globalThis.M) ? globalThis.M : []);
+  function s(v) { return typeof v === "string" ? v : ""; }
+  var out = [];
+  mods.forEach(function (m) {
+    if (!m || typeof m !== "object") return;
+    var quiz = (Array.isArray(m.quiz) ? m.quiz : []).filter(function (x) {
+      return x && typeof x.q === "string" && Array.isArray(x.o) && x.o.length >= 2 && typeof x.a === "number" && x.a >= 0 && x.a < x.o.length;
+    }).map(function (x) { return { q: x.q, o: x.o.map(function (o) { return String(o); }), a: x.a, e: s(x.e) }; });
+    var keys = (Array.isArray(m.keys) ? m.keys : []).filter(function (k) { return typeof k === "string"; });
+    out.push({ id: s(m.id), t: s(m.t || m.title), keys: keys, quiz: quiz });
+  });
+  return JSON.stringify(out);
+})()`;
+
+/** Markdown and HTML marks out: the quiz shows plain text. */
+export function plainText(value) {
+  return decodeEntities(String(value).replace(/<[^>]+>/g, ''))
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function extractQuizBank(scripts, label) {
+  const modules = extractHubMetadata(scripts, label, BANK_SRC, { tolerant: true }) ?? [];
+  return modules
+    .map((m) => ({
+      id: m.id,
+      title: plainText(m.t),
+      keys: m.keys.map(plainText).filter(Boolean).slice(0, 12),
+      quiz: m.quiz.map((x) => ({ q: plainText(x.q), o: x.o.map(plainText), a: x.a, e: plainText(x.e) }))
+        .filter((x) => x.q && x.o.every(Boolean)),
+    }))
+    .filter((m) => m.id && (m.quiz.length || m.keys.length));
 }
 
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
@@ -588,7 +637,16 @@ export function inspectHub(srcRoot, rel, config) {
     errors.push(`publish lint: ${blocking.length} finding(s): ${sample}`);
   }
 
-  return { report, entry, original, html, scan, scripts, usedAllow };
+  let bank = [];
+  if (engine !== 'static') {
+    try {
+      bank = extractQuizBank(scripts, rel);
+    } catch (e) {
+      warnings.push(`quiz bank not extracted: ${e.message}`);
+    }
+  }
+
+  return { report, entry, original, html, scan, scripts, usedAllow, bank };
 }
 
 /** Cross-hub validation: unique ids and slugs, and no id that is another hub's slug. */
@@ -700,7 +758,7 @@ function sortEntries(a, b) {
   return 0;
 }
 
-const MANAGED = ['hubs', 'catalog.json', 'catalog.json.br', 'catalog.json.gz', 'catalog.internal.json', 'build-report.json'];
+const MANAGED = ['hubs', 'quiz-bank.json', 'catalog.json', 'catalog.json.br', 'catalog.json.gz', 'catalog.internal.json', 'build-report.json'];
 
 /** Refuse to clean a directory that we did not create (no build-report.json next to hubs/). */
 function assertSafeOut(out, src) {
@@ -841,6 +899,13 @@ export async function collect({ src, config: configPath, out, strict = false, no
     ['catalog.json', catalogBuf], ['catalog.json.br', catBr], ['catalog.json.gz', catGz],
     ['catalog.internal.json', Buffer.from(JSON.stringify(internal, null, 2) + '\n')],
     ['build-report.json', Buffer.from(JSON.stringify(report, null, 2) + '\n')],
+    ['quiz-bank.json', Buffer.from(JSON.stringify({
+      version: 1,
+      generatedAt,
+      hubs: published
+        .filter((it) => it.bank && it.bank.length)
+        .map((it) => ({ id: it.entry.id, slug: it.entry.slug, title: it.entry.title, code: it.entry.code ?? null, modules: it.bank })),
+    }))],
   );
   writeOutputs(outDir, files);
 
