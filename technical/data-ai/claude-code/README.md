@@ -1,7 +1,7 @@
 ---
 title: Claude Code
 track: technical
-updated: 2026-10-01
+updated: 2026-10-23
 ---
 # Claude Code
 
@@ -16,6 +16,7 @@ Claude Code / agentic coding courses.
 | Folder | Holds | Items |
 |---|---|---|
 | `courses/` | Third-party course material, kept intact | 1 |
+| `claude-works/` | Claude's own instructions for artifacts, dashboards, docs, decks, designs, Cowork and connectors; index in its `README.md` | 1,327 files |
 
 ## Learning files (pro-instructor)
 - `concepts/` notes, `resources.md`, `misconceptions.md`, `interview.md` are created here as you study.

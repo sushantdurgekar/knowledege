@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "source": "db",
+  "db": {
+    "meta": "film/meta",
+    "collections": [
+      "film",
+      "modules",
+      "assets"
+    ]
+  }
+}

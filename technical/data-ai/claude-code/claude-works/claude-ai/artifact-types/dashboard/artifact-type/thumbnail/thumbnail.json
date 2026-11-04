@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "source": "db",
+  "db": {
+    "meta": "dash/meta",
+    "collections": [
+      "dash",
+      "files",
+      "datasets"
+    ]
+  }
+}
