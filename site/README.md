@@ -436,3 +436,7 @@ Admins host, players join with a 6-digit PIN and a nickname (no account needed).
 - **Scoring:** a correct answer earns 50–100% of the question's points, more for answering sooner. Multiple choice and match earn partial points. Ties go to the faster player.
 - **Limits:** up to 250 players per room and 50 open rooms. Rooms live in the server's memory, so a deploy or restart ends any running quiz, and a room closes after 6 idle hours. Don't deploy during an event.
 - **Design for 250 players:** answers wake only the host, not all players, and lobby head-count updates are batched to one per second. Lookups are hash maps, and the leaderboard is sorted once per change. Join limits are set per IP address and allow a full room through one shared school network. See `site/server/app/quiz/room.py`.
+
+## Auto-deploy
+
+Pushes to `main` that touch the site deploy themselves: the `site` workflow calls the Render deploy hook stored in the GitHub secret `RENDER_DEPLOY_HOOK`, waits until `/api/version` reports the new commit, and runs a smoke check. Render's own Auto-Deploy stays off, so each push deploys once. While the repository variable `SITE_RUN_TESTS` is not `true`, the test jobs are skipped and the deploy starts right away.
