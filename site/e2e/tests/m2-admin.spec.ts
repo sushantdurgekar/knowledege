@@ -70,7 +70,8 @@ test('admin overview renders for an admin and /api/admin 404s for everyone else'
   await expect(site).toContainText('Users');
   await expect(site).toContainText('none yet'); // no backup yet
   await page.getByRole('button', { name: /Account menu/ }).click();
-  await expect(page.getByRole('link', { name: 'Admin', exact: true })).toHaveAttribute('href', '/admin');
+  // The account menu (the header nav has its own Admin link).
+  await expect(page.locator('.user-menu__panel').getByRole('link', { name: 'Admin', exact: true })).toHaveAttribute('href', '/admin');
   expect((await page.request.get('/api/admin/stats')).status()).toBe(200);
 
   const unknown = await (await request.get('/api/no-such-endpoint')).json();

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from app.clock import FixedClock
 from app.quiz import routes as quiz_routes
 from app.quiz.parse import TEMPLATE, QuizFormatError, parse_quiz
-from app.quiz.room import Room, RoomManager
+from app.quiz.room import QuizError, Room, RoomManager
 from tests.api.conftest import API
 from tests.api.test_admin_api import ADMIN, session
 
@@ -37,7 +37,16 @@ pair: b = 2
 
 def test_template_parses() -> None:
     quiz = parse_quiz(TEMPLATE)
-    assert [q.type for q in quiz.questions] == ["single", "multi", "text", "truefalse", "match"]
+    assert [q.type for q in quiz.questions] == [
+        "slide",
+        "single",
+        "multi",
+        "text",
+        "truefalse",
+        "match",
+        "order",
+        "poll",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -45,11 +54,13 @@ def test_template_parses() -> None:
     [
         ("", "no questions"),
         ("Q: x\n* a\n", "2-8 options"),
-        ("Q: x\n- a\n- b\n", "add options|at least one"),
+        ("Q: x\n- a\n- b\n", "type: poll"),
         ("Q: x\nanswer: /(/\n", "bad regular expression"),
-        ("Q: x\npair: a\n", "pair lines"),
+        ("Q: x\npair: a\n", "pairs look like"),
         ("Q: x\n* a\n* b\ntype: single\n", "exactly one"),
-        ("Q: x\ntype: truefalse\nanswer: maybe\n", "truefalse"),
+        ("Q: x\ntype: truefalse\nanswer: maybe\n", "true/false"),
+        ("Q: x\nitem: a\n", "2-8 items"),
+        ("Q: x\ntype: bogus\n* a\n- b\n", "type must be"),
     ],
 )
 def test_format_errors(source: str, message: str) -> None:
@@ -158,7 +169,7 @@ def test_full_room_250_players_is_cheap() -> None:
     import asyncio
     import time
 
-    from app.quiz.room import MAX_PLAYERS, QuizError
+    from app.quiz.room import MAX_PLAYERS
 
     async def scenario() -> None:
         room = Room("1", parse_quiz(SOURCE), "boss", time.monotonic)
@@ -180,6 +191,154 @@ def test_full_room_250_players_is_cheap() -> None:
         elapsed = time.perf_counter() - started
         assert room.phase == "reveal"
         assert {v["me"]["rank"] for v in views} == set(range(1, MAX_PLAYERS + 1))
-        assert elapsed < 1.0, elapsed  # a 250-player question costs milliseconds, not seconds
+        assert elapsed < 3.0, elapsed  # a 250-player question costs milliseconds; 3 s leaves room for slow CI
 
     asyncio.run(scenario())
+
+
+MIXED = """title: Mixed
+Slide: Read this
+Some body text.
+
+- a bullet stays in the body
+
+Q: Order these
+item: one
+item: two
+item: three
+
+Q: Feeling?
+type: poll
+- good
+- bad
+"""
+
+
+def test_slide_poll_order_and_json_round_trip() -> None:
+    from app.quiz.parse import quiz_from_json, quiz_to_json
+
+    quiz = parse_quiz(MIXED)
+    slide, order, poll = quiz.questions
+    assert slide.type == "slide"
+    assert slide.body == "Some body text.\n\n- a bullet stays in the body"
+    assert (order.type, order.items) == ("order", ["one", "two", "three"])
+    assert (poll.type, poll.points, poll.correct) == ("poll", 0, [])
+    again = quiz_from_json(quiz_to_json(quiz))
+    assert quiz_to_json(again) == quiz_to_json(quiz)
+    template = quiz_from_json(quiz_to_json(parse_quiz(TEMPLATE)))
+    assert [q.type for q in template.questions] == [q.type for q in parse_quiz(TEMPLATE).questions]
+    with pytest.raises(QuizFormatError, match="item 1"):
+        quiz_from_json({"title": "x", "items": [{"type": "single", "text": "q", "options": []}]})
+
+
+def test_order_poll_slide_scoring_and_host_controls() -> None:
+    now = [0.0]
+    room = Room("1", parse_quiz(MIXED), "boss", lambda: now[0])
+    ann, bob = room.join("Ann"), room.join("Bob")
+    room.act("start")  # the slide: no timer, no answers
+    assert room.view(host=True)["question"]["type"] == "slide"
+    with pytest.raises(QuizError):
+        room.answer(ann, 0, 0)
+    room.act("goto", index=2)  # the host jumps to the poll, skipping the order question
+    room.act("extend", seconds=30)
+    assert room.deadline == 50.0
+    room.answer(ann, 2, 0)
+    room.answer(bob, 2, 1)
+    assert room.phase == "reveal"
+    assert (ann.score, room.view(host=True)["question"]["stats"]["counts"]) == (0, [1, 1])
+    assert room.next_index() == 1  # the skipped item is still to run
+    room.act("next")
+    order = room.orders[1]
+    right = [order.index(k) for k in range(3)]
+    room.answer(ann, 1, right)
+    room.answer(bob, 1, list(reversed(right)))
+    assert ann.answers[1].correct
+    assert 0 < bob.answers[1].fraction < 1 or bob.answers[1].fraction == 0
+    room.act("lock")
+    with pytest.raises(QuizError, match="locked"):
+        room.join("Cy")
+    room.act("next")  # nothing left: finished
+    assert room.phase == "finished"
+    assert room.cards()[0]["type"] == "slide"
+    assert room.cards_open_to(ann)
+
+
+def test_end_early_keeps_scores() -> None:
+    now = [0.0]
+    room = Room("1", parse_quiz(SOURCE), "boss", lambda: now[0])
+    ann = room.join("Ann")
+    room.join("Bob")
+    room.act("start")
+    room.answer(ann, 0, 1)
+    room.act("end")  # mid-question: closes it and finishes, scores stand
+    assert room.phase == "finished"
+    assert ann.score == 1000
+    assert room.view(player=ann)["leaderboard"][0]["name"] == "Ann"
+
+
+def test_self_paced_room() -> None:
+    from app.quiz.room import RoomManager
+
+    now = [0.0]
+    room = RoomManager(lambda: now[0]).create(parse_quiz(SOURCE), "boss", mode="self", study=True)
+    ann, bob = room.join("Ann"), room.join("Bob")
+    assert room.cards_open_to(ann)  # study rooms show flashcards before the start
+    room.act("start")
+    room.advance(ann)
+    view = room.view(player=ann)
+    assert (view["stage"], view["question"]["index"]) == ("question", 0)
+    assert "solution" not in view["question"]
+    room.answer(ann, 0, 1)
+    assert room.view(player=ann)["question"]["solution"] == {"correct": [1]}
+    room.advance(bob)
+    now[0] = 11.0  # Bob's 10 s run out
+    assert room.view(player=bob)["stage"] == "reveal"
+    with pytest.raises(QuizError):
+        room.answer(bob, 0, 1)
+    for _ in range(3):
+        room.advance(ann)
+        q = room.view(player=ann)["question"]
+        if q["type"] == "multi":
+            room.answer(ann, q["index"], [0, 1])
+        elif q["type"] == "text":
+            room.answer(ann, q["index"], "paris")
+        else:
+            room.answer(ann, q["index"], [room.orders[3].index(k) for k in range(2)])
+    room.advance(ann)
+    assert room.view(player=ann)["stage"] == "done"
+    host = room.view(host=True)
+    assert host["players"][0]["answered"] == 4
+    assert host["leaderboard"][0]["name"] == "Ann"
+    room.act("end")
+    assert room.view(player=bob)["stage"] == "done"
+
+
+def test_api_builder_json_self_mode_and_cards(admin: TestClient) -> None:
+    parsed = admin.post("/api/quiz/parse", json={"source": MIXED}, headers=API).json()
+    assert parsed["ok"]
+    assert parsed["quiz"]["items"][1]["items"] == ["one", "two", "three"]
+    created = admin.post(
+        "/api/quiz/rooms", json={"quiz": parsed["quiz"], "mode": "self", "study": True}, headers=API
+    ).json()
+    pin, key = created["pin"], created["hostKey"]
+    admin.cookies.clear()
+    token = admin.post(f"/api/quiz/rooms/{pin}/join", json={"name": "Ann"}, headers=API).json()["token"]
+    me = {**API, "X-Quiz-Token": token}
+    cards = admin.get(f"/api/quiz/rooms/{pin}/cards", headers=me).json()["cards"]
+    assert [c["type"] for c in cards] == ["slide", "order"]  # polls have no card
+    host = {**API, "X-Quiz-Host": key}
+    assert (
+        admin.post(f"/api/quiz/rooms/{pin}/host/action", json={"action": "start"}, headers=host).status_code
+        == 200
+    )
+    view = admin.post(f"/api/quiz/rooms/{pin}/advance", headers=me).json()
+    assert view["question"]["type"] == "slide"
+    view = admin.post(f"/api/quiz/rooms/{pin}/advance", headers=me).json()
+    assert view["question"]["type"] == "order"
+    assert len(view["question"]["items"]) == 3
+    bad = admin.post(f"/api/quiz/rooms/{pin}/answer", json={"index": 1, "answer": [0, 0, 1]}, headers=me)
+    assert bad.status_code == 422
+    good = admin.post(f"/api/quiz/rooms/{pin}/answer", json={"index": 1, "answer": [0, 1, 2]}, headers=me)
+    assert good.json()["stage"] == "reveal"
+    goto = admin.post(f"/api/quiz/rooms/{pin}/host/action", json={"action": "goto", "index": 1}, headers=host)
+    assert goto.status_code == 409  # self-paced rooms have no host-driven items

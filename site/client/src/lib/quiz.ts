@@ -2,7 +2,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, isApiProblem } from './api';
 
-export type QuestionType = 'single' | 'multi' | 'text' | 'match' | 'truefalse';
+export type QuestionType = 'single' | 'multi' | 'text' | 'match' | 'truefalse' | 'order' | 'poll' | 'slide';
+export type Mode = 'live' | 'self';
+export type Stage = 'ready' | 'question' | 'reveal' | 'done';
 export type Phase = 'lobby' | 'question' | 'reveal' | 'finished';
 
 export interface QuestionStats {
@@ -24,7 +26,10 @@ export interface QuestionView {
   pick?: number;
   left?: string[];
   right?: string[];
-  solution?: { correct?: number[]; accepted?: string[]; pairs?: number[] };
+  items?: string[];
+  body?: string;
+  answerText?: string;
+  solution?: { correct?: number[]; accepted?: string[]; pairs?: number[]; order?: number[] };
   explain?: string;
   stats?: QuestionStats;
 }
@@ -48,21 +53,37 @@ export interface MeView {
   answered: boolean;
   answer?: unknown;
   lastPoints?: number;
-  lastCorrect?: boolean;
+  lastCorrect?: boolean | null;
   lastFraction?: number;
+}
+
+export interface SheetRow {
+  index: number;
+  type: QuestionType;
+  text: string;
+  done: boolean;
+  points: number;
 }
 
 export interface RoomView {
   pin: string;
   title: string;
   phase: Phase;
+  mode: Mode;
+  study: boolean;
+  locked: boolean;
+  scoredTotal: number;
+  stage?: Stage;
+  sheet?: SheetRow[];
+  nextIndex?: number | null;
+  itemStats?: (QuestionStats | null)[];
   version: number;
   index: number;
   total: number;
   playerCount: number;
   question: QuestionView | null;
   leaderboard?: BoardRow[];
-  players?: { id: string; name: string; score: number; answered: boolean }[];
+  players?: { id: string; name: string; score: number; answered: boolean | number; position?: number; stage?: Stage }[];
   answeredCount?: number;
   me?: MeView;
 }
@@ -78,7 +99,18 @@ export const TYPE_LABELS: Record<QuestionType, string> = {
   text: 'Type the answer',
   match: 'Match the following',
   truefalse: 'True or false',
+  order: 'Put in order',
+  poll: 'Poll',
+  slide: 'Slide',
 };
+
+export interface Card {
+  type: QuestionType;
+  front: string;
+  back: string;
+  options?: string[];
+  explain?: string;
+}
 
 // -- storage: which room this browser plays or hosts --------------------------------------------
 const playerKey = (pin: string) => `studyhubs.quiz.player.${pin}`;
@@ -117,19 +149,47 @@ export const sendAnswer = (pin: string, token: string, index: number, answer: un
     headers: { 'X-Quiz-Token': token },
   });
 
-export const parseQuiz = (source: string) =>
-  api<({ ok: true } & QuizSummary) | { ok: false; errors: string[] }>('/api/quiz/parse', { json: { source } });
+export type ParseResult = ({ ok: true; quiz: unknown } & QuizSummary) | { ok: false; errors: string[] };
 
-export const createRoom = (source: string) =>
-  api<{ pin: string; hostKey: string } & QuizSummary>('/api/quiz/rooms', { json: { source } });
+/** Check a quiz: the builder's JSON (`quiz`) or the text format (`source`). */
+export const parseQuiz = (input: { source: string } | { quiz: unknown }) =>
+  api<ParseResult>('/api/quiz/parse', { json: input });
 
-export const listRooms = () =>
-  api<{ rooms: { pin: string; title: string; phase: Phase; players: number; hostKey: string }[] }>('/api/quiz/rooms');
+export const createRoom = (quiz: unknown, mode: Mode, study: boolean) =>
+  api<{ pin: string; hostKey: string; mode: Mode } & QuizSummary>('/api/quiz/rooms', {
+    json: { quiz, mode, study },
+  });
 
-export const hostAction = (pin: string, key: string, action: string, playerId?: string) =>
+export interface OpenRoom {
+  pin: string;
+  title: string;
+  phase: Phase;
+  mode: Mode;
+  players: number;
+  hostKey: string;
+}
+export const listRooms = () => api<{ rooms: OpenRoom[] }>('/api/quiz/rooms');
+
+export const hostAction = (
+  pin: string,
+  key: string,
+  action: string,
+  extra: { playerId?: string; index?: number; seconds?: number } = {},
+) =>
   api<RoomView | { closed: true }>(`/api/quiz/rooms/${encodeURIComponent(pin)}/host/action`, {
-    json: { action, playerId },
+    json: { action, ...extra },
     headers: { 'X-Quiz-Host': key },
+  });
+
+export const advance = (pin: string, token: string) =>
+  api<RoomView>(`/api/quiz/rooms/${encodeURIComponent(pin)}/advance`, {
+    method: 'POST',
+    headers: { 'X-Quiz-Token': token },
+  });
+
+export const fetchCards = (pin: string, token: string) =>
+  api<{ title: string; cards: Card[] }>(`/api/quiz/rooms/${encodeURIComponent(pin)}/cards`, {
+    headers: { 'X-Quiz-Token': token },
   });
 
 /**
@@ -193,9 +253,9 @@ export function useCountdown(view: RoomView | null): number {
   const [now, setNow] = useState(() => performance.now());
   const anchor = useRef({ at: performance.now(), ms: 0, key: '' });
   const q = view?.question;
-  const key = view ? `${view.version}` : '';
+  const open = !!q && q.timeLimit > 0 && (view?.mode === 'self' ? view.stage === 'question' : view?.phase === 'question');
+  const key = view ? `${view.version}:${q?.index}:${view.stage}:${view.phase}:${q?.remainingMs}` : '';
   if (q && anchor.current.key !== key) anchor.current = { at: performance.now(), ms: q.remainingMs, key };
-  const open = view?.phase === 'question';
   useEffect(() => {
     if (!open) return;
     const timer = setInterval(() => setNow(performance.now()), 250);

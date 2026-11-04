@@ -426,16 +426,18 @@ Optional per-hub overrides (code, cert name, blurb) go in `hubs.config.json` →
 | The first visit after a while is slow | The free instance was asleep. Check that the UptimeRobot monitor is up and every 5 min |
 | `check-image.sh` fails | Something private or unexpected reached `/app` (a `.md`, `_meta`, a non-catalog file under `hubs/`). Fix `.dockerignore` or the Dockerfile `COPY` lines; never widen the check |
 
-## Live quiz (`/quiz`)
+## Live quiz and quiz studio (`/quiz`)
 
-Admins host, players join with a 6-digit PIN and a nickname (no account needed).
+Players join with a 6-digit PIN and a nickname (no account needed). Admins build and run quizzes in the **Studio** (`/quiz/host`).
 
-- **Host:** sign in as an admin → **Live quiz → Host a quiz** (`/quiz/host`). Paste questions or upload a `.txt` file, **Check questions**, **Open room**, then project the host screen. Start, close each question (or let the timer run out), show the answer and leaderboard, go to the next question, and download the results as CSV at the end.
-- **Players:** open `/quiz` (or the join link the host shows), enter the PIN and a nickname, answer on their phone.
-- **Question types:** single answer, multiple choice, typed answer (plain text or `/regex/i`), true/false, match the following. The format is under **Import format** on the host page; **Load the example** fills in one of each.
-- **Scoring:** a correct answer earns 50–100% of the question's points, more for answering sooner. Multiple choice and match earn partial points. Ties go to the faster player.
-- **Limits:** up to 250 players per room and 50 open rooms. Rooms live in the server's memory, so a deploy or restart ends any running quiz, and a room closes after 6 idle hours. Don't deploy during an event.
-- **Design for 250 players:** answers wake only the host, not all players, and lobby head-count updates are batched to one per second. Lookups are hash maps, and the leaderboard is sorted once per change. Join limits are set per IP address and allow a full room through one shared school network. See `site/server/app/quiz/room.py`.
+- **Studio:** a library of quizzes saved in the admin's browser, with export/import as `.json` or `.txt` (the text format is described in `site/server/app/quiz/parse.py`). **Start from the example** creates one item of every type.
+- **Editor:** add items by type, drag the item list to reorder, tick the correct options, set time, points and an explanation per item, and **Check** before hosting.
+- **Item types:** quiz (single answer), multiple choice, true/false, typed answer (text or `/regex/i`), match (drag pairs), put in order (drag into sequence), poll (no right answer, no points), slide (content to present).
+- **Live mode:** the host runs the room with a run sheet. Any item can go next, in any order; **Next** takes the next item not yet run. **+10 s** adds time, **Lock joining** closes the room to newcomers, and **End quiz now** finishes with the scores so far. Slides are presented with no timer. Results download as CSV.
+- **Self-paced mode:** each player moves through the items with their own timer. With **flashcards first**, players can study cards before they start. The host sees each player's progress, a leaderboard and per-item stats.
+- **Flashcards:** after any quiz, and before a self-paced one when enabled. Flip the card, then mark it known or study it again; missed cards come back in another round.
+- **Scoring:** 50–100% of the points depending on speed. Multiple choice, match and order give partial credit; ties go to the faster player.
+- **Limits:** 250 players per room and 50 open rooms. Rooms live in server memory, so a deploy or restart ends running rooms. Answers wake only the host; lobby updates are batched; lookups are O(1) and the ranking is sorted once per change (`site/server/app/quiz/room.py`).
 
 ## Auto-deploy
 

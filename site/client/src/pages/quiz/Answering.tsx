@@ -1,7 +1,37 @@
 import { useState, type FormEvent } from 'react';
 import type { QuestionView } from '../../lib/quiz';
+import { Sortable } from './Sortable';
 
 export const LETTERS = 'ABCDEFGH';
+
+const identity = (n: number) => Array.from({ length: n }, (_, i) => i);
+
+/** A slide (presentation content): the title and its body, paragraphs and "- " bullets kept. */
+export function SlideBody({ text, body, big = false }: { text: string; body?: string; big?: boolean }) {
+  const blocks = (body ?? '').split(/\n{2,}/).filter((b) => b.trim());
+  return (
+    <article className={`quiz-slide${big ? ' quiz-slide--big' : ''}`}>
+      <h2 className="quiz-slide__title">{text}</h2>
+      {blocks.map((block, i) => {
+        const lines = block.split('\n');
+        if (lines.every((l) => /^\s*[-*•]\s+/.test(l))) {
+          return (
+            <ul key={i}>
+              {lines.map((l, j) => (
+                <li key={j}>{l.replace(/^\s*[-*•]\s+/, '')}</li>
+              ))}
+            </ul>
+          );
+        }
+        return (
+          <p key={i} className="quiz-slide__p">
+            {block}
+          </p>
+        );
+      })}
+    </article>
+  );
+}
 
 /** The answer controls for one open question. Calls `onAnswer` once with the answer value. */
 export function Answering({
@@ -13,7 +43,7 @@ export function Answering({
   disabled: boolean;
   onAnswer: (value: unknown) => void;
 }) {
-  if (q.type === 'single' || q.type === 'truefalse') {
+  if (q.type === 'single' || q.type === 'truefalse' || q.type === 'poll') {
     return (
       <div className="quiz-options" role="group" aria-label="Answers">
         {(q.options ?? []).map((option, i) => (
@@ -35,7 +65,8 @@ export function Answering({
   }
   if (q.type === 'multi') return <MultiAnswer q={q} disabled={disabled} onAnswer={onAnswer} />;
   if (q.type === 'text') return <TextAnswer disabled={disabled} onAnswer={onAnswer} />;
-  return <MatchAnswer q={q} disabled={disabled} onAnswer={onAnswer} />;
+  if (q.type === 'match' || q.type === 'order') return <DragAnswer q={q} disabled={disabled} onAnswer={onAnswer} />;
+  return null;
 }
 
 function MultiAnswer({ q, disabled, onAnswer }: { q: QuestionView; disabled: boolean; onAnswer: (v: unknown) => void }) {
@@ -100,75 +131,59 @@ function TextAnswer({ disabled, onAnswer }: { disabled: boolean; onAnswer: (v: u
   );
 }
 
-function MatchAnswer({ q, disabled, onAnswer }: { q: QuestionView; disabled: boolean; onAnswer: (v: unknown) => void }) {
+/** Match (drag the right-hand items next to their partners) and order (drag into sequence). */
+function DragAnswer({ q, disabled, onAnswer }: { q: QuestionView; disabled: boolean; onAnswer: (v: unknown) => void }) {
+  const match = q.type === 'match';
+  const labels = (match ? q.right : q.items) ?? [];
+  const [order, setOrder] = useState(() => identity(labels.length));
   const left = q.left ?? [];
-  const right = q.right ?? [];
-  const [choice, setChoice] = useState<number[]>(() => left.map(() => -1));
-  const used = new Set(choice.filter((c) => c >= 0));
-  const done = choice.every((c) => c >= 0);
   return (
-    <div className="quiz-match">
-      <p className="muted small">Pick the matching item for each line, then submit.</p>
-      <ol className="quiz-match__list">
-        {left.map((item, i) => (
-          <li key={i} className="quiz-match__row">
-            <label htmlFor={`match-${i}`} className="quiz-match__left">
-              {item}
-            </label>
-            <select
-              id={`match-${i}`}
-              value={choice[i]}
-              disabled={disabled}
-              onChange={(e) => {
-                const value = Number(e.target.value);
-                setChoice((c) => c.map((x, j) => (j === i ? value : x === value ? -1 : x)));
-              }}
-            >
-              <option value={-1}>Choose…</option>
-              {right.map((r, j) => (
-                <option key={j} value={j}>
-                  {r}
-                  {used.has(j) && choice[i] !== j ? ' (used)' : ''}
-                </option>
-              ))}
-            </select>
-          </li>
-        ))}
-      </ol>
-      <button
-        type="button"
-        className="btn btn--primary btn--wide quiz-submit"
-        disabled={disabled || !done}
-        onClick={() => onAnswer(choice)}
-      >
+    <div className="quiz-drag">
+      <p className="muted small">
+        {match
+          ? 'Drag each item on the right next to its partner (or use ↑ ↓), then submit.'
+          : 'Drag the items into the right order, first at the top (or use ↑ ↓), then submit.'}
+      </p>
+      <Sortable
+        label={match ? 'Matches' : 'Order'}
+        labels={labels}
+        order={order}
+        onChange={setOrder}
+        disabled={disabled}
+        narrow={!match}
+        rowLabel={(row) => (match ? left[row] : `${row + 1}.`)}
+      />
+      <button type="button" className="btn btn--primary btn--wide quiz-submit" disabled={disabled} onClick={() => onAnswer(order)}>
         Submit
       </button>
     </div>
   );
 }
 
-/** The correct answer, shown after the reveal (players and host). */
+/** The correct answer after the reveal (players and host), with the player's own pick marked. */
 export function Solution({ q, mine }: { q: QuestionView; mine?: unknown }) {
   const s = q.solution;
-  if (!s) return null;
   const counts = q.stats?.counts;
   const total = q.stats?.answered ?? 0;
-  if (q.options && s.correct) {
+  if (q.options && (s?.correct || q.type === 'poll')) {
+    const correct = s?.correct ?? [];
     return (
       <ul className="quiz-solution" aria-label="Answers">
         {q.options.map((option, i) => {
-          const right = s.correct!.includes(i);
+          const right = correct.includes(i);
+          const poll = q.type === 'poll';
           const picked = Array.isArray(mine) ? mine.includes(i) : mine === i;
           const n = counts?.[i] ?? 0;
           return (
-            <li key={i} className={`quiz-solution__row ${right ? 'is-right' : 'is-wrong'}`}>
+            <li key={i} className={`quiz-solution__row ${poll ? 'is-poll' : right ? 'is-right' : 'is-wrong'}`}>
               <span className="quiz-solution__mark" aria-hidden="true">
-                {right ? '✓' : '✗'}
+                {poll ? LETTERS[i] : right ? '✓' : '✗'}
               </span>
               <span className="quiz-solution__label">
-                {LETTERS[i]}. {option}
+                {poll ? '' : `${LETTERS[i]}. `}
+                {option}
                 {picked && <em className="quiz-solution__mine"> — your pick</em>}
-                <span className="sr-only">{right ? ' (correct)' : ' (wrong)'}</span>
+                {!poll && <span className="sr-only">{right ? ' (correct)' : ' (wrong)'}</span>}
               </span>
               {counts && (
                 <span className="quiz-solution__bar" style={{ ['--w' as string]: `${total ? (n / total) * 100 : 0}%` }}>
@@ -181,6 +196,7 @@ export function Solution({ q, mine }: { q: QuestionView; mine?: unknown }) {
       </ul>
     );
   }
+  if (!s) return null;
   if (q.type === 'text') {
     return (
       <div className="quiz-solution">
@@ -194,29 +210,33 @@ export function Solution({ q, mine }: { q: QuestionView; mine?: unknown }) {
       </div>
     );
   }
-  if (q.type === 'match' && s.pairs) {
+  if ((q.type === 'match' && s.pairs) || (q.type === 'order' && s.order)) {
+    const labels = (q.type === 'match' ? q.right : q.items) ?? [];
+    const right = (q.type === 'match' ? s.pairs : s.order)!;
+    const placed = Array.isArray(mine) ? (mine as number[]) : null;
     return (
-      <ul className="quiz-solution">
-        {(q.left ?? []).map((item, i) => {
-          const ok = Array.isArray(mine) ? mine[i] === s.pairs![i] : undefined;
-          return (
-            <li key={i} className={`quiz-solution__row ${ok === false ? 'is-wrong' : 'is-right'}`}>
-              <span className="quiz-solution__mark" aria-hidden="true">
-                {ok === false ? '✗' : '✓'}
-              </span>
-              <span className="quiz-solution__label">
-                {item} → {(q.right ?? [])[s.pairs![i] ?? 0]}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+      <Sortable
+        label="Correct answer"
+        labels={labels}
+        order={right}
+        onChange={() => undefined}
+        disabled
+        narrow={q.type === 'order'}
+        rowLabel={(row) => (q.type === 'match' ? (q.left ?? [])[row] : `${row + 1}.`)}
+        marks={placed ? right.map((r, row) => placed[row] === r) : undefined}
+      />
     );
   }
   return null;
 }
 
-export function Leaderboard({ rows, highlight }: { rows: { rank: number; id: string; name: string; score: number }[]; highlight?: string }) {
+export function Leaderboard({
+  rows,
+  highlight,
+}: {
+  rows: { rank: number; id: string; name: string; score: number }[];
+  highlight?: string;
+}) {
   if (rows.length === 0) return <p className="muted">No players yet.</p>;
   return (
     <ol className="quiz-board">
