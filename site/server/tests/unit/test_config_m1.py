@@ -147,3 +147,57 @@ def test_fake_auth_and_test_routes_never_reach_a_real_firestore(app_env: str) ->
         assert Settings.from_env({**real, "AUTH_MODE": "firebase"}).auth_mode == "firebase"
     emulator = Settings.from_env({**real, "FIRESTORE_EMULATOR_HOST": "127.0.0.1:8080"})
     assert (emulator.auth_mode, emulator.store) == ("fake", "firestore")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        # As copied from Firebase console -> Project settings -> Your apps (JavaScript, not JSON).
+        """// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIza-test",
+  authDomain: "study-hubs-test.firebaseapp.com",
+  projectId: "study-hubs-test",
+  storageBucket: "study-hubs-test.firebasestorage.app",
+  messagingSenderId: "123",
+  appId: "1:123:web:abc",
+  measurementId: "G-XYZ",
+};""",
+        "{apiKey: 'AIza-test', authDomain: 'study-hubs-test.firebaseapp.com', "
+        "projectId: 'study-hubs-test', appId: '1:123:web:abc',}",
+        "'"
+        + json.dumps(
+            {
+                "apiKey": "AIza-test",
+                "authDomain": "study-hubs-test.firebaseapp.com",
+                "projectId": "study-hubs-test",
+                "appId": "1:123:web:abc",
+            }
+        )
+        + "'",
+        json.dumps(
+            json.dumps(
+                {
+                    "apiKey": "AIza-test",
+                    "authDomain": "study-hubs-test.firebaseapp.com",
+                    "projectId": "study-hubs-test",
+                    "appId": "1:123:web:abc",
+                }
+            )
+        ),
+    ],
+)
+def test_web_config_accepts_console_snippet(value: str) -> None:
+    from app.config import parse_web_config
+
+    cfg = parse_web_config(value)
+    assert (cfg.api_key, cfg.project_id, cfg.app_id) == ("AIza-test", "study-hubs-test", "1:123:web:abc")
+    assert cfg.auth_domain == "study-hubs-test.firebaseapp.com"
+
+
+def test_web_config_error_does_not_echo_value() -> None:
+    from app.config import parse_web_config
+
+    with pytest.raises(ConfigError) as err:
+        parse_web_config("AIza-secretish-garbage")
+    assert "AIza" not in str(err.value)

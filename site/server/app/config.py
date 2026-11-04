@@ -24,6 +24,7 @@ import base64
 import binascii
 import json
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -137,11 +138,61 @@ class FirebaseWebConfig:
         }
 
 
+_JS_PAIR = re.compile(
+    r"""([A-Za-z_$][\w$]*|"[^"]*"|'[^']*')\s*:\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`)"""
+)
+
+
+def _web_config_from_js(value: str) -> dict[str, str] | None:
+    """The `firebaseConfig = {...};` snippet as the Firebase console shows it -> dict.
+
+    The console shows a JavaScript object literal (unquoted keys, maybe single quotes,
+    trailing commas, a `const firebaseConfig =` prefix), not JSON, and that is what
+    people paste. Only string-valued `key: "value"` pairs are read; None if none found.
+    """
+    start, end = value.find("{"), value.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    pairs: dict[str, str] = {}
+    for key, raw in _JS_PAIR.findall(value[start + 1 : end]):
+        if key[0] in "\"'":
+            key = key[1:-1]
+        if raw[0] == '"':
+            try:
+                text = json.loads(raw)
+            except ValueError:
+                return None
+        else:
+            text = raw[1:-1].replace("\\'", "'")
+        pairs[key] = text
+    return pairs or None
+
+
 def parse_web_config(value: str) -> FirebaseWebConfig:
+    """FIREBASE_WEB_CONFIG -> the four public fields.
+
+    Accepts one line of JSON (the documented form) or the `firebaseConfig` object as
+    copied from the Firebase console. Errors never echo the value.
+    """
+    text = value.strip()
+    # A value wrapped in an extra pair of quotes (a common copy/paste slip).
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "'`":
+        text = text[1:-1].strip()
     try:
-        data = json.loads(value)
+        data: object = json.loads(text)
     except ValueError:
-        raise ConfigError("FIREBASE_WEB_CONFIG must be JSON") from None
+        data = _web_config_from_js(text)
+        if data is None:
+            raise ConfigError(
+                "FIREBASE_WEB_CONFIG must be JSON like "
+                '{"apiKey":"...","authDomain":"...","projectId":"...","appId":"..."} '
+                f"(got {len(text)} characters that are not a JSON or JavaScript object)"
+            ) from None
+    if isinstance(data, str):  # JSON-encoded twice: "{\"apiKey\":...}"
+        try:
+            data = json.loads(data)
+        except ValueError:
+            raise ConfigError("FIREBASE_WEB_CONFIG must be JSON") from None
     if not isinstance(data, dict):
         raise ConfigError("FIREBASE_WEB_CONFIG must be a JSON object")
     missing = [key for key in WEB_CONFIG_KEYS if not isinstance(data.get(key), str) or not data[key]]
