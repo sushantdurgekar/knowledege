@@ -70,6 +70,7 @@ def room_state(room: Room) -> dict[str, Any]:
         "done": sorted(room.done),
         "openedAt": w(room.opened_at),
         "deadline": w(room.deadline),
+        "revealedAt": w(room.revealed_at),
         "touched": w(room.touched),
         "created": room.created,
         "answeredCount": room.answered_count,
@@ -92,7 +93,16 @@ def room_state(room: Room) -> dict[str, Any]:
                 "team": p.team,
                 "hints": {str(k): v for k, v in p.hints_used.items()},
                 "answers": {
-                    str(k): [a.value, a.elapsed, a.fraction, a.points, a.scored, a.confidence, a.hints]
+                    str(k): [
+                        a.value,
+                        a.elapsed,
+                        a.fraction,
+                        a.points,
+                        a.scored,
+                        a.confidence,
+                        a.hints,
+                        a.bonus,
+                    ]
                     for k, a in p.answers.items()
                 },
             }
@@ -120,6 +130,7 @@ def restore_room(state: dict[str, Any], clock: Any) -> Room:
     room.done = set(state["done"])
     room.opened_at = m(state["openedAt"])
     room.deadline = m(state["deadline"])
+    room.revealed_at = m(state.get("revealedAt"))
     room.touched = now_m  # a restored room counts as active again
     room.created = float(state["created"])
     room.answered_count = int(state["answeredCount"])

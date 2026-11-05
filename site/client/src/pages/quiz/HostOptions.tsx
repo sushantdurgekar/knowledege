@@ -25,6 +25,11 @@ export function HostOptions({
   const [teams, setTeams] = useState(0);
   const [study, setStudy] = useState(false);
   const [scheduled, setScheduled] = useState(false);
+  const [streakBonus, setStreakBonus] = useState(true);
+  const [autoplay, setAutoplay] = useState(0);
+  const [shuffle, setShuffle] = useState(false);
+  const [friendlyNames, setFriendlyNames] = useState(false);
+  const [reactions, setReactions] = useState(true);
   const [opens, setOpens] = useState(() => toLocal(Date.now()));
   const [closes, setCloses] = useState(() => toLocal(Date.now() + 7 * 86_400_000));
   const opensAt = new Date(opens).getTime();
@@ -48,6 +53,11 @@ export function HostOptions({
                 study: mode === 'self' && study,
                 opensAt: mode === 'self' && scheduled ? opensAt : null,
                 closesAt: mode === 'self' && scheduled ? closesAt : null,
+                streakBonus,
+                autoplay: mode === 'live' ? autoplay : 0,
+                shuffle,
+                friendlyNames,
+                reactions,
               })
             }
           >
@@ -111,6 +121,38 @@ export function HostOptions({
           )}
         </>
       )}
+      <details className="host-options__more">
+        <summary>Game options</summary>
+        {mode === 'live' && (
+          <div className="field">
+            <label htmlFor="host-autoplay">Auto-play</label>
+            <select id="host-autoplay" value={autoplay} onChange={(e) => setAutoplay(Number(e.target.value))}>
+              <option value={0}>Off: you move on with Next</option>
+              {[5, 8, 12, 20].map((n) => (
+                <option key={n} value={n}>
+                  Results for {n} s, then the next item opens by itself
+                </option>
+              ))}
+            </select>
+            {autoplay > 0 && <span className="field__hint">Slides stay up for 12 s. You can still skip, pause with “End quiz now” or jump.</span>}
+          </div>
+        )}
+        <label className="studio__check">
+          <input type="checkbox" checked={streakBonus} onChange={(e) => setStreakBonus(e.target.checked)} /> Streak bonus (+100
+          points per right answer in a row, up to +500)
+        </label>
+        <label className="studio__check">
+          <input type="checkbox" checked={shuffle} onChange={(e) => setShuffle(e.target.checked)} /> Shuffle the answer order
+        </label>
+        <label className="studio__check">
+          <input type="checkbox" checked={friendlyNames} onChange={(e) => setFriendlyNames(e.target.checked)} /> Friendly names only
+          (players pick a generated name like “Curious Otter”)
+        </label>
+        <label className="studio__check">
+          <input type="checkbox" checked={reactions} onChange={(e) => setReactions(e.target.checked)} /> Emoji reactions on the shared
+          screen
+        </label>
+      </details>
     </Dialog>
   );
 }

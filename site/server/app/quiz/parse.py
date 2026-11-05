@@ -14,6 +14,10 @@ Item types
   slide      a content screen (title + body) the host presents; no answer
   explain    teach-back: players explain in their own words (no score); `answer:` lines are the
              model answer shown afterwards, and the host sees every response
+  slider     pick a number on a scale: `min:`, `max:`, `step:`, `answer:` (the number) and
+             `margin:` (answers within +/- margin count as right); optional `unit:`
+  cloud      word cloud: players send a word or two; the room sees the most common ones big
+             (no score)
 
 Advanced quizzes (`advanced: true` at the top, or "advanced" in the builder) add confidence
 ratings on answers and `hint:` lines (up to 3 per question; each hint used costs 25% of the
@@ -41,11 +45,14 @@ Text format (one block per item; `#` starts a comment):
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-QuestionType = Literal["single", "multi", "text", "match", "truefalse", "order", "poll", "slide", "explain"]
+QuestionType = Literal[
+    "single", "multi", "text", "match", "truefalse", "order", "poll", "slide", "explain", "slider", "cloud"
+]
 TYPES: tuple[QuestionType, ...] = (
     "single",
     "multi",
@@ -56,8 +63,11 @@ TYPES: tuple[QuestionType, ...] = (
     "poll",
     "slide",
     "explain",
+    "slider",
+    "cloud",
 )
-SCORED: frozenset[str] = frozenset({"single", "multi", "text", "match", "truefalse", "order"})
+SCORED: frozenset[str] = frozenset({"single", "multi", "text", "match", "truefalse", "order", "slider"})
+UNSCORED: frozenset[str] = frozenset({"poll", "slide", "explain", "cloud"})
 
 MAX_SOURCE_CHARS = 200_000
 MAX_QUESTIONS = 200
@@ -72,9 +82,13 @@ MAX_ANSWERS = 20
 MAX_HINTS = 3
 MIN_TIME, MAX_TIME, DEFAULT_TIME = 5, 300, 20
 MIN_POINTS, MAX_POINTS, DEFAULT_POINTS = 0, 5000, 1000
+MAX_SLIDER = 1_000_000_000  # |min|, |max| of a slider scale
+MAX_STEPS = 10_000  # positions on one slider scale
+MAX_UNIT = 12
 
 _KEY = re.compile(
-    r"^(title|time|points|type|answer|pair|item|explain|hint|advanced|image)\s*:\s*(.*)$", re.IGNORECASE
+    r"^(title|time|points|type|answer|pair|item|explain|hint|advanced|image|min|max|step|margin|unit)\s*:\s*(.*)$",
+    re.IGNORECASE,
 )
 IMAGE_ID = re.compile(r"^[a-f0-9]{24}$")  # an uploaded image (app/quiz/images.py)
 _Q = re.compile(r"^(?:q|question)\s*\d*\s*[:.)]\s*(.*)$", re.IGNORECASE)
@@ -115,6 +129,13 @@ class Question:
     hints: list[str] = field(default_factory=list)
     model: list[str] = field(default_factory=list)  # explain: the model answer
     image: str | None = None  # an uploaded image id, shown with the question or slide
+    # slider: the scale, the right number and how far from it still counts as right
+    low: float = 0.0
+    high: float = 0.0
+    step: float = 1.0
+    target: float = 0.0
+    margin: float = 0.0
+    unit: str = ""
 
     @property
     def scored(self) -> bool:
@@ -151,6 +172,25 @@ class _Draft:
     explain: list[str] = field(default_factory=list)
     hints: list[str] = field(default_factory=list)
     image: str | None = None
+    slider: dict[str, str] = field(default_factory=dict)  # min, max, step, margin, unit
+
+
+def _number(value: str, what: str, where: str, errors: list[str]) -> float | None:
+    """A finite number (slider scales may use decimals), rounded to 6 places."""
+    try:
+        number = float(str(value).strip())
+    except ValueError:
+        errors.append(f"{where}: {what} must be a number, got {str(value).strip()!r}")
+        return None
+    if not math.isfinite(number) or abs(number) > MAX_SLIDER:
+        errors.append(f"{where}: {what} must be a number between -{MAX_SLIDER} and {MAX_SLIDER}")
+        return None
+    return round(number, 6)
+
+
+def fmt_number(value: float) -> str:
+    """42.0 -> "42", 2.5 -> "2.5" (how slider numbers are shown)."""
+    return f"{value:.6f}".rstrip("0").rstrip(".") if value != int(value) else str(int(value))
 
 
 def _int(value: str, low: int, high: int, what: str, where: str, errors: list[str]) -> int | None:
@@ -192,6 +232,8 @@ def _infer(d: _Draft) -> str | None:
     if d.options:
         right = sum(ok for _, ok in d.options)
         return "multi" if right > 1 else "single"  # no * at all: an error, unless type: poll
+    if d.slider:
+        return "slider"
     if d.answers:
         return "text"
     return None
@@ -220,7 +262,7 @@ def _build(d: _Draft, default_time: int, default_points: int, errors: list[str])
         if d.points in (None, "")
         else _int(d.points, MIN_POINTS, MAX_POINTS, "points", where, errors)
     )
-    if kind in ("poll", "slide", "explain"):
+    if kind in UNSCORED:
         points = 0
     q = Question(text=text, type=kind, time_limit=time_limit or default_time, points=points or 0)  # type: ignore[arg-type]
     q.explain = "\n".join(d.explain).strip()[:MAX_TEXT]
@@ -233,7 +275,7 @@ def _build(d: _Draft, default_time: int, default_points: int, errors: list[str])
     q.hints = [h.strip()[:MAX_OPTION] for h in d.hints if h.strip()]
     if len(q.hints) > MAX_HINTS:
         errors.append(f"{where}: at most {MAX_HINTS} hints")
-    if q.hints and kind in ("slide", "poll", "explain"):
+    if q.hints and kind in UNSCORED:
         errors.append(f"{where}: hints only apply to questions with a right answer")
     if len(q.body) > MAX_BODY:
         errors.append(f"{where}: the slide body is longer than {MAX_BODY} characters")
@@ -281,6 +323,8 @@ def _build(d: _Draft, default_time: int, default_points: int, errors: list[str])
             errors.append(f"{where}: the right-hand sides of pairs must all differ")
     elif kind == "explain":
         q.model = [a.strip()[:MAX_TEXT] for a in d.answers if a.strip()][:3]
+    elif kind == "slider":
+        _build_slider(q, d, where, errors)
     elif kind == "order":
         q.items = [i.strip()[:MAX_OPTION] for i in d.items if i.strip()]
         if not 2 <= len(q.items) <= MAX_ITEMS:
@@ -288,6 +332,34 @@ def _build(d: _Draft, default_time: int, default_points: int, errors: list[str])
         if len({normalise(i) for i in q.items}) != len(q.items):
             errors.append(f"{where}: items to order must all differ")
     return q if len(errors) == before else None
+
+
+def _build_slider(q: Question, d: _Draft, where: str, errors: list[str]) -> None:
+    before = len(errors)
+    low = _number(d.slider.get("min", ""), "min", where, errors) if d.slider.get("min") else None
+    high = _number(d.slider.get("max", ""), "max", where, errors) if d.slider.get("max") else None
+    if low is None or high is None:
+        if len(errors) == before:
+            errors.append(f"{where}: a slider needs min: and max:")
+        return
+    step = _number(d.slider["step"], "step", where, errors) if d.slider.get("step") else 1.0
+    margin = _number(d.slider["margin"], "margin", where, errors) if d.slider.get("margin") else 0.0
+    values = [a for a in d.answers if a.strip()]
+    target = _number(values[0], "answer", where, errors) if len(values) == 1 else None
+    if len(values) != 1:
+        errors.append(f"{where}: a slider needs exactly one answer: (the right number)")
+    if len(errors) != before or step is None or margin is None or target is None:
+        return
+    if high <= low:
+        errors.append(f"{where}: max must be greater than min")
+    elif step <= 0 or (high - low) / step > MAX_STEPS:
+        errors.append(f"{where}: step must be above 0, with at most {MAX_STEPS} steps from min to max")
+    elif not low <= target <= high:
+        errors.append(f"{where}: the answer must be between min and max")
+    elif not 0 <= margin <= high - low:
+        errors.append(f"{where}: margin must be between 0 and max - min")
+    q.low, q.high, q.step, q.target, q.margin = low, high, step, target, margin
+    q.unit = d.slider.get("unit", "").strip()[:MAX_UNIT]
 
 
 def _finish(
@@ -377,6 +449,8 @@ def parse_quiz(source: str) -> Quiz:
                 current.hints.append(value)
             elif name == "image":
                 current.image = value.strip()
+            elif name in ("min", "max", "step", "margin", "unit"):
+                current.slider[name] = value.strip()
             elif name == "advanced":
                 errors.append(f"line {number}: advanced: belongs at the top of the file")
             elif name == "explain":
@@ -447,6 +521,12 @@ def quiz_from_json(data: Any) -> Quiz:
         d.explain = [_str(item.get("explain"), MAX_TEXT)] if item.get("explain") else []
         d.hints = [_str(h, MAX_OPTION) for h in item.get("hints") or [] if isinstance(h, str)]
         d.image = _str(item.get("image"), 64) or None
+        if d.type == "slider":
+            for key in ("min", "max", "step", "margin", "unit"):
+                if item.get(key) not in (None, "") and isinstance(item.get(key), int | float | str):
+                    d.slider[key] = str(item[key])[:40]
+            if isinstance(item.get("answer"), int | float) and not isinstance(item.get("answer"), bool):
+                d.answers = [str(item["answer"])]
         drafts.append(d)
     return _finish(
         _str(data.get("title"), MAX_TITLE),
@@ -477,6 +557,10 @@ def quiz_to_json(quiz: Quiz) -> dict[str, Any]:
             item["body"] = q.body
         elif q.type == "explain":
             item["answers"] = list(q.model)
+        elif q.type == "slider":
+            item.update(min=q.low, max=q.high, step=q.step, answer=q.target, margin=q.margin)
+            if q.unit:
+                item["unit"] = q.unit
         if q.explain:
             item["explain"] = q.explain
         if q.hints:
@@ -505,6 +589,10 @@ def answer_text(q: Question) -> str:
         return q.body
     if q.type == "explain":
         return " / ".join(q.model)
+    if q.type == "slider":
+        unit = f" {q.unit}" if q.unit else ""
+        margin = f" (±{fmt_number(q.margin)})" if q.margin else ""
+        return f"{fmt_number(q.target)}{unit}{margin}"
     return ""
 
 

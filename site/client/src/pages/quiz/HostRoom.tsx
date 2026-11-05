@@ -7,6 +7,11 @@ import {
   apiMessage,
   boardLink,
   fetchHostCards,
+  fetchReport,
+  fmtNumber,
+  toCsv,
+  useAutoCountdown,
+  type RoomSettings,
   hostAction,
   presenterLink,
   hostSecret,
@@ -17,7 +22,7 @@ import {
   type Insight,
   type RoomView,
 } from '../../lib/quiz';
-import { Leaderboard, LETTERS, QuestionImage, SlideBody, Solution } from './Answering';
+import { Leaderboard, LETTERS, QuestionImage, SlideBody, Solution, WordCloud } from './Answering';
 import { QrCode } from './QrCode';
 import { TeamBoard, teamOf } from './Teams';
 import { roomToVault, vaultDeck } from '../../lib/vault-export';
@@ -192,6 +197,36 @@ function ShareRow({ label, note, url, open = false }: { label: string; note: str
   );
 }
 
+/** The game options this room was opened with. */
+function OptionChips({ options }: { options: RoomSettings }) {
+  const on = [
+    options.autoplay ? `Auto-play (${options.autoplay} s results)` : null,
+    options.streakBonus ? 'Streak bonus' : null,
+    options.shuffle ? 'Shuffled answers' : null,
+    options.friendlyNames ? 'Friendly names only' : null,
+    options.reactions ? 'Reactions' : null,
+  ].filter(Boolean);
+  if (!on.length) return null;
+  return (
+    <ul className="quiz-optchips" aria-label="Game options">
+      {on.map((label) => (
+        <li key={label}>{label}</li>
+      ))}
+    </ul>
+  );
+}
+
+/** "Next in 5 s" while auto-play counts down. */
+function AutoNote({ view }: { view: RoomView }) {
+  const left = useAutoCountdown(view);
+  if (left === null) return null;
+  return (
+    <p className="quiz-auto" role="status">
+      Auto-play: next item in <strong>{left} s</strong>
+    </p>
+  );
+}
+
 function Lobby({ view, pin, joinUrl, busy, act }: { view: RoomView; pin: string; joinUrl: string; busy: boolean; act: Act }) {
   return (
     <div className="quiz-lobby">
@@ -206,6 +241,7 @@ function Lobby({ view, pin, joinUrl, busy, act }: { view: RoomView; pin: string;
         <span className="muted small">or scan to join</span>
       </div>
       {view.teams ? <p className="muted">Playing in {view.teams} teams; players are balanced as they join.</p> : null}
+      {view.options && <OptionChips options={view.options} />}
       {view.opensAt || view.closesAt ? (
         <p className="muted">
           Scheduled: {view.opensAt ? `opens ${new Date(view.opensAt).toLocaleString()}` : 'open now'}
@@ -245,6 +281,7 @@ function LiveStage({ view, seconds, busy, act }: { view: RoomView; seconds: numb
           Item {q.index + 1} of {view.total} · Slide
         </p>
         <SlideBody text={q.text} body={q.body} image={q.image} big />
+        <AutoNote view={view} />
         <p className="actions">
           <button type="button" className="btn btn--primary" disabled={busy} onClick={() => act('next')}>
             {nextLabel}
@@ -294,6 +331,13 @@ function LiveStage({ view, seconds, busy, act }: { view: RoomView; seconds: numb
                 </ul>
               </div>
             )}
+            {q.type === 'slider' && q.scale && (
+              <p className="quiz-slider__scale">
+                Scale {fmtNumber(q.scale.min)} → {fmtNumber(q.scale.max)}
+                {q.scale.unit ? ` ${q.scale.unit}` : ''} · right answer {q.answerText}
+              </p>
+            )}
+            {q.type === 'cloud' && <WordCloud words={q.stats?.words ?? []} />}
             {q.hints && q.hints.length > 0 && (
               <p className="muted small">Hints players can open: {q.hints.join(' · ')}</p>
             )}
@@ -319,7 +363,7 @@ function LiveStage({ view, seconds, busy, act }: { view: RoomView; seconds: numb
           </>
         ) : (
           <>
-            {q.type !== 'poll' && (
+            {q.type !== 'poll' && q.type !== 'cloud' && q.type !== 'explain' && (
               <p className="muted">
                 {q.stats?.correct ?? 0} of {q.stats?.answered ?? 0} correct
               </p>
@@ -349,6 +393,7 @@ function LiveStage({ view, seconds, busy, act }: { view: RoomView; seconds: numb
           )}
           <h2>Leaderboard</h2>
           <Leaderboard rows={(view.leaderboard ?? []).slice(0, 10)} />
+          <AutoNote view={view} />
           <p className="actions">
             <button type="button" className="btn btn--primary" disabled={busy} onClick={() => act('next')}>
               {nextLabel}
@@ -554,9 +599,32 @@ function Final({ view, busy, act }: { view: RoomView; busy: boolean; act: Act })
       )}
       <Leaderboard rows={view.leaderboard ?? []} />
       {view.insights && <Insights rows={view.insights} advanced={!!view.advanced} />}
+      {view.needsHelp && view.needsHelp.length > 0 && (
+        <section className="needs-help" aria-labelledby="needs-help-title">
+          <h3 id="needs-help-title">May need help</h3>
+          <p className="muted small">Under half right (after two answers or more): worth a follow-up.</p>
+          <ul>
+            {view.needsHelp.map((r) => (
+              <li key={r.id}>
+                <strong>{r.name}</strong> · {r.correct} of {r.answered} right
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <p className="actions quiz-center">
         <button type="button" className="btn" onClick={() => download(`quiz-${view.pin}-results.csv`, resultsCsv(view), 'text/csv')}>
           Download results (CSV)
+        </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={async () => {
+            const r = await fetchReport(view.pin, hostSecret(view.pin) ?? '');
+            download(`quiz-${view.pin}-full-report.csv`, toCsv([r.columns, ...r.rows]), 'text/csv');
+          }}
+        >
+          Full report: every answer (CSV)
         </button>
         <button type="button" className="btn btn--danger" disabled={busy} onClick={() => act('close')}>
           Close room

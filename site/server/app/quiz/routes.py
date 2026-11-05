@@ -17,9 +17,13 @@ Host (X-Quiz-Host: the room's hostKey; no admin re-check per poll):
   POST /api/quiz/rooms/{pin}/host/action       {action: start|reveal|next|goto|extend|lock|unlock|
                                                 end|close|kick, index?, seconds?, playerId?}
   GET  /api/quiz/rooms/{pin}/host/cards        every question + answer + results (vault export)
+  GET  /api/quiz/rooms/{pin}/host/report       every player's answer to every question (CSV rows)
 
 Players (no account needed; X-Quiz-Token from join):
+  GET  /api/quiz/rooms/{pin}/info              before joining: title, phase, friendly names only?
+  GET  /api/quiz/rooms/{pin}/names             three friendly nicknames nobody in the room uses
   POST /api/quiz/rooms/{pin}/join              {name} -> {playerId, token}
+  POST /api/quiz/rooms/{pin}/react             {emoji: 0-5} -> shown on the presenter screen
   GET  /api/quiz/rooms/{pin}?since=N           long-poll, the player's view
   POST /api/quiz/rooms/{pin}/answer            {index, answer}
   POST /api/quiz/rooms/{pin}/advance           self-paced: open my next item
@@ -193,6 +197,9 @@ async def create_room(request: Request, admin: Admin) -> JSONResponse:
     teams = data.get("teams") or 0
     if not isinstance(teams, int) or isinstance(teams, bool):
         raise ApiError(422, "invalid", "teams must be a number")
+    autoplay = data.get("autoplay") or 0
+    if not isinstance(autoplay, int) or isinstance(autoplay, bool):
+        raise ApiError(422, "invalid", "autoplay must be a number of seconds")
     try:
         room = _manager.create(
             quiz,
@@ -202,6 +209,11 @@ async def create_room(request: Request, admin: Admin) -> JSONResponse:
             teams=teams,
             opens_at=_epoch(data.get("opensAt")),
             closes_at=_epoch(data.get("closesAt")),
+            streak_bonus=data.get("streakBonus") is True,
+            autoplay=autoplay,
+            shuffle=data.get("shuffle") is True,
+            friendly_names=data.get("friendlyNames") is True,
+            reactions=data.get("reactions") is not False,
         )
     except QuizError as exc:
         raise _err(exc) from None
@@ -253,6 +265,12 @@ async def host_cards(request: Request, pin: str) -> JSONResponse:
     return _json({"title": room.quiz.title, "cards": room.cards(), "insights": room.insights()})
 
 
+@router.get("/rooms/{pin}/host/report")
+async def host_report(request: Request, pin: str) -> JSONResponse:
+    """One row per player per question (answer, result, points, time): the downloadable report."""
+    return _json(_host_room(request, pin).report())
+
+
 @router.post("/rooms/{pin}/host/action", dependencies=CSRF)
 async def host_action(request: Request, pin: str) -> JSONResponse:
     room = _host_room(request, pin)
@@ -279,6 +297,42 @@ async def host_action(request: Request, pin: str) -> JSONResponse:
 
 
 # -- players -------------------------------------------------------------------------------
+@router.get("/rooms/{pin}/info")
+async def room_info(request: Request, pin: str) -> JSONResponse:
+    """What the join page needs before a name is chosen."""
+    _limit(request, "quiz-info", JOIN_RULE)
+    room = _room(pin)
+    return _json(
+        {
+            "pin": room.pin,
+            "title": room.quiz.title,
+            "phase": room.phase,
+            "mode": room.mode,
+            "locked": room.locked,
+            "friendlyNames": room.friendly_names,
+        }
+    )
+
+
+@router.get("/rooms/{pin}/names")
+async def room_names(request: Request, pin: str) -> JSONResponse:
+    """Friendly nickname suggestions (adjective + animal) not used in the room yet."""
+    _limit(request, "quiz-names", JOIN_RULE)
+    return _json({"names": _room(pin).suggest_names()})
+
+
+@router.post("/rooms/{pin}/react", dependencies=CSRF)
+async def react(request: Request, pin: str) -> JSONResponse:
+    room = _room(pin)
+    data = await _body(request)
+    try:
+        player = room.player_by_token(request.headers.get("x-quiz-token"))
+        room.react(player, data.get("emoji"))
+    except QuizError as exc:
+        raise _err(exc) from None
+    return _json({"ok": True})
+
+
 @router.post("/rooms/{pin}/join", dependencies=CSRF)
 async def join(request: Request, pin: str) -> JSONResponse:
     _limit(request, "quiz-join", JOIN_RULE)

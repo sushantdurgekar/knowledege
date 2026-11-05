@@ -1,10 +1,12 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { parentOf } from '../src/components/SiteNav';
 import { blankDoc, blankItem, fromServer, retype, toServer, toText, type QuizDoc } from '../src/lib/quiz-doc';
 import { Sortable } from '../src/pages/quiz/Sortable';
+import { Answering, WordCloud } from '../src/pages/quiz/Answering';
+import { toCsv, type QuestionView } from '../src/lib/quiz';
 import { bodyText, ME_SIGNED_IN, mockServer, setHint, USER } from './api-mock';
 import { renderApp } from './render';
 import type { DeckCard, HistoryEntry } from '../src/lib/quiz-history';
@@ -360,5 +362,67 @@ describe('presenter sounds', () => {
     expect(soundPreference()).toBe(false);
     setSoundPreference(true);
     expect(soundPreference()).toBe(true);
+  });
+});
+
+describe('Kahoot-style additions', () => {
+  it('writes slider and word-cloud items in the text format', () => {
+    const doc: QuizDoc = {
+      ...blankDoc(),
+      title: 'Fun',
+      items: [
+        { id: 's', type: 'slider', text: 'Bits in a byte?', min: 0, max: 16, step: 1, answer: 8, margin: 0, unit: 'bits' },
+        { id: 'c', type: 'cloud', text: 'One word for TLS' },
+      ],
+    };
+    const text = toText(doc);
+    expect(text).toContain('Q: Bits in a byte?\ntype: slider\nmin: 0\nmax: 16\nstep: 1\nanswer: 8\nunit: bits');
+    expect(text).toContain('Q: One word for TLS\ntype: cloud');
+    expect(blankItem('slider')).toMatchObject({ min: 0, max: 100, step: 1, answer: 50 });
+  });
+
+  it('builds CSV with quotes and defuses spreadsheet formulas', () => {
+    expect(toCsv([['Player', 'Answer'], ['Ann', '=1+1'], ['Bob', 'say "hi"'], ['Cy', 42]])).toBe(
+      '"Player","Answer"\r\n"Ann","\'=1+1"\r\n"Bob","say ""hi"""\r\n"Cy","42"',
+    );
+  });
+
+  it('answers a slider on the question scale', async () => {
+    const user = userEvent.setup();
+    const answers: unknown[] = [];
+    const q: QuestionView = {
+      index: 0, text: 'How many?', type: 'slider', timeLimit: 20, points: 1000, remainingMs: 20000,
+      scale: { min: 0, max: 10, step: 0.5, unit: 'km' },
+    };
+    render(<Answering q={q} disabled={false} onAnswer={(v) => answers.push(v)} />);
+    expect(screen.getByRole('status')).toHaveTextContent('5 km');
+    const exact = screen.getByLabelText('Exact value');
+    await user.clear(exact);
+    await user.type(exact, '7.4');
+    await user.click(screen.getByRole('button', { name: 'Lock it in' }));
+    expect(answers).toEqual([7.5]); // snapped to the 0.5 steps
+  });
+
+  it('draws a word cloud, biggest word for the most answers', () => {
+    render(<WordCloud words={[['secure', 4], ['fast', 1]]} />);
+    const words = screen.getAllByRole('listitem');
+    const size = (name: string) => Number(words.find((w) => w.textContent?.startsWith(name))!.style.getPropertyValue('--s'));
+    expect(size('secure')).toBeGreaterThan(size('fast'));
+    expect(screen.getByRole('list', { name: /Word cloud/ })).toHaveTextContent('secure: 4');
+  });
+
+  it('a friendly-names room offers generated names and joins with the one picked', async () => {
+    const server = mockServer({
+      'GET /api/quiz/rooms/123456/info': { pin: '123456', title: 'Team quiz', phase: 'lobby', mode: 'live', locked: false, friendlyNames: true },
+      'GET /api/quiz/rooms/123456/names': { names: ['Curious Otter', 'Brave Koala', 'Sunny Owl'] },
+      'POST /api/quiz/rooms/123456/join': { playerId: 'p1', token: 't1', name: 'Brave Koala' },
+    });
+    const { user } = renderApp('/quiz?pin=123456');
+    expect(await screen.findByText('Joining “Team quiz”')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Nickname')).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('radio', { name: 'Brave Koala' }));
+    await user.click(screen.getByRole('button', { name: 'Join' }));
+    await waitFor(() => expect(server.to('POST /api/quiz/rooms/123456/join')).toHaveLength(1));
+    expect(JSON.parse(await bodyText(server.to('POST /api/quiz/rooms/123456/join')[0]!))).toEqual({ name: 'Brave Koala' });
   });
 });

@@ -1,9 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { FormMessage } from '../../components/forms';
 import { useMe } from '../../context/me';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { apiMessage, joinRoom, playerToken, setPlayerToken } from '../../lib/quiz';
+import { apiMessage, joinRoom, playerToken, roomInfo, setPlayerToken, suggestNames } from '../../lib/quiz';
 import { dueCards, loadState } from '../../lib/quiz-history';
 import { WatchForm } from './Board';
 
@@ -23,11 +23,56 @@ export function JoinPage() {
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [room, setRoom] = useState<{ pin: string; title: string; friendly: boolean } | null>(null);
+  const [choices, setChoices] = useState<string[]>([]);
+  const [spins, setSpins] = useState(0);
+  const code = pin.replace(/\D/g, '');
+
+  // Once the PIN is complete, look the room up: its title, and whether it uses generated names.
+  useEffect(() => {
+    if (code.length !== 6) {
+      setRoom(null);
+      return;
+    }
+    let live = true;
+    const timer = setTimeout(() => {
+      roomInfo(code)
+        .then((r) => live && setRoom({ pin: code, title: r.title, friendly: r.friendlyNames }))
+        .catch(() => live && setRoom(null));
+    }, 250);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [code]);
+
+  const spin = async () => {
+    if (code.length !== 6) return;
+    try {
+      const { names } = await suggestNames(code);
+      setChoices(names);
+      setSpins((n) => n + 1);
+      return names;
+    } catch (e) {
+      setError(apiMessage(e));
+      return [];
+    }
+  };
+
+  // Generated names only: offer three right away.
+  useEffect(() => {
+    if (room?.friendly && room.pin === code) {
+      setName('');
+      setSpins(0);
+      void spin();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room?.friendly, room?.pin]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const code = pin.replace(/\D/g, '');
     if (code.length !== 6) return setError('The PIN has 6 digits.');
+    if (room?.friendly && !choices.includes(name)) return setError('Pick one of the names above.');
     if (playerToken(code)) return navigate(`/quiz/play/${code}`); // already in this room
     setBusy(true);
     setError(null);
@@ -71,17 +116,56 @@ export function JoinPage() {
             required
           />
         </div>
-        <div className="field">
-          <label htmlFor="quiz-name">Nickname</label>
-          <input
-            id="quiz-name"
-            maxLength={24}
-            autoComplete="nickname"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-        </div>
+        {room && <p className="quiz-join__room">Joining “{room.title}”</p>}
+        {room?.friendly ? (
+          <fieldset className="quiz-names">
+            <legend>Pick your name</legend>
+            <p className="muted small">This room uses generated names, so everyone gets a friendly one.</p>
+            <div className="quiz-names__choices" role="radiogroup" aria-label="Name suggestions">
+              {choices.map((choice) => (
+                <button
+                  key={choice}
+                  type="button"
+                  role="radio"
+                  aria-checked={name === choice}
+                  className={`quiz-names__choice${name === choice ? ' is-on' : ''}`}
+                  onClick={() => setName(choice)}
+                >
+                  {choice}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="btn btn--small btn--quiet" disabled={spins >= 3} onClick={() => void spin()}>
+              🎲 {spins >= 3 ? 'No more spins' : `Spin again (${3 - spins} left)`}
+            </button>
+          </fieldset>
+        ) : (
+          <div className="field">
+            <label htmlFor="quiz-name">Nickname</label>
+            <div className="quiz-join__name">
+              <input
+                id="quiz-name"
+                maxLength={24}
+                autoComplete="nickname"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                className="btn btn--small btn--quiet"
+                disabled={code.length !== 6}
+                title="Suggest a friendly name"
+                onClick={async () => {
+                  const names = await spin();
+                  if (names?.[0]) setName(names[0]);
+                }}
+              >
+                🎲 Suggest
+              </button>
+            </div>
+          </div>
+        )}
         {error && <FormMessage tone="error">{error}</FormMessage>}
         <button className="btn btn--primary btn--wide" type="submit" disabled={busy}>
           {busy ? 'Joining…' : 'Join'}

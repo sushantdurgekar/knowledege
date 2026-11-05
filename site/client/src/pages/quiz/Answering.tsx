@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { imageUrl, type QuestionView } from '../../lib/quiz';
+import { fmtNumber, imageUrl, type QuestionView, type SliderScale } from '../../lib/quiz';
 import { Sortable } from './Sortable';
 
 export const LETTERS = 'ABCDEFGH';
@@ -78,7 +78,179 @@ export function Answering({
   if (q.type === 'text') return <TextAnswer disabled={disabled} onAnswer={onAnswer} />;
   if (q.type === 'explain') return <ExplainAnswer disabled={disabled} onAnswer={onAnswer} />;
   if (q.type === 'match' || q.type === 'order') return <DragAnswer q={q} disabled={disabled} onAnswer={onAnswer} />;
+  if (q.type === 'slider' && q.scale) return <SliderAnswer scale={q.scale} disabled={disabled} onAnswer={onAnswer} />;
+  if (q.type === 'cloud') return <CloudAnswer disabled={disabled} onAnswer={onAnswer} />;
   return null;
+}
+
+/** Slider: drag (or type) a number on the question's scale, then submit. */
+function SliderAnswer({ scale, disabled, onAnswer }: { scale: SliderScale; disabled: boolean; onAnswer: (v: unknown) => void }) {
+  const snap = (v: number) => {
+    const steps = Math.round((v - scale.min) / scale.step);
+    return Math.min(scale.max, Math.max(scale.min, Number((scale.min + steps * scale.step).toFixed(6))));
+  };
+  const [value, setValue] = useState(() => snap((scale.min + scale.max) / 2));
+  // What is typed in the exact box: kept as text so it can be cleared and retyped.
+  const [draft, setDraft] = useState<string | null>(null);
+  const unit = scale.unit ? ` ${scale.unit}` : '';
+  return (
+    <form
+      className="quiz-slider"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onAnswer(value);
+      }}
+    >
+      <output className="quiz-slider__value" htmlFor="quiz-slider-range" aria-live="polite">
+        {fmtNumber(value)}
+        {unit}
+      </output>
+      <label htmlFor="quiz-slider-range" className="sr-only">
+        Your answer, from {fmtNumber(scale.min)} to {fmtNumber(scale.max)}
+      </label>
+      <input
+        id="quiz-slider-range"
+        type="range"
+        min={scale.min}
+        max={scale.max}
+        step={scale.step}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => {
+          setDraft(null);
+          setValue(snap(Number(e.target.value)));
+        }}
+      />
+      <div className="quiz-slider__ends" aria-hidden="true">
+        <span>
+          {fmtNumber(scale.min)}
+          {unit}
+        </span>
+        <span>
+          {fmtNumber(scale.max)}
+          {unit}
+        </span>
+      </div>
+      <div className="quiz-slider__row">
+        <label htmlFor="quiz-slider-exact" className="muted small">
+          Exact value
+        </label>
+        <input
+          id="quiz-slider-exact"
+          type="number"
+          min={scale.min}
+          max={scale.max}
+          step={scale.step}
+          value={draft ?? value}
+          disabled={disabled}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            const n = Number(e.target.value);
+            if (e.target.value.trim() !== '' && Number.isFinite(n)) setValue(snap(n));
+          }}
+          onBlur={() => setDraft(null)}
+        />
+        <button type="submit" className="btn btn--primary" disabled={disabled}>
+          Lock it in
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** Word cloud: a word or two, no right answer. */
+function CloudAnswer({ disabled, onAnswer }: { disabled: boolean; onAnswer: (v: unknown) => void }) {
+  const [text, setText] = useState('');
+  return (
+    <form
+      className="quiz-text"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (text.trim()) onAnswer(text.trim());
+      }}
+    >
+      <div className="field">
+        <label htmlFor="quiz-cloud-answer">A word or two</label>
+        <input
+          id="quiz-cloud-answer"
+          autoComplete="off"
+          maxLength={40}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          disabled={disabled}
+          autoFocus
+        />
+        <span className="field__hint">Shown in the word cloud for everyone · not scored</span>
+      </div>
+      <button type="submit" className="btn btn--primary btn--wide" disabled={disabled || !text.trim()}>
+        Send
+      </button>
+    </form>
+  );
+}
+
+/** A deterministic shuffle, so the biggest words don't all line up at the start. */
+function spread<T>(items: T[]): T[] {
+  const out: T[] = [];
+  items.forEach((item, i) => (i % 2 ? out.push(item) : out.unshift(item)));
+  return out;
+}
+
+/** The word cloud: more answers, bigger word. */
+export function WordCloud({ words, big = false }: { words: [string, number][]; big?: boolean }) {
+  if (!words.length) return <p className="muted quiz-cloud__empty">Waiting for the first words…</p>;
+  const top = words[0]![1];
+  return (
+    <ul className={`quiz-cloud${big ? ' quiz-cloud--big' : ''}`} aria-label="Word cloud: the most common answers">
+      {spread(words).map(([word, n], i) => (
+        <li
+          key={word}
+          className={`quiz-cloud__word quiz-cloud__word--${i % 5}`}
+          style={{ ['--s' as string]: String(0.95 + (2.3 * n) / top) }}
+          title={`${word}: ${n}`}
+        >
+          {word}
+          <span className="sr-only">: {n}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Where slider answers landed: ten bins, the right zone marked. */
+function SliderSpread({ q }: { q: QuestionView }) {
+  const bins = q.stats?.bins;
+  const scale = q.scale;
+  if (!bins || !scale) return null;
+  const top = Math.max(1, ...bins);
+  const width = (scale.max - scale.min) / bins.length;
+  const target = q.solution?.value;
+  const margin = q.solution?.margin ?? 0;
+  const unit = scale.unit ? ` ${scale.unit}` : '';
+  return (
+    <figure className="quiz-spread">
+      <ol className="quiz-spread__bins" aria-label="How many answered in each part of the scale">
+        {bins.map((n, i) => {
+          const lo = scale.min + i * width;
+          const hi = lo + width;
+          // Bins are [lo, hi); the last one also holds max.
+          const last = i === bins.length - 1;
+          const right = target !== undefined && lo <= target + margin && (hi > target - margin || (last && hi >= target - margin));
+          const label = `${fmtNumber(Number(lo.toFixed(4)))} to ${fmtNumber(Number(hi.toFixed(4)))}${unit}: ${n}`;
+          return (
+            <li key={i} className={right ? 'is-right' : undefined} title={label} aria-label={label}>
+              <span style={{ ['--h' as string]: `${(n / top) * 100}%` }} />
+            </li>
+          );
+        })}
+      </ol>
+      <figcaption className="muted small">
+        {fmtNumber(scale.min)}
+        {unit} → {fmtNumber(scale.max)}
+        {unit} · average {fmtNumber(Number((q.stats?.average ?? 0).toFixed(2)))} · median {fmtNumber(Number((q.stats?.median ?? 0).toFixed(2)))}
+      </figcaption>
+    </figure>
+  );
 }
 
 function MultiAnswer({ q, disabled, onAnswer }: { q: QuestionView; disabled: boolean; onAnswer: (v: unknown) => void }) {
@@ -256,7 +428,36 @@ export function Solution({ q, mine }: { q: QuestionView; mine?: unknown }) {
       </div>
     );
   }
+  if (q.type === 'cloud') {
+    return (
+      <div className="quiz-solution">
+        <WordCloud words={q.stats?.words ?? []} />
+        {typeof mine === 'string' && <p className="muted">You sent: {mine}</p>}
+      </div>
+    );
+  }
   if (!s) return null;
+  if (q.type === 'slider' && s.value !== undefined) {
+    const unit = q.scale?.unit ? ` ${q.scale.unit}` : '';
+    return (
+      <div className="quiz-solution">
+        <p className="quiz-slider__answer">
+          <strong>
+            {fmtNumber(s.value)}
+            {unit}
+          </strong>
+          {s.margin ? <span className="muted"> (±{fmtNumber(s.margin)} counts)</span> : null}
+        </p>
+        {typeof mine === 'number' && (
+          <p className="muted">
+            You said {fmtNumber(mine)}
+            {unit}
+          </p>
+        )}
+        <SliderSpread q={q} />
+      </div>
+    );
+  }
   if (q.type === 'text') {
     return (
       <div className="quiz-solution">

@@ -336,3 +336,86 @@ test('teams, QR code and a picture: live room in two teams', async ({ browser })
   await host.getByRole('button', { name: 'End quiz now' }).click();
   await expect(ann.locator('.team-board__row.is-me')).toContainText('Violet');
 });
+
+test('game options: friendly names, reactions, slider, word cloud, auto-play and the full report', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const hostContext = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+  await signInAdmin(hostContext);
+  const host = await hostContext.newPage();
+  host.on('dialog', (d) => void d.accept());
+  await host.goto('/quiz/host');
+  await host.getByRole('button', { name: 'Quick example' }).click();
+  await expect(host.getByText('Items (8)')).toBeVisible();
+
+  // A slider and a word cloud after the opening slide.
+  await host.locator('.editor__type', { hasText: 'Slider' }).click();
+  await host.getByLabel('Question', { exact: true }).fill('How many bits are in a byte?');
+  await host.getByLabel('Min', { exact: true }).fill('0');
+  await host.getByLabel('Max', { exact: true }).fill('16');
+  await host.getByLabel('Right number', { exact: true }).fill('8');
+  await host.locator('.editor__type', { hasText: 'Word cloud' }).click();
+  await host.getByLabel('Question', { exact: true }).fill('One word for HTTPS');
+  await host.getByRole('button', { name: 'Check', exact: true }).click();
+  await expect(host.getByText(/Ready: 10 items/)).toBeVisible();
+
+  await host.getByRole('button', { name: 'Host live' }).click();
+  const dialog = host.getByRole('dialog');
+  await dialog.getByText('Game options').click();
+  await dialog.getByLabel('Auto-play').selectOption('5');
+  await dialog.getByLabel(/Friendly names only/).check();
+  await dialog.getByRole('button', { name: 'Open the room' }).click();
+  await host.waitForURL(/\/quiz\/host\/\d{6}$/);
+  const pin = host.url().split('/').pop()!;
+  await expect(host.locator('.quiz-optchips')).toContainText('Friendly names only');
+
+  await host.getByText(/Present on another screen/).click();
+  const link = await host.locator('.share-row__url').first().innerText();
+  const presenter = await (await browser.newContext({ viewport: { width: 1440, height: 860 } })).newPage();
+  await presenter.goto(link);
+  await presenter.locator('.present__stage').click(); // allow sound
+
+  // Friendly names only: no free-text nickname, pick a generated one.
+  const ann = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  await ann.goto(`/quiz?pin=${pin}`);
+  await expect(ann.getByText('Joining “Networking basics”')).toBeVisible();
+  await expect(ann.getByLabel('Nickname')).toHaveCount(0);
+  const choice = ann.getByRole('radio').first();
+  const annName = (await choice.innerText()).trim();
+  await choice.click();
+  await ann.getByRole('button', { name: 'Join' }).click();
+  await expect(ann.getByText('You’re in!')).toBeVisible();
+  await expect(presenter.locator('.present__chips li')).toHaveText([annName]);
+
+  // A reaction floats up the presenter screen.
+  await ann.getByRole('button', { name: 'React 👏' }).click();
+  await expect(presenter.locator('.present__reactions span').first()).toHaveText('👏');
+
+  await host.getByRole('button', { name: /^Start/ }).click();
+  await host.getByRole('button', { name: /^Next: item 2/ }).click();
+  await expect(presenter.locator('.present__q')).toHaveText('How many bits are in a byte?');
+  const exact = ann.getByLabel('Exact value');
+  await exact.fill('8');
+  await ann.getByRole('button', { name: 'Lock it in' }).click();
+  await expect(ann.getByText('Correct!')).toBeVisible();
+  await expect(presenter.locator('.quiz-spread')).toBeVisible();
+
+  // Auto-play: after 5 s of results the word cloud opens with no click from the host.
+  await expect(host.getByText(/Auto-play: next item in/)).toBeVisible();
+  await expect(presenter.locator('.present__q')).toHaveText('One word for HTTPS', { timeout: 15_000 });
+  await ann.getByLabel('A word or two').fill('Secure!');
+  await ann.getByRole('button', { name: 'Send' }).click();
+  await expect(ann.getByText('You’re in the cloud')).toBeVisible();
+  await expect(presenter.locator('.quiz-cloud')).toContainText('secure');
+
+  await host.getByRole('button', { name: 'End quiz now' }).click();
+  await expect(presenter.locator('.confetti')).toHaveCount(1);
+  const [report] = await Promise.all([
+    host.waitForEvent('download'),
+    host.getByRole('button', { name: 'Full report: every answer (CSV)' }).click(),
+  ]);
+  expect(report.suggestedFilename()).toBe(`quiz-${pin}-full-report.csv`);
+  const csv = await fs.readFile((await report.path())!, 'utf8');
+  expect(csv.split('\r\n')[0]).toContain('"Player","Team","Rank","Item","Type","Question","Answer","Result"');
+  expect(csv).toContain(`"${annName}","","1","2","slider","How many bits are in a byte?","8","right"`);
+  expect(csv).toContain('"cloud","One word for HTTPS","Secure!","not scored"');
+});
