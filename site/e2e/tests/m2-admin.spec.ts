@@ -9,7 +9,8 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+import { test } from './support/serial';
 import { openQuizModule, settle } from './support/hub';
 import { ADMIN, ADMIN_TZ, GOOGLE, saveDownload, signInAdmin, signInAs, tick, verifyBackup, wallClock } from './support/m2';
 import {

@@ -5,7 +5,8 @@
  *   S16  quota at the budget: "Sync paused", no "storage full" toast, the reset-time notice,
  *        and the outbox drains once the quota is back (POST /api/test/reset)
  */
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { test } from './support/serial';
 import { openQuizModule, settle, watchPage } from './support/hub';
 import {
   PILL,

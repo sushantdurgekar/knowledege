@@ -1,39 +1,21 @@
-"""Open quizzes: every hub's first topics as a quiz anyone can play at any time.
+"""Open quizzes: every hub's topics as quizzes anyone can play at any time.
 
 No room, no PIN, no host and no account: the browser fetches the questions, runs the game and
 keeps the result (in the browser; signed-in players also sync it to their account through the
 review-deck history). The questions are the hubs' own practice questions, which the public hub
 pages already carry with their answers, so serving the answers to the browser reveals nothing new.
 
-An admin can still host the same quiz as a live room or a self-paced challenge from the page.
+Level 1 is a hub's first three topics that have questions; level 2 the next three, and so on.
+An admin can still host any of them as a live room or a self-paced challenge from the page.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-TOPICS = 3  # the first three topics that have practice questions
+TOPICS = 3  # topics per level
 PER_TOPIC = 10  # at most this many questions from one topic
 KEYS = 6  # key points shown per topic (and used as slides when hosted)
-
-
-def _topics(hub: dict[str, Any]) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    for m in hub.get("modules") or []:
-        quiz = [q for q in m.get("quiz") or [] if _valid(q)]
-        if not quiz:
-            continue
-        out.append(
-            {
-                "id": m.get("id"),
-                "title": m.get("title"),
-                "keys": [str(k) for k in (m.get("keys") or [])[:KEYS]],
-                "quiz": quiz[:PER_TOPIC],
-            }
-        )
-        if len(out) == TOPICS:
-            break
-    return out
 
 
 def _valid(q: Any) -> bool:
@@ -50,12 +32,33 @@ def _valid(q: Any) -> bool:
     )
 
 
+def _topics(hub: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every topic that has valid practice questions, in hub order."""
+    out: list[dict[str, Any]] = []
+    for m in hub.get("modules") or []:
+        quiz = [q for q in m.get("quiz") or [] if _valid(q)]
+        if quiz:
+            out.append(
+                {
+                    "id": m.get("id"),
+                    "title": m.get("title"),
+                    "keys": [str(k) for k in (m.get("keys") or [])[:KEYS]],
+                    "quiz": quiz[:PER_TOPIC],
+                }
+            )
+    return out
+
+
+def _levels(topics: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    return [topics[i : i + TOPICS] for i in range(0, len(topics), TOPICS)]
+
+
 def open_index(bank: dict[str, Any]) -> list[dict[str, Any]]:
-    """One entry per hub that has practice questions."""
+    """One entry per hub that has practice questions (`topics`/`questions` describe level 1)."""
     out = []
     for hub in bank.get("hubs") or []:
-        topics = _topics(hub)
-        if not topics:
+        levels = _levels(_topics(hub))
+        if not levels:
             continue
         out.append(
             {
@@ -63,24 +66,28 @@ def open_index(bank: dict[str, Any]) -> list[dict[str, Any]]:
                 "slug": hub.get("slug"),
                 "title": hub.get("title"),
                 "code": hub.get("code"),
-                "topics": [t["title"] for t in topics],
-                "questions": sum(len(t["quiz"]) for t in topics),
+                "topics": [t["title"] for t in levels[0]],
+                "questions": sum(len(t["quiz"]) for t in levels[0]),
+                "levels": len(levels),
             }
         )
     return out
 
 
-def open_quiz(bank: dict[str, Any], hub_id: str) -> dict[str, Any] | None:
+def open_quiz(bank: dict[str, Any], hub_id: str, level: int = 1) -> dict[str, Any] | None:
     hub = next((h for h in bank.get("hubs") or [] if h.get("id") == hub_id), None)
     if hub is None:
         return None
-    topics = _topics(hub)
-    if not topics:
+    levels = _levels(_topics(hub))
+    if not 1 <= level <= len(levels):
         return None
     return {
         "id": hub.get("id"),
         "slug": hub.get("slug"),
         "title": hub.get("title"),
         "code": hub.get("code"),
-        "topics": topics,
+        "level": level,
+        "levels": len(levels),
+        "firstTopic": (level - 1) * TOPICS + 1,
+        "topics": levels[level - 1],
     }

@@ -5,7 +5,8 @@
  *   S5  anonymous progress merges at the first sign-in, through the hub on reload and
  *       through the sign-in page's reconcileUp
  */
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from './support/serial';
 import { hubPath, progressKey } from './support/catalog';
 import { openQuizModule, readItem, settle, watchPage } from './support/hub';
 import {

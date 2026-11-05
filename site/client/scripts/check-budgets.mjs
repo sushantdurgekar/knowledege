@@ -4,6 +4,8 @@
 //   CSS          <= 10 KB gzipped   (every stylesheet index.html links)
 //   Firebase JS  <= 80 KB gzipped   (assets/firebase-*.js: the SDK chunk + the shell's wrapper)
 //   admin JS     <= 40 KB gzipped   (assets/Admin-*.js plus every lazy chunk it imports statically)
+//   player JS    <= 30 KB gzipped   (what a phone needs to join and play a live quiz: the /quiz shell,
+//                                    the join and play pages, and every chunk they import statically)
 // and that the main JS holds no Firebase code (the SDK must stay a lazy chunk).
 // Other lazy chunks are listed for information only. Sizes use gzip level 9, like the build's .gz files.
 //
@@ -14,7 +16,9 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 const KB = 1024;
-const BUDGETS = { js: 90 * KB, css: 10 * KB, firebase: 80 * KB, admin: 40 * KB };
+const BUDGETS = { js: 90 * KB, css: 10 * KB, firebase: 80 * KB, admin: 40 * KB, player: 30 * KB };
+// The live-quiz player path (pages/quiz/QuizApp.tsx lazy-loads each page).
+const PLAYER_CHUNKS = [/^assets\/QuizApp-[\w-]+\.js$/, /^assets\/JoinPage-[\w-]+\.js$/, /^assets\/PlayRoom-[\w-]+\.js$/];
 // Lazy Firebase chunks: `firebase` (vite.config.ts manualChunks) and the `firebase-auth` wrapper.
 const FIREBASE_CHUNK = /^assets\/firebase-.*\.js$/;
 // The lazy /admin page (App.tsx: import('./pages/admin/Admin')).
@@ -70,25 +74,35 @@ const lazyAll = await Promise.all(
 const firebase = lazyAll.filter((file) => FIREBASE_CHUNK.test(file.rel));
 const lazy = lazyAll.filter((file) => !FIREBASE_CHUNK.test(file.rel));
 
-// The admin chunk and the lazy chunks it pulls in statically (shared helpers), never the main JS.
+// Lazy chunks matching `patterns`, plus every lazy chunk they pull in statically (shared helpers),
+// never the main JS: a depth-first walk over the static-import graph, each chunk counted once.
 const byRel = new Map(lazyAll.map((file) => [file.rel, file]));
-const admin = [];
-const pending = lazyAll.filter((file) => ADMIN_CHUNK.test(file.rel)).map((file) => file.rel);
-const seen = new Set(pending);
-while (pending.length > 0) {
-  const file = byRel.get(pending.pop());
-  if (!file) continue;
-  admin.push(file);
-  for (const match of file.text.matchAll(STATIC_IMPORT)) {
-    const rel = `assets/${match[1]}`;
-    if (!seen.has(rel) && byRel.has(rel)) {
-      seen.add(rel);
-      pending.push(rel);
+function closure(patterns) {
+  const out = [];
+  const pending = lazyAll.filter((file) => patterns.some((p) => p.test(file.rel))).map((file) => file.rel);
+  const seen = new Set(pending);
+  while (pending.length > 0) {
+    const file = byRel.get(pending.pop());
+    if (!file) continue;
+    out.push(file);
+    for (const match of file.text.matchAll(STATIC_IMPORT)) {
+      const rel = `assets/${match[1]}`;
+      if (!seen.has(rel) && byRel.has(rel)) {
+        seen.add(rel);
+        pending.push(rel);
+      }
     }
   }
+  return out;
 }
+const admin = closure([ADMIN_CHUNK]);
 if (admin.length === 0) {
   console.error('check-budgets: no assets/Admin-*.js chunk; is /admin still a lazy route?');
+  process.exit(1);
+}
+const player = closure(PLAYER_CHUNKS);
+if (!PLAYER_CHUNKS.every((p) => player.some((file) => p.test(file.rel)))) {
+  console.error('check-budgets: the QuizApp, JoinPage and PlayRoom chunks must each be lazy (pages/quiz/QuizApp.tsx).');
   process.exit(1);
 }
 
@@ -98,6 +112,7 @@ const rows = [
   ['CSS', css, BUDGETS.css],
   ['Firebase', firebase, BUDGETS.firebase],
   ['admin JS', admin, BUDGETS.admin],
+  ['player JS', player, BUDGETS.player],
 ];
 
 let failed = false;

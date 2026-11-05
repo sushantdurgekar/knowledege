@@ -84,6 +84,28 @@ estimate (it reads every progress document once, so it is refused when today's r
 | AI drafts | 3 a minute per admin, 1–15 questions each | `app/quiz/routes.py` |
 | Sync part size / document size | 128 KiB / 384 KiB gzipped | `MAX_PART_GZ`, `MAX_DOC_GZ` |
 
+## The quiz history a player syncs
+
+Signed-in players' quiz history and review deck sync as one part of the virtual `live-quiz` hub,
+which the server caps at `MAX_PART_GZ` (128 KiB gzipped). Measured on 2026-11-05 with the hubs'
+real questions, a full 500-card deck is about 70 KiB gzipped. Quizzes built in the studio can hold
+much longer text, so the client also guards the limit:
+
+- card text is capped when a card is created (question and explanation 600 characters, answer
+  300, each option 160);
+- before a push, the copy sent is kept under `SYNC_BUDGET` (360,000 characters of JSON). If it is
+  larger, the most mature cards (longest review interval, then least recently changed) are left
+  out of the synced copy first. The browser keeps every card;
+- a push the server still refuses as `too_large` is retried once per halving, down to 40,000
+  characters.
+
+## What a player downloads
+
+The `/quiz` app is split into one lazy chunk per page, so a phone joining a live quiz loads the
+join and play screens only: **18.7 KB** of JavaScript gzipped (it was 41.1 KB as one chunk).
+`client/scripts/check-budgets.mjs` keeps this "player JS" under 30 KB on every build, next to the
+main, CSS, Firebase and admin budgets.
+
 ## Why only one instance
 
 The server keeps live quiz rooms and the maintenance, backup and restore scheduler in its process.

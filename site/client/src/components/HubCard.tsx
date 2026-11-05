@@ -1,4 +1,5 @@
 import { useId, type CSSProperties } from 'react';
+import { Link } from 'react-router';
 import {
   downloadHref,
   formatBytes,
@@ -13,13 +14,15 @@ interface HubCardProps {
   hub: HubEntry;
   /** Progress saved in this browser, or null when the hub has none. */
   progress: LocalProgress | null;
+  /** The hub has an open quiz (its first topics, playable without a room). */
+  quiz?: boolean;
 }
 
 /**
  * One hub in the catalog. "Open" is a plain link on purpose: hubs are full pages served by the
  * backend (with the bridge injected), not routes of this app, so they need a real navigation.
  */
-export function HubCard({ hub, progress }: HubCardProps) {
+export function HubCard({ hub, progress, quiz = false }: HubCardProps) {
   const titleId = useId();
   const badge = levelBadge(hub) ?? (hub.kind === 'cert' ? 'Certification' : null);
   // `accent` is already sanitised to #rgb/#rrggbb by parseCatalog; null means "use the theme accent".
@@ -64,6 +67,11 @@ export function HubCard({ hub, progress }: HubCardProps) {
         <a className="btn" href={downloadHref(hub)} download="" aria-label={`Download ${hub.title} (HTML file)`}>
           Download
         </a>
+        {quiz && (
+          <Link className="btn" to={`/quiz/open/${encodeURIComponent(hub.id)}`} aria-label={`Quiz on ${hub.title}`}>
+            Quiz
+          </Link>
+        )}
       </div>
     </article>
   );

@@ -3,7 +3,8 @@
  * drop answers, end early, flashcards, and a self-paced room. Players need no account.
  */
 import fs from 'node:fs/promises';
-import { expect, test, type Browser, type Download, type Page } from '@playwright/test';
+import { expect, type Browser, type Download, type Page } from '@playwright/test';
+import { test } from './support/serial';
 import { signInAdmin } from './support/m2';
 
 async function join(browser: Browser, pin: string, name: string): Promise<Page> {
@@ -455,6 +456,21 @@ test('open quizzes: anyone plays a hub’s first three topics solo; an admin can
   await player.goto('/quiz/review');
   await expect(player.getByRole('heading', { name: 'Review deck' })).toBeVisible();
   await expect(player.locator('.review__history')).toContainText('first 3 topics');
+
+  // Later levels: the hub's next three topics, and answers in a new order every game.
+  await player.goto(`/quiz/open/${quizId}`);
+  const levels = player.getByRole('navigation', { name: 'Topic levels' });
+  if (await levels.count()) {
+    await levels.getByRole('link', { name: 'Topics 4–6' }).click();
+    await expect(player).toHaveURL(new RegExp(`/quiz/open/${quizId}\\?level=2$`));
+    await expect(player.locator('.open-bar__title')).toContainText(/topics? 4/);
+  }
+
+  // The catalog links each hub that has an open quiz.
+  await player.goto('/');
+  await player.locator('.hub-card').getByRole('link', { name: /^Quiz on / }).first().click();
+  await player.waitForURL(/\/quiz\/open\/[^/?]+$/);
+  await expect(player.getByRole('button', { name: 'Play' })).toBeVisible();
 
   // An admin hosts the same questions as a live room.
   const hostContext = await browser.newContext({ viewport: { width: 1366, height: 900 } });

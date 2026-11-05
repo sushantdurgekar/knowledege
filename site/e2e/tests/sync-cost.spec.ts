@@ -4,7 +4,8 @@
  *   - closing the tab right after an answer still delivers it (keepalive on pagehide)
  *   - a large state (> 60 KB) goes out gzipped on unload
  */
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from './support/serial';
 import { progressKey } from './support/catalog';
 import { openQuizModule, settle, watchPage } from './support/hub';
 import {

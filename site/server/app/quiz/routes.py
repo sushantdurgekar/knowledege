@@ -31,9 +31,9 @@ Players (no account needed; X-Quiz-Token from join):
   GET  /api/quiz/rooms/{pin}/review            every question with its solution and my result
   GET  /api/quiz/rooms/{pin}/cards             flashcards (study rooms, or once finished)
 
-Open quizzes (anyone, no room; cached): each hub's first three topics as a quiz played in the browser
+Open quizzes (anyone, no room; cached): each hub's topics, three per level, played in the browser
   GET  /api/quiz/open                          the list
-  GET  /api/quiz/open/{hubId}                  topics, key points and questions with answers
+  GET  /api/quiz/open/{hubId}?level=N          level N (topics 3N-2..3N): key points, questions, answers
 
 Presenter (X-Quiz-Present: the room's presentKey, handed out by the host) and anyone:
   GET  /api/quiz/rooms/{pin}/present?since=N   long-poll, the projected screen (no early answers)
@@ -517,8 +517,8 @@ async def open_list(request: Request) -> JSONResponse:
 
 
 @router.get("/open/{hub_id}")
-async def open_get(request: Request, hub_id: str) -> JSONResponse:
-    quiz = open_quiz(load_bank(get_runtime(request).settings.hubs_dir), hub_id)
+async def open_get(request: Request, hub_id: str, level: int = 1) -> JSONResponse:
+    quiz = open_quiz(load_bank(get_runtime(request).settings.hubs_dir), hub_id, level)
     if quiz is None:
         raise ApiError(404, "not_found", "No open quiz for that hub")
     return JSONResponse(quiz, headers=OPEN_CACHE)

@@ -977,8 +977,14 @@ def test_open_quizzes_are_public_and_use_the_first_three_topics(admin: TestClien
             "code": "H-1",
             "topics": ["Topic 1", "Topic 3", "Topic 5"],
             "questions": 10 + 2 + 3,  # at most 10 from one topic
+            "levels": 2,  # topics with questions: 1, 3, 5 | 6
         }
     ]
+    level2 = admin.get("/api/quiz/open/h1?level=2").json()
+    assert (level2["level"], level2["levels"], level2["firstTopic"]) == (2, 2, 4)
+    assert [t["title"] for t in level2["topics"]] == ["Topic 6"]
+    assert admin.get("/api/quiz/open/h1?level=3").status_code == 404
+    assert admin.get("/api/quiz/open/h1?level=0").status_code == 404
     quiz = admin.get("/api/quiz/open/h1").json()
     assert [t["title"] for t in quiz["topics"]] == ["Topic 1", "Topic 3", "Topic 5"]
     assert len(quiz["topics"][0]["keys"]) == 6

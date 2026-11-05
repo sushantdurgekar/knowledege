@@ -2,7 +2,8 @@
  * M1 client flows in fake-auth mode (build-contracts.md §14): the "Test sign-in" form,
  * `next` handling, the header account menu, the unverified-email detour and /signout.
  */
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from './support/serial';
 import { hubPath } from './support/catalog';
 import { watchPage } from './support/hub';
 import {

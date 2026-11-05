@@ -8,7 +8,9 @@
  *               tests/m2-*.spec.ts: admin, maintenance, scheduler, backups, account export and
  *               delete; tests/m3-*.spec.ts: the admin restore wizard). They reset the server's
  *               store and set faults, quota, clock offsets and maintenance that the whole server
- *               shares, so they run one test at a time (workers: 1), alongside M0. The server
+ *               shares, so they run one test at a time (workers: 1), alongside M0. Their `test`
+ *               comes from tests/support/serial.ts, whose lock enforces that: Playwright alone
+ *               can briefly start two sync files while a worker switches projects. The server
  *               must run with APP_ENV=test AUTH_MODE=fake STORE=memory (or postgres, through
  *               scripts/dev-e2e-pg.sh) ADMIN_EMAILS=admin@studyhubs.test.
  *

@@ -1,5 +1,6 @@
-import { useId, useMemo, type CSSProperties } from 'react';
+import { useEffect, useId, useMemo, useState, type CSSProperties } from 'react';
 import { Link, useSearchParams } from 'react-router';
+import { api } from '../lib/api';
 import { FilterBar } from '../components/FilterBar';
 import { HubCard } from '../components/HubCard';
 import { useCatalog } from '../hooks/useCatalog';
@@ -19,6 +20,24 @@ import {
 import { readLocalProgress, type LocalProgress } from '../lib/local-progress';
 
 type ProgressMap = ReadonlyMap<string, LocalProgress | null>;
+
+/**
+ * Hub ids that have an open quiz (`/api/quiz/open`, cached by the server for 5 minutes). Loaded
+ * after the catalog, never blocking it; on any failure the cards simply show no Quiz button.
+ */
+function useOpenQuizIds(): ReadonlySet<string> {
+  const [ids, setIds] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    let live = true;
+    api<{ quizzes?: { id: string }[] }>('/api/quiz/open')
+      .then((r) => live && setIds(new Set((r.quizzes ?? []).map((q) => q.id))))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  return ids;
+}
 
 /** `/`: every published hub, grouped by domain and subject, with search and level chips. */
 export function Catalog() {
@@ -86,6 +105,7 @@ function useCatalogParams() {
 function CatalogResults({ hubs }: { hubs: HubEntry[] }) {
   const { query, filter, update } = useCatalogParams();
   const storageVersion = useStorageVersion();
+  const quizIds = useOpenQuizIds();
 
   const counts = useMemo(() => countByFilter(hubs, query), [hubs, query]);
   const visible = useMemo(() => filterHubs(hubs, filter, query), [hubs, filter, query]);
@@ -128,13 +148,13 @@ function CatalogResults({ hubs }: { hubs: HubEntry[] }) {
           </button>
         </div>
       ) : (
-        groups.map((domain) => <DomainSection key={domain.label} domain={domain} progress={progress} />)
+        groups.map((domain) => <DomainSection key={domain.label} domain={domain} progress={progress} quizIds={quizIds} />)
       )}
     </>
   );
 }
 
-function DomainSection({ domain, progress }: { domain: DomainGroup; progress: ProgressMap }) {
+function DomainSection({ domain, progress, quizIds }: { domain: DomainGroup; progress: ProgressMap; quizIds: ReadonlySet<string> }) {
   const headingId = useId();
   return (
     <section className="domain" aria-labelledby={headingId}>
@@ -143,14 +163,14 @@ function DomainSection({ domain, progress }: { domain: DomainGroup; progress: Pr
       </h2>
       <div className="subjects">
         {domain.subjects.map((subject) => (
-          <SubjectSection key={subject.label} subject={subject} progress={progress} />
+          <SubjectSection key={subject.label} subject={subject} progress={progress} quizIds={quizIds} />
         ))}
       </div>
     </section>
   );
 }
 
-function SubjectSection({ subject, progress }: { subject: SubjectGroup; progress: ProgressMap }) {
+function SubjectSection({ subject, progress, quizIds }: { subject: SubjectGroup; progress: ProgressMap; quizIds: ReadonlySet<string> }) {
   const headingId = useId();
   // A certification is usually its own subject ("AI-103" > "AI-103 Study Hub"). The card already
   // shows that code, so the heading stays for screen readers but is hidden visually.
@@ -165,7 +185,7 @@ function SubjectSection({ subject, progress }: { subject: SubjectGroup; progress
       <ul className="hub-grid">
         {subject.hubs.map((hub) => (
           <li key={hub.slug}>
-            <HubCard hub={hub} progress={progress.get(hub.slug) ?? null} />
+            <HubCard hub={hub} progress={progress.get(hub.slug) ?? null} quiz={quizIds.has(hub.id)} />
           </li>
         ))}
       </ul>

@@ -49,6 +49,9 @@ const KEY = 'studyhubs.quiz.state';
 const HUB = 'live-quiz';
 const DAY = 86_400_000;
 const MAX_CARDS = 500;
+const CARD_TEXT = 600; // characters kept of a card's question and explanation
+const CARD_ANSWER = 300;
+const CARD_OPTION = 160;
 const MAX_HISTORY = 50;
 
 export const emptyState = (): QuizState => ({ deck: {}, history: [] });
@@ -143,14 +146,16 @@ export function recordQuiz(
       if (wrong) deck[id] = { ...existing, due: now, updated: now };
       continue;
     }
+    // Card text is capped so the synced deck stays small (see SYNC_BUDGET); the id still comes
+    // from the full question, so the same question is always the same card.
     deck[id] = {
       id,
       quiz: entry.title,
       type: c.type,
-      front: c.front,
-      back: c.back,
-      options: c.options,
-      explain: c.explain,
+      front: c.front.slice(0, CARD_TEXT),
+      back: c.back.slice(0, CARD_ANSWER),
+      options: c.options?.map((o) => o.slice(0, CARD_OPTION)),
+      explain: c.explain?.slice(0, CARD_TEXT),
       ef: 2.5,
       interval: wrong ? 0 : 1,
       reps: wrong ? 0 : 1,
@@ -208,9 +213,50 @@ export function commit(state: QuizState, signedIn: boolean): void {
   }, 2000);
 }
 
-async function push(state: QuizState): Promise<void> {
+/**
+ * The server stores one synced part only up to MAX_PART_GZ (128 KiB gzipped) and rejects a larger
+ * one as `too_large`. Card text compresses about 3-4:1, so the JSON sent is kept under this many
+ * characters. Only the synced copy is cut down: this browser keeps every card.
+ */
+export const SYNC_BUDGET = 360_000;
+const MIN_BUDGET = 40_000;
+
+/**
+ * The copy of the state to sync, at most `budget` characters of JSON. When the deck is too large,
+ * the most mature cards go first (longest interval, then least recently changed): they are the
+ * ones a learner needs least soon. One sort, then sizes are subtracted card by card instead of
+ * serialising the whole state again after each removal: O(n log n) for n cards.
+ */
+export function forSync(state: QuizState, budget = SYNC_BUDGET): QuizState {
+  let size = JSON.stringify(state).length;
+  if (size <= budget) return state;
+  const deck = { ...state.deck };
+  const matureFirst = Object.values(deck).sort((a, b) => b.interval - a.interval || a.updated - b.updated);
+  for (const card of matureFirst) {
+    if (size <= budget) break;
+    size -= JSON.stringify(card).length + JSON.stringify(card.id).length + 2; // "id":{...},
+    delete deck[card.id];
+  }
+  const out: QuizState = { ...state, deck };
+  // Still too large with no cards left (an unusually long history): keep the newest games only.
+  if (size > budget) out.history = state.history.slice(0, 10);
+  return out;
+}
+
+interface SyncAnswer {
+  results?: Record<string, Record<string, { status: string; code?: string }>>;
+}
+
+async function push(state: QuizState, budget = SYNC_BUDGET): Promise<void> {
   try {
-    await api('/api/sync', { json: { hubs: { [HUB]: { main: { hub: HUB, upd: Date.now(), S: state } } } } });
+    const answer = await api<SyncAnswer>('/api/sync', {
+      json: { hubs: { [HUB]: { main: { hub: HUB, upd: Date.now(), S: forSync(state, budget) } } } },
+    });
+    const main = answer?.results?.[HUB]?.main;
+    // Compressed size depends on the text, so a copy can still come back too large: try smaller.
+    if (main?.status === 'rejected' && main.code === 'too_large' && budget / 2 >= MIN_BUDGET) {
+      await push(state, Math.floor(budget / 2));
+    }
   } catch {
     /* offline or paused: the next change retries; the browser copy is safe */
   }
