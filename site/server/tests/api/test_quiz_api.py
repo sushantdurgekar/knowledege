@@ -923,4 +923,4 @@ def test_new_options_survive_a_restart() -> None:
     again = fresh.get(room.pin)
     assert again.options_state() == room.options_state()
     assert [q.options for q in again.quiz.questions] == [q.options for q in room.quiz.questions]
-    assert 11 < again.auto_at() - 900.0 <= 12
+    assert 11 < again.auto_at() - 900.0 <= 12.001  # saved times are rounded to 1 ms (persist._to_wall)
