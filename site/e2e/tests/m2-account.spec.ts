@@ -6,7 +6,8 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+import { test } from './support/serial';
 import { BASE_URL } from './support/env';
 import { openQuizModule } from './support/hub';
 import { saveDownload, storageKeys } from './support/m2';

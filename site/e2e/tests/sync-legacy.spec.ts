@@ -2,7 +2,8 @@
  * M1 S9: the legacy AI-901 hub syncs through its seed script and the wrapped setItem
  * (build-contracts.md §10 seed, §13 "Legacy"), across two browser contexts (two devices).
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+import { test } from './support/serial';
 import { openHub, readJson, watchPage } from './support/hub';
 import {
   LEGACY_HUB,

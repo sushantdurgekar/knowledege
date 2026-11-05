@@ -3,7 +3,8 @@
  * drop answers, end early, flashcards, and a self-paced room. Players need no account.
  */
 import fs from 'node:fs/promises';
-import { expect, test, type Browser, type Download, type Page } from '@playwright/test';
+import { expect, type Browser, type Download, type Page } from '@playwright/test';
+import { test } from './support/serial';
 import { signInAdmin } from './support/m2';
 
 async function join(browser: Browser, pin: string, name: string): Promise<Page> {

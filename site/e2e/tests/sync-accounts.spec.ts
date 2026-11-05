@@ -5,7 +5,8 @@
  *   S13  another account signing in on the same browser gets the account-switch dialog, and
  *        no write ever lands under the wrong uid (checked through /api/test/store)
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+import { test } from './support/serial';
 import { hubPath, progressKey } from './support/catalog';
 import { openQuizModule, readItem, readJson, settle, watchPage, type HubRecord } from './support/hub';
 import {

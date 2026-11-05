@@ -10,7 +10,8 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from './support/serial';
 import { progressKey } from './support/catalog';
 import { E2E_STORE } from './support/env';
 import { openQuizModule } from './support/hub';

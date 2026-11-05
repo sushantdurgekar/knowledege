@@ -3,7 +3,8 @@
  * Each fault on POST /api/sync must give the right pill, toast and notice, lose no data
  * (the browser keeps the progress, the server keeps its last good copy) and recover.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+import { test } from './support/serial';
 import { openQuizModule, settle, watchPage } from './support/hub';
 import {
   PILL,
