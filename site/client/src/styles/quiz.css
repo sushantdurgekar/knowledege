@@ -727,3 +727,22 @@
   .quiz-cloud__word { animation: none; }
 }
 @keyframes fade-out { to { opacity: 0; } }
+
+/* -- open quizzes (no room) ------------------------------------------------------------------ */
+.open-list__search { max-width: 420px; }
+.open-list__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 14px; margin: 14px 0 0; padding: 0; list-style: none; }
+.open-card { display: flex; flex-direction: column; gap: 6px; padding: 16px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow-1); }
+.open-card .btn { margin-top: auto; align-self: flex-start; }
+.open-card__code { margin: 0; color: var(--accent-strong); font: 800 0.8rem var(--f-mono); letter-spacing: 0.04em; }
+.open-card__title { margin: 0; font-size: 1.1rem; }
+.open-card__topics { margin: 4px 0; padding-left: 1.2em; color: var(--muted); font-size: 0.9rem; }
+.open-card__best { margin: 0; font-size: 0.9rem; }
+.open-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 14px; padding: 10px 14px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow-1); }
+.open-bar__title { margin-right: auto; font-weight: 800; }
+.open-bar__score { font: 700 0.95rem var(--f-mono); color: var(--accent-strong); }
+.open-play__topics { display: grid; gap: 8px; padding-left: 1.2em; }
+.open-play__keys { margin: 6px 0 0; color: var(--muted); }
+.open-host { margin-top: 22px; padding: 16px; border: 1px dashed var(--line); border-radius: 18px; }
+.open-host h2 { margin: 0 0 4px; font-size: 1.05rem; }
+.btn--big { min-height: 52px; padding-inline: 34px; font-size: 1.15rem; }
+.open-cta { margin-top: 18px; }

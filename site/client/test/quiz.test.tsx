@@ -7,6 +7,7 @@ import { blankDoc, blankItem, fromServer, retype, toServer, toText, type QuizDoc
 import { Sortable } from '../src/pages/quiz/Sortable';
 import { Answering, WordCloud } from '../src/pages/quiz/Answering';
 import { toCsv, type QuestionView } from '../src/lib/quiz';
+import { openAsServerQuiz, openRecord, openTitle, playItems, recordOpenGame, scoreAnswer } from '../src/lib/open-quiz';
 import { bodyText, ME_SIGNED_IN, mockServer, setHint, USER } from './api-mock';
 import { renderApp } from './render';
 import type { DeckCard, HistoryEntry } from '../src/lib/quiz-history';
@@ -88,7 +89,7 @@ describe('Sortable', () => {
 
 import { checkLocally, type ReviewItem } from '../src/lib/quiz';
 import { fromBank } from '../src/lib/quiz-doc';
-import { cardId, dueCards, emptyState, localDay, markStudied, merge, recordQuiz, schedule } from '../src/lib/quiz-history';
+import { cardId, dueCards, emptyState, loadState, localDay, markStudied, merge, recordQuiz, schedule } from '../src/lib/quiz-history';
 
 describe('review deck (SM-2) and history', () => {
   const cards = [
@@ -424,5 +425,74 @@ describe('Kahoot-style additions', () => {
     await user.click(screen.getByRole('button', { name: 'Join' }));
     await waitFor(() => expect(server.to('POST /api/quiz/rooms/123456/join')).toHaveLength(1));
     expect(JSON.parse(await bodyText(server.to('POST /api/quiz/rooms/123456/join')[0]!))).toEqual({ name: 'Brave Koala' });
+  });
+});
+
+describe('open quizzes (no room)', () => {
+  const OPEN = {
+    id: 'h1',
+    slug: 'hub-one',
+    title: 'Hub One',
+    code: 'H-1',
+    topics: [
+      { id: 't1', title: 'Topic 1', keys: ['k1'], quiz: [{ q: 'Port for HTTPS?', o: ['80', '443'], a: 1, e: 'TLS on 443.' }] },
+      { id: 't2', title: 'Topic 2', keys: ['k2'], quiz: [{ q: 'TCP is L4?', o: ['Yes', 'No'], a: 0, e: '' }] },
+    ],
+  };
+
+  it('scores like a live room: speed, then the streak bonus', () => {
+    expect(scoreAnswer(true, 0, 1)).toEqual({ points: 1000, bonus: 0 });
+    expect(scoreAnswer(true, 15_000, 1)).toEqual({ points: 750, bonus: 0 });
+    expect(scoreAnswer(true, 60_000, 3)).toEqual({ points: 700, bonus: 200 });
+    expect(scoreAnswer(false, 0, 0)).toEqual({ points: 0, bonus: 0 });
+  });
+
+  it('records a game in the browser history and review deck, and finds the best score', () => {
+    const items = playItems(OPEN);
+    expect(items.map((i) => i.topic)).toEqual(['Topic 1', 'Topic 2']);
+    let state = recordOpenGame(emptyState(), OPEN, items, [
+      { index: 0, pick: 1, right: true, points: 900 },
+      { index: 1, pick: null, right: false, points: 0 },
+    ], 1000);
+    state = recordOpenGame(state, OPEN, items, [
+      { index: 0, pick: 1, right: true, points: 950 },
+      { index: 1, pick: 0, right: true, points: 800 },
+    ], 2000);
+    const { best, last, plays } = openRecord(state, OPEN);
+    expect(plays).toBe(2);
+    expect(best!.score).toBe(1750);
+    expect(last!.at).toBe(2000);
+    expect(Object.values(state.deck).map((c) => c.front).sort()).toEqual(['Port for HTTPS?', 'TCP is L4?']);
+    expect(openTitle(OPEN)).toBe('H-1 · first 3 topics');
+  });
+
+  it('turns into a hostable quiz, with key points as slides when asked', () => {
+    const plain = openAsServerQuiz(OPEN, false) as { title: string; time: number; items: { type: string }[] };
+    expect(plain.title).toBe('H-1 · first 3 topics');
+    expect(plain.time).toBe(30);
+    expect(plain.items.map((i) => i.type)).toEqual(['single', 'single']);
+    const slides = openAsServerQuiz(OPEN, true) as { items: { type: string }[] };
+    expect(slides.items.map((i) => i.type)).toEqual(['slide', 'single', 'slide', 'single']);
+    expect(parentOf('/quiz/open/h1')).toBe('/quiz/open');
+  });
+
+  it('plays solo in the browser and keeps the result in this browser', async () => {
+    mockServer({ 'GET /api/quiz/open/h1': OPEN });
+    const { user } = renderApp('/quiz/open/h1');
+    await user.click(await screen.findByRole('button', { name: 'Play' }));
+    await user.click(screen.getByRole('button', { name: /443/ }));
+    expect(screen.getByText('Correct!')).toBeInTheDocument();
+    expect(screen.getByText('TLS on 443.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Next question' }));
+    await user.click(screen.getByRole('button', { name: /No/ }));
+    expect(screen.getByText('Not this time')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'See my score' }));
+    expect(await screen.findByText(/Saved in this browser/)).toBeInTheDocument();
+    expect(screen.getByText('1 of 2 right', { exact: false })).toBeInTheDocument();
+    const saved = loadState();
+    expect(saved.history[0]).toMatchObject({ title: 'H-1 · first 3 topics', correct: 1, total: 2, players: 1 });
+    await user.click(screen.getByRole('button', { name: 'Practise the 1 I missed' }));
+    await user.click(screen.getByRole('button', { name: /Yes/ }));
+    expect(screen.getByText('Got it now!')).toBeInTheDocument();
   });
 });

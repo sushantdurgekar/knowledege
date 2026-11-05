@@ -7,6 +7,8 @@ import { Editor } from './Editor';
 import { HostRoom } from './HostRoom';
 import { JoinPage } from './JoinPage';
 import { Library } from './Library';
+import { OpenList } from './OpenList';
+import { OpenPlay } from './OpenPlay';
 import { PlayRoom } from './PlayRoom';
 import { ProgressPage } from './ProgressPage';
 import { Present } from './Present';
@@ -19,6 +21,8 @@ export function QuizApp() {
       <Route path="play/:pin" element={<PlayRoom />} />
       <Route path="review" element={<ReviewPage />} />
       <Route path="progress" element={<ProgressPage />} />
+      <Route path="open" element={<OpenList />} />
+      <Route path="open/:id" element={<OpenPlay />} />
       <Route path="present/:pin" element={<Present />} />
       <Route path="board/:pin" element={<Board />} />
       <Route path="host" element={<Library />} />

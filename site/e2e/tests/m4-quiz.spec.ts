@@ -419,3 +419,50 @@ test('game options: friendly names, reactions, slider, word cloud, auto-play and
   expect(csv).toContain(`"${annName}","","1","2","slider","How many bits are in a byte?","8","right"`);
   expect(csv).toContain('"cloud","One word for HTTPS","Secure!","not scored"');
 });
+
+test('open quizzes: anyone plays a hub’s first three topics solo; an admin can host the same quiz', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const player = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  await player.goto('/quiz');
+  await player.getByRole('link', { name: 'Browse open quizzes' }).click();
+  await expect(player.getByRole('heading', { level: 1, name: 'Open quizzes' })).toBeVisible();
+  const cards = player.locator('.open-card');
+  expect(await cards.count()).toBeGreaterThan(3);
+  await player.getByLabel('Find a quiz').fill('DSA');
+  const card = player.locator('.open-card').first();
+  await expect(card.locator('.open-card__topics li')).toHaveCount(3);
+  await card.getByRole('link', { name: /^Play/ }).click();
+  await player.waitForURL(/\/quiz\/open\/[^/]+$/);
+  const quizId = player.url().split('/').pop()!;
+
+  // No PIN, no host: the game runs in the browser.
+  await player.getByRole('button', { name: 'Play' }).click();
+  for (let n = 0; n < 40; n++) {
+    await player.locator('.quiz-options .quiz-option').first().click();
+    await expect(player.locator('.quiz-result')).toBeVisible();
+    const next = player.getByRole('button', { name: /Next question|See my score/ });
+    const label = await next.innerText();
+    await next.click();
+    if (label.includes('See my score')) break;
+  }
+  await expect(player.getByText(/Saved in this browser/)).toBeVisible();
+  await expect(player.locator('.quiz-final h1')).toContainText('points');
+
+  // The score is kept in this browser: the list and the quiz page show the best.
+  await player.goto('/quiz/open');
+  await player.getByLabel('Find a quiz').fill('DSA');
+  await expect(player.locator('.open-card').first().locator('.open-card__best')).toContainText('Your best');
+  await player.goto('/quiz/review');
+  await expect(player.getByRole('heading', { name: 'Review deck' })).toBeVisible();
+  await expect(player.locator('.review__history')).toContainText('first 3 topics');
+
+  // An admin hosts the same questions as a live room.
+  const hostContext = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+  await signInAdmin(hostContext);
+  const host = await hostContext.newPage();
+  await host.goto(`/quiz/open/${quizId}`);
+  await host.getByRole('button', { name: 'Host live' }).click();
+  await host.getByRole('dialog').getByRole('button', { name: 'Open the room' }).click();
+  await host.waitForURL(/\/quiz\/host\/\d{6}$/);
+  await expect(host.locator('.quiz-pin')).toHaveText(/\d{6}/);
+});

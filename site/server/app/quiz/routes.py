@@ -31,6 +31,10 @@ Players (no account needed; X-Quiz-Token from join):
   GET  /api/quiz/rooms/{pin}/review            every question with its solution and my result
   GET  /api/quiz/rooms/{pin}/cards             flashcards (study rooms, or once finished)
 
+Open quizzes (anyone, no room; cached): each hub's first three topics as a quiz played in the browser
+  GET  /api/quiz/open                          the list
+  GET  /api/quiz/open/{hubId}                  topics, key points and questions with answers
+
 Presenter (X-Quiz-Present: the room's presentKey, handed out by the host) and anyone:
   GET  /api/quiz/rooms/{pin}/present?since=N   long-poll, the projected screen (no early answers)
   GET  /api/quiz/rooms/{pin}/board?since=N     long-poll, public leaderboard (no key)
@@ -58,6 +62,7 @@ from app.errors import ApiError
 from app.quiz import ai, images, library
 from app.quiz.bank import bank_hub, bank_index, load_bank
 from app.quiz.library import LibraryError
+from app.quiz.open import open_index, open_quiz
 from app.quiz.parse import (
     ADVANCED_TEMPLATE,
     TEMPLATE,
@@ -499,6 +504,24 @@ async def board(request: Request, pin: str) -> JSONResponse:
     if _manager.rooms.get(room.pin) is not room:
         raise ApiError(404, "no_room", "This quiz has closed")
     return _json(room.board_view())
+
+
+# -- open quizzes (no room) -----------------------------------------------------------------------
+OPEN_CACHE = {"Cache-Control": "public, max-age=300"}
+
+
+@router.get("/open")
+async def open_list(request: Request) -> JSONResponse:
+    bank = load_bank(get_runtime(request).settings.hubs_dir)
+    return JSONResponse({"quizzes": open_index(bank)}, headers=OPEN_CACHE)
+
+
+@router.get("/open/{hub_id}")
+async def open_get(request: Request, hub_id: str) -> JSONResponse:
+    quiz = open_quiz(load_bank(get_runtime(request).settings.hubs_dir), hub_id)
+    if quiz is None:
+        raise ApiError(404, "not_found", "No open quiz for that hub")
+    return JSONResponse(quiz, headers=OPEN_CACHE)
 
 
 # -- images -----------------------------------------------------------------------------------
