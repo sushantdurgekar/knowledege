@@ -2,9 +2,21 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router';
 import { BusyLine } from '../../components/forms';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { presenterKey, TYPE_LABELS, useCountdown, useRoomPoll, type RoomView } from '../../lib/quiz';
-import { cueFor, play, setSoundPreference, soundPreference, unlockAudio, type RoomSnap } from '../../lib/sound';
-import { Leaderboard, LETTERS, QuestionImage, SlideBody, Solution } from './Answering';
+import { fmtNumber, presenterKey, TYPE_LABELS, useAutoCountdown, useCountdown, useRoomPoll, type RoomView } from '../../lib/quiz';
+import {
+  cueFor,
+  musicPreference,
+  play,
+  setMusicPreference,
+  setSoundPreference,
+  soundPreference,
+  startMusic,
+  stopMusic,
+  unlockAudio,
+  type RoomSnap,
+} from '../../lib/sound';
+import { Leaderboard, LETTERS, QuestionImage, SlideBody, Solution, WordCloud } from './Answering';
+import { Confetti } from './Confetti';
 import { QrCode } from './QrCode';
 import { TeamBoard, teamOf } from './Teams';
 
@@ -37,7 +49,14 @@ function Presenting({ pin, presentKey }: { pin: string; presentKey: string }) {
   const [full, setFull] = useState(false);
   const [sound, setSound] = useState(soundPreference);
   const [unlocked, setUnlocked] = useState(false);
+  const [musicOn, setMusicOn] = useState(musicPreference);
   usePresenterSounds(view, seconds, sound && unlocked);
+  const lobby = view?.phase === 'lobby';
+  useEffect(() => {
+    if (sound && unlocked && musicOn && lobby) startMusic();
+    else stopMusic();
+  }, [sound, unlocked, musicOn, lobby]);
+  useEffect(() => () => stopMusic(), []);
 
   useEffect(() => {
     const onChange = () => setFull(!!document.fullscreenElement);
@@ -94,6 +113,21 @@ function Presenting({ pin, presentKey }: { pin: string; presentKey: string }) {
           <button type="button" className="present__btn" aria-pressed={sound} onClick={toggleSound}>
             <span aria-hidden="true">{sound ? '🔊' : '🔇'}</span> {sound ? 'Sound on' : 'Sound off'}
           </button>
+          {sound && view.phase === 'lobby' && (
+            <button
+              type="button"
+              className="present__btn"
+              aria-pressed={musicOn}
+              onClick={() => {
+                setMusicOn(!musicOn);
+                setMusicPreference(!musicOn);
+                unlockAudio();
+                setUnlocked(true);
+              }}
+            >
+              <span aria-hidden="true">♪</span> {musicOn ? 'Music on' : 'Music off'}
+            </button>
+          )}
           <button
             type="button"
             className="present__btn"
@@ -106,6 +140,7 @@ function Presenting({ pin, presentKey }: { pin: string; presentKey: string }) {
       <div className="present__stage">
         <Stage view={view} seconds={seconds} pin={pin} host={host} />
       </div>
+      {view.reactions && <Reactions list={view.reactions} />}
     </section>
   );
 }
@@ -145,6 +180,7 @@ function Stage({ view, seconds, pin, host }: { view: RoomView; seconds: number; 
     const top = (view.leaderboard ?? []).slice(0, 3);
     return (
       <div className="present__final">
+        <Confetti />
         <h2 className="present__headline">Final results</h2>
         <ol className="quiz-podium quiz-podium--big">
           {top.map((r) => (
@@ -182,7 +218,14 @@ function Stage({ view, seconds, pin, host }: { view: RoomView; seconds: number; 
 
   const q = view.question;
   if (!q) return null;
-  if (q.type === 'slide') return <SlideBody text={q.text} body={q.body} image={q.image} big />;
+  if (q.type === 'slide') {
+    return (
+      <>
+        <SlideBody text={q.text} body={q.body} image={q.image} big />
+        <AutoNote view={view} />
+      </>
+    );
+  }
   const open = view.phase === 'question';
 
   return (
@@ -236,6 +279,13 @@ function Stage({ view, seconds, pin, host }: { view: RoomView; seconds: number; 
               </div>
             )}
             {q.type === 'text' && <p className="present__sub">Type your answer on your phone</p>}
+            {q.type === 'slider' && q.scale && (
+              <p className="present__sub">
+                Pick a number from {fmtNumber(q.scale.min)} to {fmtNumber(q.scale.max)}
+                {q.scale.unit ? ` ${q.scale.unit}` : ''} on your phone
+              </p>
+            )}
+            {q.type === 'cloud' && <WordCloud words={q.stats?.words ?? []} big />}
             {q.type === 'explain' && <p className="present__sub">Explain it in your own words on your phone</p>}
             <p className="present__count">
               <strong>{view.answeredCount ?? 0}</strong> of {view.playerCount} answered
@@ -243,7 +293,7 @@ function Stage({ view, seconds, pin, host }: { view: RoomView; seconds: number; 
           </>
         ) : (
           <>
-            <Solution q={q} />
+            {q.type === 'cloud' ? <WordCloud words={q.stats?.words ?? []} big /> : <Solution q={q} />}
             {q.explain && <p className="quiz-explain">{q.explain}</p>}
           </>
         )}
@@ -253,8 +303,45 @@ function Stage({ view, seconds, pin, host }: { view: RoomView; seconds: number; 
           {view.teamBoard && view.teamBoard.length > 0 && <TeamBoard rows={view.teamBoard} big />}
           <h2 className="present__sub">Leaderboard</h2>
           <Leaderboard rows={(view.leaderboard ?? []).slice(0, 8)} />
+          <AutoNote view={view} />
         </div>
       )}
+    </div>
+  );
+}
+
+/** "Next in 5 s" while auto-play counts down. */
+function AutoNote({ view }: { view: RoomView }) {
+  const left = useAutoCountdown(view);
+  if (left === null) return null;
+  return <p className="present__auto">Next in {left} s</p>;
+}
+
+/** Emoji from players float up the screen; each one once. */
+function Reactions({ list }: { list: [number, string][] }) {
+  // The newest reaction already handled; null until the first view (what was there then stays quiet).
+  const seen = useRef<number | null>(null);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const [floating, setFloating] = useState<{ id: number; emoji: string; x: number }[]>([]);
+  useEffect(() => {
+    const newest = list.length ? list[list.length - 1]![0] : 0;
+    const last = seen.current;
+    seen.current = Math.max(newest, last ?? 0);
+    if (last === null) return;
+    const fresh = list.filter(([seq]) => seq > last).slice(-12);
+    if (!fresh.length) return;
+    setFloating((now) => [...now, ...fresh.map(([id, emoji]) => ({ id, emoji, x: 4 + ((id * 37) % 88) }))].slice(-30));
+    const ids = new Set(fresh.map(([id]) => id));
+    timers.current.push(setTimeout(() => setFloating((now) => now.filter((f) => !ids.has(f.id))), 3200));
+  }, [list]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  return (
+    <div className="present__reactions" aria-hidden="true">
+      {floating.map((f) => (
+        <span key={f.id} style={{ left: `${f.x}%` }}>
+          {f.emoji}
+        </span>
+      ))}
     </div>
   );
 }

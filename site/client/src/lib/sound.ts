@@ -135,3 +135,48 @@ export function play(cue: Cue): void {
       break;
   }
 }
+
+// -- lobby music: a soft synthesised loop while players join -----------------------------------
+const MUSIC_KEY = 'studyhubs.quiz.music';
+// Two bars of a C-major pentatonic pattern (Hz), one note per half beat; 0 = rest.
+const PATTERN = [523.25, 659.25, 783.99, 659.25, 880, 783.99, 659.25, 0, 587.33, 659.25, 783.99, 1046.5, 880, 783.99, 659.25, 0];
+const BASS = [130.81, 130.81, 174.61, 196];
+let music: ReturnType<typeof setInterval> | null = null;
+
+export function musicPreference(): boolean {
+  try {
+    return window.localStorage.getItem(MUSIC_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+export function setMusicPreference(on: boolean): void {
+  try {
+    window.localStorage.setItem(MUSIC_KEY, on ? 'on' : 'off');
+  } catch {
+    /* storage blocked */
+  }
+}
+
+/** Start the lobby loop (no-op if it runs already or audio is not allowed yet). */
+export function startMusic(): void {
+  if (music) return;
+  let step = 0;
+  const beat = () => {
+    const c = context();
+    if (!c || c.state !== 'running') return;
+    const t = c.currentTime + 0.02;
+    const f = PATTERN[step % PATTERN.length]!;
+    if (f) note(c, f, t, 0.32, 0.035, 'triangle');
+    if (step % 4 === 0) note(c, BASS[(step / 4) % BASS.length]!, t, 0.9, 0.05, 'sine');
+    step += 1;
+  };
+  beat();
+  music = setInterval(beat, 260);
+}
+
+export function stopMusic(): void {
+  if (music) clearInterval(music);
+  music = null;
+}

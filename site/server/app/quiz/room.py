@@ -10,8 +10,15 @@ Two modes:
 
 Scoring: a fully correct answer earns 50-100% of the question's points, more for answering
 sooner. Multiple choice, match and order earn the same scaled by the share they got right
-(multiple choice: a wrong pick cancels a right one). Polls and slides earn nothing. Ties rank
-by total answer time, quicker first.
+(multiple choice: a wrong pick cancels a right one); a slider answer is right within the
+question's margin. Polls, word clouds, teach-back and slides earn nothing. With the streak bonus
+on, each right answer in a row after the first adds STREAK_STEP points (at most STREAK_MAX).
+Ties rank by total answer time, quicker first.
+
+Room options (set when the room opens): teams, a schedule (self-paced), the streak bonus,
+auto-play (a live room that runs itself: each question closes on time, the results show for
+`autoplay` seconds, then the next item opens; slides stay up for SLIDE_AUTOPLAY_S), shuffled
+answer order, friendly names only, and emoji reactions.
 
 Sized for MAX_PLAYERS (250) per room on one process:
 - Two change channels. `version` (host) moves on every change; `pversion` (players) only when
@@ -34,7 +41,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from app.quiz.parse import Question, Quiz, answer_text, normalise
+from app.quiz import names as friendly
+from app.quiz.parse import Question, Quiz, answer_text, fmt_number, normalise
 
 Phase = Literal["lobby", "question", "reveal", "finished"]
 Mode = Literal["live", "self"]
@@ -51,6 +59,17 @@ BOARD_SIZE = 50
 LOBBY_COALESCE_S = 1.0
 MAX_RESPONSES = 250
 MAX_EXTEND_S = 120
+MAX_CLOUD = 40  # characters in a word-cloud answer
+CLOUD_SIZE = 40  # words shown in a cloud
+STREAK_STEP, STREAK_MAX = 100, 500
+AUTOPLAY_CHOICES = (0, 5, 8, 12, 20)  # seconds the results stay up before the next item
+SLIDE_AUTOPLAY_S = 12
+REACTIONS = ("👍", "👏", "😂", "😮", "❤️", "🔥")
+REACTION_GAP_S = 1.5  # per player
+REACTION_COALESCE_S = 0.8
+REACTION_KEEP = 60  # recent reactions kept for the presenter
+NEEDS_HELP_BELOW = 0.5  # accuracy under this, with at least NEEDS_HELP_MIN answers
+NEEDS_HELP_MIN = 2
 
 
 class QuizError(Exception):
@@ -68,6 +87,7 @@ class Answer:
     scored: bool = True
     confidence: str | None = None  # advanced quizzes: "sure" or "unsure"
     hints: int = 0
+    bonus: int = 0  # streak bonus included in `points`
 
     @property
     def correct(self) -> bool:
@@ -92,6 +112,7 @@ class Player:
     opened_at: float = 0.0
     deadline: float = 0.0
     team: int | None = None  # index into TEAM_NAMES when the room plays in teams
+    reacted: float = -math.inf  # last emoji reaction (not saved)
 
 
 # Team play: teams are named by colour; the client draws them with the same palette.
@@ -135,7 +156,33 @@ def score_answer(q: Question, value: Any, order: list[int]) -> float:
         if not isinstance(value, str) or not value.strip() or len(value) > MAX_EXPLAIN:
             raise bad
         return 0.0  # teach-back is never scored
+    if q.type == "cloud":
+        if not isinstance(value, str) or not cloud_key(value) or len(value) > MAX_CLOUD:
+            raise bad
+        return 0.0
+    if q.type == "slider":
+        if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+            raise bad
+        if not q.low <= value <= q.high:
+            raise bad
+        return 1.0 if abs(value - q.target) <= q.margin + 1e-9 else 0.0
     raise bad  # slides take no answers
+
+
+def cloud_key(value: str) -> str:
+    """A word-cloud answer as counted: trimmed, one space, lower case, no edge punctuation."""
+    return " ".join(value.split()).strip(" .,;:!?\"'()[]{}").casefold()[:MAX_CLOUD]
+
+
+def streak_bonus(streak: int) -> int:
+    """Bonus for a right answer that extends a streak to `streak` (the first earns none)."""
+    return min(STREAK_MAX, STREAK_STEP * (streak - 1)) if streak > 1 else 0
+
+
+def _median(values: list[float]) -> float:
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
 
 
 HINT_COST = 0.25
@@ -201,6 +248,17 @@ class Room:
         self.teams = 0
         self.opens_at: float | None = None
         self.closes_at: float | None = None
+        # More options (configure): bonus points for streaks, auto-play seconds (0 = the host
+        # moves on), answers in a shuffled order, generated names only, emoji reactions.
+        self.streak_bonus = False
+        self.autoplay = 0
+        self.shuffle = False
+        self.friendly_names = False
+        self.reactions_on = True
+        self.revealed_at = math.inf
+        self.reaction_seq = 0
+        self.reaction_log: list[tuple[int, int]] = []  # (seq, emoji index), newest last
+        self._reaction_pending = False
         # Match and order items are shown in one shuffled order per question (same for all).
         self.orders: dict[int, list[int]] = {}
         for i, q in enumerate(quiz.questions):
@@ -253,6 +311,9 @@ class Room:
             timeout = min(timeout, max(0.05, self.deadline - self.clock() + 0.05))
         if until is not None and math.isfinite(until):
             timeout = min(timeout, max(0.05, until - self.clock() + 0.05))
+        auto = self.auto_at()
+        if math.isfinite(auto):
+            timeout = min(timeout, max(0.05, auto - self.clock() + 0.05))
         event = self._event if host else self._pevent
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(event.wait(), timeout)
@@ -263,10 +324,27 @@ class Room:
     def question(self) -> Question | None:
         return self.quiz.questions[self.index] if 0 <= self.index < self.total else None
 
+    def auto_at(self) -> float:
+        """Auto-play: when the room moves on by itself (inf when it waits for the host)."""
+        if not self.autoplay or self.mode != "live":
+            return math.inf
+        q = self.question
+        if self.phase == "reveal":
+            return self.revealed_at + self.autoplay
+        if self.phase == "question" and q is not None and not q.answerable:
+            return self.opened_at + SLIDE_AUTOPLAY_S
+        return math.inf
+
     def tick(self) -> None:
         """Close the open live question once its time is up; open/close a scheduled challenge."""
         if self.mode == "live" and self.phase == "question" and self.clock() >= self.deadline:
             self._reveal()
+        if self.mode == "live" and self.clock() >= self.auto_at():
+            target = self.next_index()
+            if target is None:
+                self._finish()
+            else:
+                self._open(target)
         if self.mode == "self" and (self.opens_at is not None or self.closes_at is not None):
             now = time.time()
             if self.phase == "lobby" and self.opens_at is not None and now >= self.opens_at:
@@ -277,8 +355,21 @@ class Room:
 
     # -- options, teams, schedule ----------------------------------------------------------
     def configure(
-        self, *, teams: int = 0, opens_at: float | None = None, closes_at: float | None = None
+        self,
+        *,
+        teams: int = 0,
+        opens_at: float | None = None,
+        closes_at: float | None = None,
+        streak_bonus: bool = False,
+        autoplay: int = 0,
+        shuffle: bool = False,
+        friendly_names: bool = False,
+        reactions: bool = True,
     ) -> None:
+        if autoplay not in AUTOPLAY_CHOICES:
+            raise QuizError(422, "invalid", f"autoplay must be one of {AUTOPLAY_CHOICES} (seconds)")
+        if autoplay and self.mode != "live":
+            raise QuizError(422, "invalid", "Auto-play is for live rooms")
         if not (teams == 0 or 2 <= teams <= len(TEAM_NAMES)):
             raise QuizError(422, "invalid", f"Teams must be 0 (off) or 2-{len(TEAM_NAMES)}")
         if (opens_at is not None or closes_at is not None) and self.mode != "self":
@@ -295,14 +386,50 @@ class Room:
         if opens_at is not None and opens_at - now > MAX_SCHEDULE_S:
             raise QuizError(422, "invalid", "The opening time must be within 14 days")
         self.teams, self.opens_at, self.closes_at = teams, opens_at, closes_at
+        self.streak_bonus, self.autoplay = streak_bonus, autoplay
+        self.friendly_names, self.reactions_on = friendly_names, reactions
+        if shuffle and not self.shuffle:
+            self._shuffle_options()
+        self.shuffle = shuffle
+
+    def _shuffle_options(self) -> None:
+        """One shuffled answer order per question, the same for everyone (presenter included).
+
+        The room's own copy of each question is reordered, so scoring, stats, solutions and
+        the saved room all follow it with nothing else to map.
+        """
+        for q in self.quiz.questions:
+            if q.type in ("single", "multi", "poll") and len(q.options) > 1:
+                order = _shuffled(len(q.options))
+                q.options = [q.options[i] for i in order]
+                q.correct = sorted(order.index(c) for c in q.correct)
+
+    def options_state(self) -> dict[str, Any]:
+        return {
+            "streakBonus": self.streak_bonus,
+            "autoplay": self.autoplay,
+            "shuffle": self.shuffle,
+            "friendlyNames": self.friendly_names,
+            "reactions": self.reactions_on,
+        }
 
     def extra_state(self) -> dict[str, Any]:
-        return {"teams": self.teams, "opensAt": self.opens_at, "closesAt": self.closes_at}
+        return {
+            "teams": self.teams,
+            "opensAt": self.opens_at,
+            "closesAt": self.closes_at,
+            **self.options_state(),
+        }
 
     def load_extra_state(self, extra: dict[str, Any]) -> None:
         self.teams = int(extra.get("teams") or 0)
         self.opens_at = extra.get("opensAt")
         self.closes_at = extra.get("closesAt")
+        self.streak_bonus = bool(extra.get("streakBonus"))
+        self.autoplay = int(extra.get("autoplay") or 0)
+        self.shuffle = bool(extra.get("shuffle"))  # the saved quiz is already in shuffled order
+        self.friendly_names = bool(extra.get("friendlyNames"))
+        self.reactions_on = extra.get("reactions") is not False
 
     def adopt(self, player: Player) -> None:
         """Add a player restored from a saved room."""
@@ -359,12 +486,22 @@ class Room:
 
     def _reveal(self) -> None:
         self.phase = "reveal"
+        self.revealed_at = self.clock()
         q = self.question
         if q is not None and q.scored:
             for player in self.players.values():
                 answer = player.answers.get(self.index)
                 player.streak = player.streak + 1 if answer is not None and answer.correct else 0
+                if answer is not None and answer.correct:
+                    self._add_bonus(player, answer)
         self.bump()
+
+    def _add_bonus(self, player: Player, answer: Answer) -> None:
+        if not self.streak_bonus or answer.bonus:
+            return
+        answer.bonus = streak_bonus(player.streak)
+        answer.points += answer.bonus
+        player.score += answer.bonus
 
     def next_index(self) -> int | None:
         """The next item not run yet: after the current one first, then from the top."""
@@ -428,6 +565,10 @@ class Room:
             raise QuizError(409, "locked", "The host has locked this room")
         if len(self.players) >= MAX_PLAYERS:
             raise QuizError(409, "full", "This room is full")
+        if self.friendly_names and not friendly.is_friendly(name):
+            raise QuizError(
+                422, "friendly_only", "This room uses generated names: pick one of the suggestions"
+            )
         key = normalise(name)
         if key in self._names:
             raise QuizError(409, "name_taken", "Someone in this room already uses that nickname")
@@ -446,6 +587,43 @@ class Room:
         else:
             self.bump(players=False)  # a late joiner changes nothing other players see
         return player
+
+    def suggest_names(self) -> list[str]:
+        return friendly.suggest(self._names)
+
+    def react(self, player: Player, emoji: Any) -> None:
+        """An emoji reaction for the presenter screen: at most one per REACTION_GAP_S."""
+        if not self.reactions_on:
+            raise QuizError(409, "reactions_off", "Reactions are off in this room")
+        if isinstance(emoji, bool) or not isinstance(emoji, int) or not 0 <= emoji < len(REACTIONS):
+            raise QuizError(422, "invalid", "Unknown reaction")
+        if self.phase == "finished":
+            raise QuizError(409, "finished", "This quiz has ended")
+        now = self.clock()
+        if now - player.reacted < REACTION_GAP_S:
+            raise QuizError(429, "slow_down", "One reaction at a time")
+        player.reacted = now
+        self.reaction_seq += 1
+        self.reaction_log.append((self.reaction_seq, emoji))
+        del self.reaction_log[:-REACTION_KEEP]
+        self._bump_reactions()
+
+    def _bump_reactions(self) -> None:
+        """Reactions wake the host channel (presenter) at most once per REACTION_COALESCE_S."""
+        if self._reaction_pending:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:  # no event loop (unit tests)
+            self.bump(players=False)
+            return
+        self._reaction_pending = True
+
+        def fire() -> None:
+            self._reaction_pending = False
+            self.bump(players=False)
+
+        loop.call_later(REACTION_COALESCE_S, fire)
 
     def player_by_token(self, token: str | None) -> Player:
         player = self._by_token.get(token or "")
@@ -559,6 +737,8 @@ class Room:
         answer = self._record(player, index, value, max(0.0, self.clock() - player.opened_at), confidence)
         if q.scored:
             player.streak = player.streak + 1 if answer.correct else 0
+            if answer.correct:
+                self._add_bonus(player, answer)
         player.stage = "reveal"
         self.bump(players=False)
         return answer
@@ -599,18 +779,21 @@ class Room:
             view["right"] = [q.pairs[i][1] for i in self.orders[index]]
         elif q.type == "order":
             view["items"] = [q.items[i] for i in self.orders[index]]
+        elif q.type == "slider":
+            view["scale"] = {"min": q.low, "max": q.high, "step": q.step, "unit": q.unit}
         if self.quiz.advanced and q.hints:
             view["hintCount"] = len(q.hints)
             if host:
                 view["hints"] = q.hints
-        if (host or not open_) and q.answerable and q.type not in ("poll", "explain"):
+        if (host or not open_) and q.answerable and q.type not in ("poll", "explain", "cloud"):
             view["solution"] = self._solution(index)
             view["answerText"] = answer_text(q)
         if (host or not open_) and q.explain:
             view["explain"] = q.explain
         if (host or not open_) and q.type == "explain" and q.model:
             view["model"] = q.model
-        if stats and q.answerable:
+        if (stats or q.type == "cloud") and q.answerable:
+            # A word cloud has no right answer, so it can grow on screen while answers come in.
             view["stats"] = self._stats(index)
         return view
 
@@ -621,6 +804,8 @@ class Room:
         if q.type == "text":
             plain = [a.raw for a in q.answers if a.pattern is None]
             return {"accepted": plain or [a.raw for a in q.answers]}
+        if q.type == "slider":
+            return {"value": q.target, "margin": q.margin}
         order = self.orders[index]  # row k's item sits at display position order.index(k)
         return {"pairs" if q.type == "match" else "order": [order.index(k) for k in range(len(order))]}
 
@@ -650,6 +835,23 @@ class Room:
                 key = " ".join(str(a.value).split())[:60]
                 tally[key] = tally.get(key, 0) + 1
             stats["top"] = sorted(tally.items(), key=lambda kv: -kv[1])[:8]
+        elif q.type == "cloud":
+            words: dict[str, int] = {}
+            for a in answers:
+                key = cloud_key(str(a.value))
+                if key:
+                    words[key] = words.get(key, 0) + 1
+            top = sorted(words.items(), key=lambda kv: (-kv[1], kv[0]))[:CLOUD_SIZE]
+            stats["words"] = [[word, n] for word, n in top]
+        elif q.type == "slider" and answers:
+            values = [float(a.value) for a in answers]
+            stats["average"] = round(sum(values) / len(values), 4)
+            stats["median"] = round(_median(values), 4)
+            bins = [0] * 10
+            span = q.high - q.low
+            for v in values:
+                bins[min(9, int((v - q.low) / span * 10))] += 1
+            stats["bins"] = bins
         return stats
 
     def _board(self, ranked: list[Player], size: int) -> list[dict[str, Any]]:
@@ -683,6 +885,7 @@ class Room:
             "teams": self.teams,
             "opensAt": round(self.opens_at * 1000) if self.opens_at is not None else None,
             "closesAt": round(self.closes_at * 1000) if self.closes_at is not None else None,
+            "options": self.options_state(),
         }
 
     def _live_question(self, host: bool) -> dict[str, Any] | None:
@@ -715,6 +918,11 @@ class Room:
             for i, q in enumerate(self.quiz.questions)
         ]
         out["nextIndex"] = self.next_index()
+        auto = self.auto_at()
+        if math.isfinite(auto):
+            out["autoMs"] = max(0, round((auto - self.clock()) * 1000))
+        if self.phase == "finished" or self.mode == "self":
+            out["needsHelp"] = self.needs_help()
         if self.mode == "live":
             out["question"] = self._live_question(True)
             out["players"] = [
@@ -763,6 +971,11 @@ class Room:
             out["players"] = [{"id": p.id, "name": p.name, "team": p.team} for p in self.players.values()]
         if self.mode == "self":
             out["doneCount"] = sum(1 for p in self.players.values() if p.stage == "done")
+        if self.reactions_on:
+            out["reactions"] = [[seq, REACTIONS[i]] for seq, i in self.reaction_log]
+        auto = self.auto_at()
+        if math.isfinite(auto):
+            out["autoMs"] = max(0, round((auto - self.clock()) * 1000))
         return out
 
     def board_view(self) -> dict[str, Any]:
@@ -854,6 +1067,7 @@ class Room:
             me["answer"] = mine.value
             if closed:
                 me["lastPoints"] = mine.points
+                me["lastBonus"] = mine.bonus
                 me["lastCorrect"] = mine.correct if mine.scored else None
                 me["lastFraction"] = round(mine.fraction, 3)
                 me["lastConfidence"] = mine.confidence
@@ -898,6 +1112,86 @@ class Room:
             out.append(row)
         return out
 
+    def needs_help(self) -> list[dict[str, Any]]:
+        """Players under NEEDS_HELP_BELOW accuracy (after NEEDS_HELP_MIN scored answers), lowest first."""
+        rows = []
+        for p in self.players.values():
+            scored = [a for a in p.answers.values() if a.scored]
+            if len(scored) < NEEDS_HELP_MIN:
+                continue
+            right = sum(1 for a in scored if a.correct)
+            if right / len(scored) < NEEDS_HELP_BELOW:
+                rows.append({"id": p.id, "name": p.name, "correct": right, "answered": len(scored)})
+        rows.sort(key=lambda r: (r["correct"] / r["answered"], r["name"].casefold()))
+        return rows
+
+    def answer_words(self, index: int, value: Any) -> str:
+        """A player's answer as text, for the report."""
+        q = self.quiz.questions[index]
+        if q.type in ("single", "truefalse", "poll") and isinstance(value, int):
+            return q.options[value]
+        if q.type == "multi" and isinstance(value, list):
+            return " · ".join(q.options[v] for v in value)
+        if q.type == "order" and isinstance(value, list):
+            return " → ".join(q.items[self.orders[index][v]] for v in value)
+        if q.type == "match" and isinstance(value, list):
+            order = self.orders[index]
+            return " · ".join(f"{q.pairs[k][0]} → {q.pairs[order[v]][1]}" for k, v in enumerate(value))
+        if q.type == "slider" and isinstance(value, int | float):
+            return fmt_number(float(value))
+        return str(value)
+
+    def report(self) -> dict[str, Any]:
+        """Every player's answer to every question (one row each): the host's full report."""
+        columns = [
+            "Player",
+            "Team",
+            "Rank",
+            "Item",
+            "Type",
+            "Question",
+            "Answer",
+            "Result",
+            "Points",
+            "Streak bonus",
+            "Seconds",
+            "Confidence",
+            "Hints",
+        ]
+        _, ranks = self._rank_index()
+        rows: list[list[Any]] = []
+        players = sorted(self.players.values(), key=lambda p: ranks.get(p.id, 0))
+        for p in players:
+            team = TEAM_NAMES[p.team] if p.team is not None else ""
+            for i, q in enumerate(self.quiz.questions):
+                if not q.answerable:
+                    continue
+                a = p.answers.get(i)
+                if a is None:
+                    result = "no answer"
+                elif not a.scored:
+                    result = "not scored"
+                else:
+                    result = "right" if a.correct else ("partly right" if a.fraction > 0 else "wrong")
+                rows.append(
+                    [
+                        p.name,
+                        team,
+                        ranks.get(p.id, 0),
+                        i + 1,
+                        q.type,
+                        q.text[:200],
+                        "" if a is None else self.answer_words(i, a.value)[:300],
+                        result,
+                        0 if a is None else a.points,
+                        0 if a is None else a.bonus,
+                        "" if a is None else round(a.elapsed, 1),
+                        "" if a is None or a.confidence is None else a.confidence,
+                        0 if a is None else a.hints,
+                    ]
+                )
+        return {"title": self.quiz.title, "columns": columns, "rows": rows}
+
     def review(self, player: Player) -> list[dict[str, Any]]:
         """Every question with its solution and this player's result: "replay my mistakes"."""
         out: list[dict[str, Any]] = []
@@ -917,7 +1211,7 @@ class Room:
         """Flashcards: each slide as a reading card, each question with its answer."""
         out: list[dict[str, Any]] = []
         for i, q in enumerate(self.quiz.questions):
-            if q.type == "poll":
+            if q.type in ("poll", "cloud"):
                 continue
             card: dict[str, Any] = {"index": i, "type": q.type, "front": q.text, "back": answer_text(q)}
             if q.type in ("single", "multi", "truefalse"):
@@ -956,6 +1250,7 @@ class RoomManager:
         teams: int = 0,
         opens_at: float | None = None,
         closes_at: float | None = None,
+        **options: Any,
     ) -> Room:
         self._sweep()
         if len(self.rooms) >= self.MAX_ROOMS:
@@ -965,7 +1260,7 @@ class RoomManager:
             if pin not in self.rooms:
                 break
         room = Room(pin, quiz, owner, self.clock, mode=mode, study=study)
-        room.configure(teams=teams, opens_at=opens_at, closes_at=closes_at)
+        room.configure(teams=teams, opens_at=opens_at, closes_at=closes_at, **options)
         self.rooms[pin] = room
         return room
 

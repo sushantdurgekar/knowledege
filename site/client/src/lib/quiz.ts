@@ -2,7 +2,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, isApiProblem } from './api';
 
-export type QuestionType = 'single' | 'multi' | 'text' | 'match' | 'truefalse' | 'order' | 'poll' | 'slide' | 'explain';
+export type QuestionType =
+  | 'single'
+  | 'multi'
+  | 'text'
+  | 'match'
+  | 'truefalse'
+  | 'order'
+  | 'poll'
+  | 'slide'
+  | 'explain'
+  | 'slider'
+  | 'cloud';
 export type Confidence = 'sure' | 'unsure';
 export type Mode = 'live' | 'self';
 export type Stage = 'ready' | 'question' | 'reveal' | 'done';
@@ -15,6 +26,19 @@ export interface QuestionStats {
   counts?: number[];
   top?: [string, number][];
   responses?: { name: string; text: string }[];
+  /** Word cloud: [word, count], most common first. */
+  words?: [string, number][];
+  /** Slider: where answers landed. */
+  average?: number;
+  median?: number;
+  bins?: number[];
+}
+
+export interface SliderScale {
+  min: number;
+  max: number;
+  step: number;
+  unit: string;
 }
 
 export interface QuestionView {
@@ -35,7 +59,15 @@ export interface QuestionView {
   image?: string;
   hints?: string[];
   model?: string[];
-  solution?: { correct?: number[]; accepted?: string[]; pairs?: number[]; order?: number[] };
+  scale?: SliderScale;
+  solution?: {
+    correct?: number[];
+    accepted?: string[];
+    pairs?: number[];
+    order?: number[];
+    value?: number;
+    margin?: number;
+  };
   explain?: string;
   stats?: QuestionStats;
 }
@@ -80,6 +112,7 @@ export interface MeView {
   team?: number | null;
   answer?: unknown;
   lastPoints?: number;
+  lastBonus?: number;
   lastCorrect?: boolean | null;
   lastFraction?: number;
   lastConfidence?: Confidence | null;
@@ -120,6 +153,22 @@ export interface SheetRow {
   points: number;
 }
 
+/** Room options chosen when it opened (the server echoes them in every view). */
+export interface RoomSettings {
+  streakBonus: boolean;
+  autoplay: number; // seconds the results stay up before the next item (0: the host moves on)
+  shuffle: boolean;
+  friendlyNames: boolean;
+  reactions: boolean;
+}
+
+export interface HelpRow {
+  id: string;
+  name: string;
+  correct: number;
+  answered: number;
+}
+
 export interface RoomView {
   pin: string;
   title: string;
@@ -154,6 +203,13 @@ export interface RoomView {
     team?: number | null;
   }[];
   presentKey?: string;
+  options?: RoomSettings;
+  /** Auto-play: milliseconds until the room moves on by itself. */
+  autoMs?: number;
+  /** Presenter: recent emoji reactions [sequence number, emoji], oldest first. */
+  reactions?: [number, string][];
+  /** Host, at the end: players under 50% right (after two answers or more). */
+  needsHelp?: HelpRow[];
   doneCount?: number;
   current?: { index: number; type: QuestionType; text: string } | null;
   answeredCount?: number;
@@ -175,7 +231,15 @@ export const TYPE_LABELS: Record<QuestionType, string> = {
   poll: 'Poll',
   slide: 'Slide',
   explain: 'Explain it',
+  slider: 'Slider',
+  cloud: 'Word cloud',
 };
+
+/** Emoji players can send to the presenter screen (same order as the server's REACTIONS). */
+export const REACTIONS = ['👍', '👏', '😂', '😮', '❤️', '🔥'] as const;
+
+/** A slider number as the server prints it: no trailing zeros. */
+export const fmtNumber = (n: number) => (Number.isInteger(n) ? String(n) : String(Number(n.toFixed(6))));
 
 export interface Card {
   type: QuestionType;
@@ -234,6 +298,44 @@ export interface RoomOptions {
   teams: number;
   opensAt?: number | null;
   closesAt?: number | null;
+  streakBonus?: boolean;
+  autoplay?: number;
+  shuffle?: boolean;
+  friendlyNames?: boolean;
+  reactions?: boolean;
+}
+
+/** What the join page needs before a nickname is chosen. */
+export const roomInfo = (pin: string) =>
+  api<{ pin: string; title: string; phase: Phase; mode: Mode; locked: boolean; friendlyNames: boolean }>(
+    `/api/quiz/rooms/${encodeURIComponent(pin)}/info`,
+  );
+
+/** Three friendly nicknames (adjective + animal) nobody in the room uses yet. */
+export const suggestNames = (pin: string) =>
+  api<{ names: string[] }>(`/api/quiz/rooms/${encodeURIComponent(pin)}/names`);
+
+export const sendReaction = (pin: string, token: string, emoji: number) =>
+  api<{ ok: true }>(`/api/quiz/rooms/${encodeURIComponent(pin)}/react`, {
+    json: { emoji },
+    headers: { 'X-Quiz-Token': token },
+  });
+
+/** The host's full report: one row per player per question. */
+export const fetchReport = (pin: string, hostKey: string) =>
+  api<{ title: string; columns: string[]; rows: (string | number)[][] }>(
+    `/api/quiz/rooms/${encodeURIComponent(pin)}/host/report`,
+    { headers: { 'X-Quiz-Host': hostKey } },
+  );
+
+/** Rows to CSV (RFC 4180 quoting; formulas defused for spreadsheets). */
+export function toCsv(rows: (string | number)[][]): string {
+  const cell = (v: string | number) => {
+    let text = String(v);
+    if (/^[=+\-@]/.test(text) && typeof v === 'string') text = `'${text}`;
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+  return rows.map((r) => r.map(cell).join(',')).join('\r\n');
 }
 
 export const createRoom = (quiz: unknown, options: RoomOptions) =>
@@ -364,6 +466,22 @@ export function useCountdown(view: RoomView | null): number {
     return () => clearInterval(timer);
   }, [open]);
   if (!open || !q) return 0;
+  return Math.max(0, Math.ceil((anchor.current.ms - (now - anchor.current.at)) / 1000));
+}
+
+/** Auto-play: whole seconds until the room moves on by itself (null when it waits for the host). */
+export function useAutoCountdown(view: RoomView | null): number | null {
+  const [now, setNow] = useState(() => performance.now());
+  const anchor = useRef({ at: performance.now(), ms: 0, key: '' });
+  const ms = view?.autoMs;
+  const key = view ? `${view.version}:${ms}` : '';
+  if (ms !== undefined && anchor.current.key !== key) anchor.current = { at: performance.now(), ms, key };
+  useEffect(() => {
+    if (ms === undefined) return;
+    const timer = setInterval(() => setNow(performance.now()), 250);
+    return () => clearInterval(timer);
+  }, [ms]);
+  if (ms === undefined) return null;
   return Math.max(0, Math.ceil((anchor.current.ms - (now - anchor.current.at)) / 1000));
 }
 

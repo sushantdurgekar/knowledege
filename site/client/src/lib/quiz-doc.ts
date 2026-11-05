@@ -14,8 +14,13 @@ export interface DocItem {
   time?: number;
   points?: number;
   options?: DocOption[];
-  answer?: boolean; // truefalse
+  answer?: boolean | number; // truefalse: true/false; slider: the right number
   answers?: string[]; // text
+  min?: number; // slider scale
+  max?: number;
+  step?: number;
+  margin?: number; // slider: answers within +/- margin are right
+  unit?: string;
   pairs?: [string, string][]; // match
   items?: string[]; // order
   explain?: string;
@@ -44,6 +49,8 @@ export const ITEM_TYPES: { type: QuestionType; label: string; hint: string }[] =
   { type: 'poll', label: 'Poll', hint: 'No right answer' },
   { type: 'slide', label: 'Slide', hint: 'Present content' },
   { type: 'explain', label: 'Explain it', hint: 'Teach-back, no score' },
+  { type: 'slider', label: 'Slider', hint: 'Pick a number' },
+  { type: 'cloud', label: 'Word cloud', hint: 'Words, no score' },
 ];
 
 export const newId = () => Math.random().toString(36).slice(2, 10);
@@ -68,6 +75,10 @@ export function blankItem(type: QuestionType): DocItem {
       return { ...base, body: '' };
     case 'explain':
       return { ...base, answers: [''] };
+    case 'slider':
+      return { ...base, min: 0, max: 100, step: 1, answer: 50, margin: 0 };
+    case 'cloud':
+      return base;
   }
 }
 
@@ -163,6 +174,12 @@ export function toText(doc: QuizDoc): string {
     if (item.points !== undefined && item.points !== doc.points) lines.push(`points: ${item.points}`);
     for (const o of item.options ?? []) lines.push(`${o.correct ? '*' : '-'} ${o.text}`);
     if (item.type === 'truefalse') lines.push(`answer: ${item.answer ? 'true' : 'false'}`);
+    if (item.type === 'slider') {
+      lines.push(`min: ${item.min ?? 0}`, `max: ${item.max ?? 100}`, `step: ${item.step ?? 1}`);
+      lines.push(`answer: ${typeof item.answer === 'number' ? item.answer : 0}`);
+      if (item.margin) lines.push(`margin: ${item.margin}`);
+      if (item.unit) lines.push(`unit: ${item.unit}`);
+    }
     for (const a of item.answers ?? []) lines.push(`answer: ${a}`);
     for (const [l, r] of item.pairs ?? []) lines.push(`pair: ${l.replace(/=/g, ' ')} = ${r}`);
     for (const i of item.items ?? []) lines.push(`item: ${i}`);

@@ -705,3 +705,222 @@ def test_ai_draft(admin: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     down = admin.post("/api/quiz/ai/draft", json={"notes": "x"}, headers=API)
     assert (down.status_code, down.json()["code"]) == (503, "ai_unavailable")
     assert admin.post("/api/quiz/ai/draft", json={"count": 2}, headers=API).status_code == 422
+
+
+KAHOOT_STYLE = """title: Fun round
+time: 20
+
+Q: How many bits in a byte?
+type: slider
+min: 0
+max: 16
+step: 1
+answer: 8
+margin: 0
+unit: bits
+
+Q: Roughly what share of the web uses HTTPS (percent)?
+min: 0
+max: 100
+answer: 95
+margin: 5
+unit: %
+
+Q: One word for how you feel about TLS
+type: cloud
+
+Q: 2 + 2?
+- 3
+* 4
+- 5
+- 22
+"""
+
+
+def test_slider_and_word_cloud_items() -> None:
+    quiz = parse_quiz(KAHOOT_STYLE)
+    assert [q.type for q in quiz.questions] == ["slider", "slider", "cloud", "single"]
+    bits, share, cloud, _ = quiz.questions
+    assert (bits.low, bits.high, bits.target, bits.margin, bits.unit) == (0, 16, 8, 0, "bits")
+    assert (share.scored, cloud.scored, cloud.points) == (True, False, 0)
+    from app.quiz.parse import answer_text, quiz_from_json, quiz_to_json
+
+    again = quiz_from_json(quiz_to_json(quiz))
+    assert (again.questions[1].target, again.questions[1].margin) == (95, 5)
+    assert answer_text(share) == "95 % (±5)"
+
+    now = [0.0]
+    room = Room("1", quiz, "boss", lambda: now[0])
+    ann, bob, cy = room.join("Ann"), room.join("Bob"), room.join("Cy")
+    room.act("start")
+    assert room.view(player=ann)["question"]["scale"] == {"min": 0, "max": 16, "step": 1, "unit": "bits"}
+    with pytest.raises(QuizError):
+        room.answer(ann, 0, 17)  # off the scale
+    room.answer(ann, 0, 8)
+    room.answer(bob, 0, 7)
+    room.answer(cy, 0, 8.0)
+    assert (ann.answers[0].correct, bob.answers[0].correct, cy.answers[0].correct) == (True, False, True)
+    stats = room.view(host=True)["question"]["stats"]
+    assert (stats["median"], sum(stats["bins"])) == (8, 3)
+    room.act("next")
+    room.answer(ann, 1, 91)  # within the margin of 5
+    room.answer(bob, 1, 89)
+    room.answer(cy, 1, 100)
+    assert [p.answers[1].correct for p in (ann, bob, cy)] == [True, False, True]
+    assert room.view(player=ann)["question"]["solution"] == {"value": 95, "margin": 5}
+
+    room.act("next")  # word cloud: no score, grows on screen while answers come in
+    room.answer(ann, 2, "Secure!")
+    room.answer(bob, 2, "  secure ")
+    present = room.present_view()["question"]
+    assert present["stats"]["words"] == [["secure", 2]]
+    assert "solution" not in present
+    with pytest.raises(QuizError):
+        room.answer(cy, 2, "   ")
+    room.answer(cy, 2, "encrypted")
+    assert room.view(player=cy)["question"]["stats"]["words"] == [["secure", 2], ["encrypted", 1]]
+    assert (
+        cy.score
+        == ann.score
+        - ann.answers[0].points
+        - ann.answers[1].points
+        + cy.answers[0].points
+        + cy.answers[1].points
+    )
+    assert all(c["type"] != "cloud" for c in room.cards())
+
+
+def test_streak_bonus_auto_play_and_shuffled_answers() -> None:
+    now = [0.0]
+    room = Room("1", parse_quiz(SOURCE), "boss", lambda: now[0])
+    room.configure(streak_bonus=True, autoplay=5, shuffle=True)
+    q0 = room.quiz.questions[0]
+    assert q0.options[q0.correct[0]] == "4"  # options moved, the right answer followed
+    ann, bob = room.join("Ann"), room.join("Bob")
+    room.act("start")
+    right0 = q0.correct[0]
+    room.answer(ann, 0, right0)
+    room.answer(bob, 0, 1 - right0 if right0 < 2 else 0)
+    assert ann.answers[0].bonus == 0  # the first right answer starts a streak: no bonus yet
+    assert room.phase == "reveal"
+    now[0] += 4.9
+    room.tick()
+    assert room.phase == "reveal"
+    assert room.view(host=True)["autoMs"] == 100
+    now[0] += 0.2
+    room.tick()  # auto-play: the next question opens by itself
+    assert (room.phase, room.index) == ("question", 1)
+    q1 = room.quiz.questions[1]
+    room.answer(ann, 1, list(q1.correct))
+    room.answer(bob, 1, [0])
+    assert (ann.streak, ann.answers[1].bonus) == (2, 100)
+    assert room.view(player=ann)["me"]["lastBonus"] == 100
+    now[0] += 5.1
+    room.tick()
+    assert room.index == 2
+    now[0] += 10.1  # time runs out with no answers, then the results show for 5 s
+    room.tick()
+    assert (room.phase, ann.streak) == ("reveal", 0)
+    with pytest.raises(QuizError):
+        room.configure(autoplay=7)
+    with pytest.raises(QuizError):  # self-paced rooms have no host pace to automate
+        Room("2", parse_quiz(SOURCE), "boss", lambda: 0.0, mode="self").configure(autoplay=5)
+
+
+def test_friendly_names_reactions_report_and_needs_help() -> None:
+    from app.quiz.names import is_friendly
+
+    room = Room("1", parse_quiz(SOURCE), "boss", lambda: 0.0)
+    room.configure(friendly_names=True)
+    suggestions = room.suggest_names()
+    assert len(suggestions) == 3
+    assert all(is_friendly(n) for n in suggestions)
+    with pytest.raises(QuizError) as typed:
+        room.join("Whatever I like")
+    assert typed.value.code == "friendly_only"
+    ann = room.join(suggestions[0])
+    bob = room.join(suggestions[1])
+    assert suggestions[0].casefold() not in {n.casefold() for n in room.suggest_names()}
+
+    room.react(ann, 0)
+    with pytest.raises(QuizError) as fast:
+        room.react(ann, 1)  # one at a time
+    assert fast.value.code == "slow_down"
+    room.react(bob, 5)
+    assert [r[1] for r in room.present_view()["reactions"]] == ["👍", "🔥"]
+    with pytest.raises(QuizError):
+        room.react(bob, 9)
+
+    room.act("start")
+    room.answer(ann, 0, 1)
+    room.answer(bob, 0, 0)
+    room.act("next")
+    room.answer(ann, 1, [0, 1])
+    room.answer(bob, 1, [2])
+    room.act("end")
+    host = room.view(host=True)
+    assert [r["name"] for r in host["needsHelp"]] == [bob.name]
+    report = room.report()
+    assert report["columns"][:4] == ["Player", "Team", "Rank", "Item"]
+    first = report["rows"][0]
+    assert (first[0], first[3], first[6], first[7]) == (ann.name, 1, "4", "right")
+    assert any(
+        row[0] == bob.name and row[3] == 2 and row[6] == "4" and row[7] == "wrong" for row in report["rows"]
+    )
+    assert any(row[3] == 3 and row[7] == "no answer" for row in report["rows"])
+
+    quiet = Room("2", parse_quiz(SOURCE), "boss", lambda: 0.0)
+    quiet.configure(reactions=False)
+    with pytest.raises(QuizError):
+        quiet.react(quiet.join("Cy"), 0)
+
+
+def test_new_room_options_through_the_api(admin: TestClient) -> None:
+    created = admin.post(
+        "/api/quiz/rooms",
+        json={"source": SOURCE, "friendlyNames": True, "streakBonus": True, "autoplay": 8, "reactions": True},
+        headers=API,
+    ).json()
+    pin, key = created["pin"], created["hostKey"]
+    admin.cookies.clear()
+    info = admin.get(f"/api/quiz/rooms/{pin}/info").json()
+    assert (info["friendlyNames"], info["phase"]) == (True, "lobby")
+    names = admin.get(f"/api/quiz/rooms/{pin}/names").json()["names"]
+    refused = admin.post(f"/api/quiz/rooms/{pin}/join", json={"name": "Typed Name"}, headers=API)
+    assert refused.status_code == 422
+    joined = admin.post(f"/api/quiz/rooms/{pin}/join", json={"name": names[0]}, headers=API).json()
+    me = {**API, "X-Quiz-Token": joined["token"]}
+    assert admin.post(f"/api/quiz/rooms/{pin}/react", json={"emoji": 1}, headers=me).status_code == 200
+    assert admin.post(f"/api/quiz/rooms/{pin}/react", json={"emoji": 1}, headers=me).status_code == 429
+    view = admin.get(f"/api/quiz/rooms/{pin}", headers=me).json()
+    assert view["options"] == {
+        "streakBonus": True,
+        "autoplay": 8,
+        "shuffle": False,
+        "friendlyNames": True,
+        "reactions": True,
+    }
+    host = {**API, "X-Quiz-Host": key}
+    report = admin.get(f"/api/quiz/rooms/{pin}/host/report", headers=host).json()
+    assert report["rows"][0][0] == names[0]
+    assert admin.get(f"/api/quiz/rooms/{pin}/host/report", headers=me).status_code == 403
+
+
+def test_new_options_survive_a_restart() -> None:
+    from app.quiz.persist import RoomSaver
+    from app.store.memory import MemoryStore
+
+    now = [10.0]
+    manager = RoomManager(lambda: now[0])
+    room = manager.create(parse_quiz(KAHOOT_STYLE), "boss", streak_bonus=True, autoplay=12, shuffle=True)
+    ann = room.join("Ann")
+    room.act("start")
+    room.answer(ann, 0, 8)  # everyone answered: reveal, auto-play counts down
+    store = MemoryStore()
+    RoomSaver(manager, store).flush(force=True)
+    fresh = RoomManager(lambda: 900.0)
+    RoomSaver(fresh, store).load()
+    again = fresh.get(room.pin)
+    assert again.options_state() == room.options_state()
+    assert [q.options for q in again.quiz.questions] == [q.options for q in room.quiz.questions]
+    assert 11 < again.auto_at() - 900.0 <= 12.001  # saved times are rounded to 1 ms (persist._to_wall)

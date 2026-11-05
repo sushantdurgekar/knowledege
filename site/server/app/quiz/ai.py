@@ -21,11 +21,12 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any
-
-import anthropic
+from typing import TYPE_CHECKING, Any
 
 from app.quiz.parse import QuizFormatError, quiz_from_json
+
+if TYPE_CHECKING:
+    import anthropic
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,10 @@ _client: anthropic.AsyncAnthropic | None = None
 def client() -> anthropic.AsyncAnthropic:
     global _client
     if _client is None:
+        # Imported on first use: the SDK and its HTTP stack take ~24 MB of RAM, which a server
+        # without ANTHROPIC_API_KEY (or one nobody drafts on) should not pay for.
+        import anthropic
+
         # Reads ANTHROPIC_API_KEY from the environment; 2 automatic retries on 429/5xx.
         _client = anthropic.AsyncAnthropic(timeout=180.0, max_retries=2)
     return _client
@@ -164,6 +169,8 @@ async def draft(
 ) -> dict[str, Any]:
     if not enabled():
         raise AiError(503, "ai_disabled", "AI drafting is not set up on this server (ANTHROPIC_API_KEY)")
+    import anthropic
+
     try:
         response = await client().beta.messages.create(
             model=MODEL,

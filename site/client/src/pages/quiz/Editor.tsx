@@ -479,6 +479,15 @@ function ItemForm({
         </fieldset>
       )}
 
+      {item.type === 'slider' && <SliderFields item={item} set={set} />}
+
+      {item.type === 'cloud' && (
+        <p className="muted small editor__note">
+          Players send a word or two; the most common answers grow biggest on the shared screen. There is no right answer and no
+          score.
+        </p>
+      )}
+
       {item.type === 'explain' && (
         <fieldset className="editor__fieldset">
           <legend>
@@ -600,7 +609,7 @@ function ItemForm({
         </fieldset>
       )}
 
-      {advanced && !['slide', 'poll', 'explain'].includes(item.type) && (
+      {advanced && !['slide', 'poll', 'explain', 'cloud'].includes(item.type) && (
         <fieldset className="editor__fieldset">
           <legend>
             Hints <span className="muted small">(up to 3; each one a player opens costs 25% of the points)</span>
@@ -645,7 +654,7 @@ function ItemForm({
               onChange={(e) => set({ time: e.target.value ? Number(e.target.value) : undefined })}
             />
           </div>
-          {item.type !== 'poll' && item.type !== 'explain' && (
+          {item.type !== 'poll' && item.type !== 'explain' && item.type !== 'cloud' && (
             <div className="field editor__num">
               <label htmlFor="item-points">Points</label>
               <input
@@ -670,6 +679,52 @@ function ItemForm({
   );
 }
 
+/** The scale and the right number of a slider question. */
+function SliderFields({ item, set }: { item: DocItem; set: (change: Partial<DocItem>) => void }) {
+  const num = (key: 'min' | 'max' | 'step' | 'answer' | 'margin', label: string, hint?: string) => (
+    <div className="field editor__num">
+      <label htmlFor={`slider-${key}`}>{label}</label>
+      <input
+        id={`slider-${key}`}
+        type="number"
+        step="any"
+        value={typeof item[key] === 'number' ? (item[key] as number) : ''}
+        title={hint}
+        onChange={(e) => set({ [key]: e.target.value === '' ? undefined : Number(e.target.value) })}
+      />
+    </div>
+  );
+  const min = item.min ?? 0;
+  const max = item.max ?? 100;
+  const answer = typeof item.answer === 'number' ? item.answer : min;
+  const problem =
+    max <= min
+      ? 'Max must be greater than min.'
+      : answer < min || answer > max
+        ? 'The right number must be on the scale.'
+        : (item.step ?? 1) <= 0
+          ? 'Step must be above 0.'
+          : null;
+  return (
+    <fieldset className="editor__fieldset">
+      <legend>
+        Scale and right number <span className="muted small">(answers within ± margin count as right)</span>
+      </legend>
+      <div className="editor__slider">
+        {num('min', 'Min')}
+        {num('max', 'Max')}
+        {num('step', 'Step')}
+        {num('answer', 'Right number')}
+        {num('margin', 'Margin ±', 'How far from the right number still counts as right (0 = exact)')}
+        <div className="field editor__num">
+          <label htmlFor="slider-unit">Unit</label>
+          <input id="slider-unit" maxLength={12} placeholder="%, km, ms…" value={item.unit ?? ''} onChange={(e) => set({ unit: e.target.value || undefined })} />
+        </div>
+      </div>
+      {problem && <p className="editor__warn">{problem}</p>}
+    </fieldset>
+  );
+}
 
 /** A picture for the question or slide: shrunk in the browser, then uploaded. */
 function ImageField({ image, onChange }: { image?: string; onChange: (image: string | undefined) => void }) {

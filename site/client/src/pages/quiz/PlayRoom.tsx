@@ -11,7 +11,9 @@ import {
   fetchReview,
   type Confidence,
   playerToken,
+  REACTIONS,
   sendAnswer,
+  sendReaction,
   setPlayerToken,
   TYPE_LABELS,
   useCountdown,
@@ -22,6 +24,7 @@ import { commit, dueCards, loadState, recordQuiz } from '../../lib/quiz-history'
 import { Answering, Leaderboard, QuestionImage, SlideBody, Solution } from './Answering';
 import { TeamBoard, TeamChip } from './Teams';
 import { Calibration } from './Calibration';
+import { Confetti } from './Confetti';
 import { Flashcards } from './Flashcards';
 import { Replay } from './Replay';
 
@@ -41,7 +44,9 @@ function resultClass(me: NonNullable<RoomView['me']>): string {
 
 function resultText(me: NonNullable<RoomView['me']>, type?: string): string {
   if (!me.answered) return 'Time’s up';
-  if (me.lastCorrect === null || me.lastCorrect === undefined) return type === 'poll' ? 'Thanks for voting' : 'Thanks, answer sent';
+  if (me.lastCorrect === null || me.lastCorrect === undefined) {
+    return type === 'poll' ? 'Thanks for voting' : type === 'cloud' ? 'You’re in the cloud' : 'Thanks, answer sent';
+  }
   if (me.lastCorrect) return 'Correct!';
   return me.lastPoints ? 'Partly right' : 'Not this time';
 }
@@ -312,8 +317,9 @@ function Playing({ pin, token }: { pin: string; token: string }) {
               <p className="quiz-big">{resultText(me, q.type)}</p>
               {me.lastCorrect !== null && (
                 <p>
-                  +{(me.lastPoints ?? 0).toLocaleString()} points · you are <strong>#{me.rank}</strong>
-                  {me.streak > 1 ? ` · ${me.streak} in a row` : ''}
+                  +{(me.lastPoints ?? 0).toLocaleString()} points
+                  {me.lastBonus ? ` (with a +${me.lastBonus} streak bonus)` : ''} · you are <strong>#{me.rank}</strong>
+                  {me.streak > 1 ? ` · ${me.streak} in a row 🔥` : ''}
                 </p>
               )}
             </div>
@@ -334,6 +340,7 @@ function Playing({ pin, token }: { pin: string; token: string }) {
 
       {finished && (
         <div className="quiz-final">
+          {view.phase === 'finished' && me.rank <= 3 && <Confetti />}
           <p className="quiz-big">{view.phase === 'finished' ? `You finished #${me.rank}` : 'All done!'}</p>
           <p className="lede">
             {me.score.toLocaleString()} points · {me.correctCount} of {view.scoredTotal} correct
@@ -375,6 +382,39 @@ function Playing({ pin, token }: { pin: string; token: string }) {
           </p>
         </div>
       )}
+      {!self && view.options?.reactions && !(open && q && q.type !== 'slide') && <ReactionBar pin={pin} token={token} />}
     </section>
+  );
+}
+
+/** Emoji reactions for the shared screen (one every 1.5 s; the server enforces it too). */
+function ReactionBar({ pin, token }: { pin: string; token: string }) {
+  const [cool, setCool] = useState(false);
+  const [sent, setSent] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+  const react = (i: number) => {
+    setCool(true);
+    setSent(REACTIONS[i]!);
+    void sendReaction(pin, token, i).catch(() => undefined);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      setCool(false);
+      setSent(null);
+    }, 1600);
+  };
+  return (
+    <div className="quiz-react" role="group" aria-label="Send a reaction to the shared screen">
+      {REACTIONS.map((emoji, i) => (
+        <button key={emoji} type="button" className="quiz-react__btn" disabled={cool} onClick={() => react(i)} aria-label={`React ${emoji}`}>
+          {emoji}
+        </button>
+      ))}
+      <span className="quiz-react__sent" aria-live="polite">
+        {sent ? `${sent} sent` : ''}
+      </span>
+    </div>
   );
 }

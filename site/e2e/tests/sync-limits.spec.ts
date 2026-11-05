@@ -66,10 +66,39 @@ async function paceForRateLimit(sync: SyncRequest[], times: number[]): Promise<v
   if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
 }
 
-async function scriptedSession(page: Page, request: APIRequestContext): Promise<{ writes: number; requests: number }> {
+/** Milliseconds until the next quota-day reset: midnight in America/Los_Angeles. */
+function msToPacificMidnight(now = Date.now()): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    hourCycle: 'h23',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(new Date(now));
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return DAY_MS - ((get('hour') * 60 + get('minute')) * 60 + get('second')) * 1000;
+}
+
+/**
+ * The write meter is per quota day. A 40-minute session that crosses midnight Pacific would be
+ * measured across two days (the meter restarts), so start it just after the next reset instead:
+ * the server clock and the page clock both move to that point before anything is measured.
+ */
+async function clearOfDayBoundary(request: APIRequestContext): Promise<number> {
+  const until = msToPacificMidnight();
+  const shift = until < SESSION_MS + 5 * 60_000 ? until + 60_000 : 0;
+  await setServerClock(request, shift);
+  return shift;
+}
+
+async function scriptedSession(
+  page: Page,
+  request: APIRequestContext,
+  shift: number,
+): Promise<{ writes: number; requests: number }> {
   const sync = trackSync(page.context());
   const times: number[] = [];
-  await page.clock.install();
+  await page.clock.install({ time: Date.now() + shift });
   await watchPage(page);
   await signIn(page.context(), userA);
   await openQuizModule(page, hub);
@@ -87,7 +116,7 @@ async function scriptedSession(page: Page, request: APIRequestContext): Promise<
     for (let step = 0; step < ANSWER_GAP_MS; step += CLOCK_STEP_MS) {
       await advanceClock(page, CLOCK_STEP_MS, CLOCK_STEP_MS);
       advanced += CLOCK_STEP_MS;
-      await setServerClock(request, advanced);
+      await setServerClock(request, shift + advanced);
     }
   }
   await expect.poll(async () => (await syncStats(page)).outbox.inflight).toBe(false);
@@ -102,16 +131,18 @@ test.describe('S12 a scripted 40-minute session stays within the write budget', 
   test.setTimeout(240_000);
 
   test('tier 1 (under 50% of the budget): at most 26 writes', async ({ page, request }) => {
-    const { writes, requests } = await scriptedSession(page, request);
+    const shift = await clearOfDayBoundary(request);
+    const { writes, requests } = await scriptedSession(page, request, shift);
     expect(writes, `writes in 40 minutes (requests: ${requests})`).toBeLessThanOrEqual(26);
     expect(writes, 'the session did sync').toBeGreaterThan(0);
     expect(requests).toBe(writes); // one hub: one write per request
   });
 
   test('tier 2 (50-80% of the budget): at most 14 writes', async ({ page, request }) => {
+    const shift = await clearOfDayBoundary(request); // before setQuota: the meter is per day
     const reply = await setQuota(request, { writes: Math.ceil(WRITE_BUDGET * 0.55) });
     expect(reply.policy.tier).toBe(2);
-    const { writes, requests } = await scriptedSession(page, request);
+    const { writes, requests } = await scriptedSession(page, request, shift);
     expect(writes, `writes in 40 minutes (requests: ${requests})`).toBeLessThanOrEqual(14);
     expect(writes, 'the session did sync').toBeGreaterThan(0);
     expect((await syncStats(page)).outbox.tier).toBe(2);
