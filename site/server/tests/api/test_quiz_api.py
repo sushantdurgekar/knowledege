@@ -924,3 +924,64 @@ def test_new_options_survive_a_restart() -> None:
     assert again.options_state() == room.options_state()
     assert [q.options for q in again.quiz.questions] == [q.options for q in room.quiz.questions]
     assert 11 < again.auto_at() - 900.0 <= 12.001  # saved times are rounded to 1 ms (persist._to_wall)
+
+
+def test_open_quizzes_are_public_and_use_the_first_three_topics(admin: TestClient) -> None:
+    import json as _json
+
+    from app.quiz import bank as bank_module
+
+    def module(n: int, questions: int) -> dict[str, Any]:
+        return {
+            "id": f"m{n}",
+            "title": f"Topic {n}",
+            "keys": [f"key {n}.{k}" for k in range(8)],
+            "quiz": [
+                {"q": f"Q{n}.{i}?", "o": ["a", "b", "c"], "a": i % 3, "e": "why"} for i in range(questions)
+            ],
+        }
+
+    broken = {"q": "Broken?", "o": ["only one"], "a": 0}
+    bank = {
+        "hubs": [
+            {
+                "id": "h1",
+                "slug": "hub-one",
+                "title": "Hub One",
+                "code": "H-1",
+                # Topic 2 has no questions: the quiz takes the first three that do.
+                "modules": [
+                    module(1, 12),
+                    {**module(2, 0)},
+                    module(3, 2),
+                    {**module(4, 1), "quiz": [broken]},
+                    module(5, 3),
+                    module(6, 4),
+                ],
+            },
+            {"id": "h2", "title": "No questions", "modules": [module(1, 0)]},
+        ]
+    }
+    hubs_dir = admin.app.state.studyhubs.settings.hubs_dir  # type: ignore[attr-defined]
+    (hubs_dir / bank_module.BANK_FILE).write_text(_json.dumps(bank))
+    admin.cookies.clear()  # anyone: no sign-in needed
+
+    listed = admin.get("/api/quiz/open")
+    assert listed.status_code == 200
+    assert listed.headers["cache-control"] == "public, max-age=300"
+    assert listed.json()["quizzes"] == [
+        {
+            "id": "h1",
+            "slug": "hub-one",
+            "title": "Hub One",
+            "code": "H-1",
+            "topics": ["Topic 1", "Topic 3", "Topic 5"],
+            "questions": 10 + 2 + 3,  # at most 10 from one topic
+        }
+    ]
+    quiz = admin.get("/api/quiz/open/h1").json()
+    assert [t["title"] for t in quiz["topics"]] == ["Topic 1", "Topic 3", "Topic 5"]
+    assert len(quiz["topics"][0]["keys"]) == 6
+    assert quiz["topics"][0]["quiz"][1] == {"q": "Q1.1?", "o": ["a", "b", "c"], "a": 1, "e": "why"}
+    assert admin.get("/api/quiz/open/h2").status_code == 404
+    assert admin.get("/api/quiz/open/nope").status_code == 404

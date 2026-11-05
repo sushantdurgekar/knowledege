@@ -171,6 +171,13 @@ export function JoinPage() {
           {busy ? 'Joining…' : 'Join'}
         </button>
       </form>
+      <div className="notice open-cta">
+        <h2>No PIN? Play an open quiz</h2>
+        <p>Every study hub’s first three topics, ready any time: no host, no account. Your scores stay in this browser.</p>
+        <Link className="btn btn--primary" to="/quiz/open">
+          Browse open quizzes
+        </Link>
+      </div>
       <WatchForm />
       {cards > 0 && (
         <div className="notice quiz-review-cta">

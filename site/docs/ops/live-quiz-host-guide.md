@@ -4,6 +4,23 @@ Everything an admin needs to build quizzes, run live sessions and self-paced cha
 on a big screen and follow up afterwards. Players need no account: they join at `/quiz` with a
 6-digit PIN.
 
+## 0. Open quizzes: no room at all (`/quiz/open`)
+
+Every study hub that has practice questions gets an **open quiz**: its first three topics (up to
+10 questions each), playable by anyone at any time. There is no PIN, no host and no account.
+
+- **Players** pick a hub on `/quiz/open` (or **Browse open quizzes** on `/quiz`) and press **Play**:
+  30 seconds per question, points for speed (500–1000), a streak bonus, the right answer and its
+  explanation after each question, then the score and **Practise the ones I missed**.
+- **Where results go:** the score goes into the player's quiz history and every question into
+  their review deck (`/quiz/review`, `/quiz/progress`). Not signed in: **this browser only**
+  (localStorage). Signed in: the same history also syncs to their account.
+- **Nothing is stored on the server** for an anonymous game, so open quizzes cost no Firestore
+  writes; the questions come from the hubs' own question bank, refreshed on every deploy.
+- **Host it for a group:** as an admin, open any open quiz and use **Host live** or
+  **Self-paced challenge** (optionally with the key points as slides). That creates a normal room
+  with a PIN, presenter screen and leaderboard; the open quiz stays playable for everyone else.
+
 ## 1. Build a quiz (Quiz studio, `/quiz/host`)
 
 Start from **New quiz** (quick or advanced), an example, a file (`.json` or `.txt`), or **From a

@@ -43,6 +43,7 @@ const LABELS: Record<string, string> = {
   edit: 'Edit',
   review: 'Review deck',
   progress: 'My progress',
+  open: 'Open quizzes',
   board: 'Leaderboard',
   play: 'Play',
   admin: 'Admin',
@@ -63,6 +64,7 @@ const LABELS: Record<string, string> = {
 export function parentOf(pathname: string): string {
   const parts = pathname.split('/').filter(Boolean);
   if (parts[0] === 'quiz' && parts[1] === 'host' && parts.length > 2) return '/quiz/host';
+  if (parts[0] === 'quiz' && parts[1] === 'open' && parts.length > 2) return '/quiz/open';
   if (parts[0] === 'quiz' && parts.length > 1) return '/quiz';
   return parts.length > 1 ? `/${parts.slice(0, -1).join('/')}` : '/';
 }
