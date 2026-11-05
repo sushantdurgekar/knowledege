@@ -746,3 +746,7 @@
 .open-host h2 { margin: 0 0 4px; font-size: 1.05rem; }
 .btn--big { min-height: 52px; padding-inline: 34px; font-size: 1.15rem; }
 .open-cta { margin-top: 18px; }
+.open-levels { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.open-levels__chip { padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--fg); font-weight: 700; font-size: 0.9rem; text-decoration: none; }
+.open-levels__chip:hover { border-color: var(--accent); }
+.open-levels__chip.is-on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); }

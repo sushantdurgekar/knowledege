@@ -30,8 +30,8 @@ export function OpenList() {
       <p className="eyebrow">Live quiz</p>
       <h1 id="page-title">Open quizzes</h1>
       <p className="lede">
-        The first three topics of every study hub, ready to play any time. No PIN and no host: just press Play. Your scores and
-        review cards stay in this browser, and sync to your account when you are signed in.
+        The first three topics of every study hub, ready to play any time, with the next topics as further levels. No PIN and no
+        host: just press Play. Your scores and review cards stay in this browser, and sync to your account when you are signed in.
       </p>
       {error && <FormMessage tone="error">{error}</FormMessage>}
       {!quizzes && !error && <BusyLine>Loading the quizzes…</BusyLine>}
@@ -58,6 +58,11 @@ export function OpenList() {
                     {q.questions} questions · about {Math.max(1, Math.round((q.questions * OPEN_TIME) / 60 / 2))}–
                     {Math.max(2, Math.round((q.questions * OPEN_TIME) / 60))} min
                   </p>
+                  {(q.levels ?? 1) > 1 && (
+                    <p className="muted small">
+                      Then {q.levels! - 1} more level{q.levels! > 2 ? 's' : ''} with the hub’s next topics
+                    </p>
+                  )}
                   {best && (
                     <p className="open-card__best">
                       Your best: <strong>{best.score.toLocaleString()}</strong> ({best.correct}/{best.total}) · played {plays}×

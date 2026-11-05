@@ -7,7 +7,10 @@ on a big screen and follow up afterwards. Players need no account: they join at 
 ## 0. Open quizzes: no room at all (`/quiz/open`)
 
 Every study hub that has practice questions gets an **open quiz**: its first three topics (up to
-10 questions each), playable by anyone at any time. There is no PIN, no host and no account.
+10 questions each), playable by anyone at any time. There is no PIN, no host and no account. The
+hub's later topics follow as **levels** (Topics 4–6, 7–9, …), picked with the chips on the quiz
+page. Each catalog card with an open quiz has a **Quiz** button, and answers are shuffled every
+game, so a replay tests the answer rather than where it sat on screen.
 
 - **Players** pick a hub on `/quiz/open` (or **Browse open quizzes** on `/quiz`) and press **Play**:
   30 seconds per question, points for speed (500–1000), a streak bonus, the right answer and its

@@ -1,4 +1,5 @@
-// Open quizzes: each hub's first three topics as a quiz anyone can play, with no room and no host.
+// Open quizzes: each hub's topics as quizzes anyone can play, with no room and no host. Level 1 is
+// a hub's first three topics; level 2 the next three, and so on.
 // The browser runs the game; the result goes into the player's quiz history and review deck
 // (lib/quiz-history.ts), which stays in this browser and also syncs to the account when signed in.
 import { api } from './api';
@@ -13,6 +14,8 @@ export interface OpenSummary {
   code?: string | null;
   topics: string[];
   questions: number;
+  /** How many levels of three topics the hub has (level 1 is described above). */
+  levels?: number;
 }
 
 export interface OpenQuestion {
@@ -35,10 +38,15 @@ export interface OpenQuiz {
   title: string;
   code?: string | null;
   topics: OpenTopic[];
+  level?: number;
+  levels?: number;
+  /** The first topic's number in the hub (1, 4, 7…). */
+  firstTopic?: number;
 }
 
 export const listOpen = () => api<{ quizzes: OpenSummary[] }>('/api/quiz/open');
-export const getOpen = (id: string) => api<OpenQuiz>(`/api/quiz/open/${encodeURIComponent(id)}`);
+export const getOpen = (id: string, level = 1) =>
+  api<OpenQuiz>(`/api/quiz/open/${encodeURIComponent(id)}${level > 1 ? `?level=${level}` : ''}`);
 
 /** Seconds per question (the hubs' practice questions carry no time of their own). */
 export const OPEN_TIME = 30;
@@ -46,8 +54,26 @@ export const OPEN_POINTS = 1000;
 const STREAK_STEP = 100;
 const STREAK_MAX = 500;
 
-/** The quiz's display name: "AI-103 · first 3 topics". */
-export const openTitle = (q: Pick<OpenSummary, 'title' | 'code'>) => `${q.code || q.title} · first 3 topics`;
+/** What names a quiz level: a summary (level 1) or a fetched level. */
+interface Named {
+  title: string;
+  code?: string | null;
+  level?: number;
+  firstTopic?: number;
+  topics?: readonly unknown[];
+}
+
+/** The quiz's display name: "AI-103 · first 3 topics", then "AI-103 · topics 4–6" for level 2. */
+export function openTitle(q: Named): string {
+  const name = q.code || q.title;
+  if (!q.level || q.level <= 1) return `${name} · first 3 topics`;
+  const first = q.firstTopic ?? (q.level - 1) * 3 + 1;
+  const last = first + Math.max(1, q.topics?.length ?? 3) - 1;
+  return first === last ? `${name} · topic ${first}` : `${name} · topics ${first}–${last}`;
+}
+
+/** A level on its own: "Topics 1–3". */
+export const levelLabel = (level: number) => `Topics ${(level - 1) * 3 + 1}–${level * 3}`;
 
 /** One question as played, with its topic. */
 export interface PlayItem extends OpenQuestion {
@@ -56,6 +82,21 @@ export interface PlayItem extends OpenQuestion {
 
 export const playItems = (quiz: OpenQuiz): PlayItem[] =>
   quiz.topics.flatMap((t) => t.quiz.map((q) => ({ ...q, topic: t.title })));
+
+/**
+ * The same questions with each one's answers in a new order (Fisher-Yates, O(k) per question), so
+ * a replay tests the answer and not where it was on screen. `a` follows the right answer.
+ */
+export function shuffleAnswers(items: PlayItem[], random: () => number = Math.random): PlayItem[] {
+  return items.map((item) => {
+    const order = item.o.map((_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [order[i], order[j]] = [order[j]!, order[i]!];
+    }
+    return { ...item, o: order.map((i) => item.o[i]!), a: order.indexOf(item.a) };
+  });
+}
 
 /** Points for one answer, as in live rooms: 50-100% for speed, plus the streak bonus. */
 export function scoreAnswer(right: boolean, elapsedMs: number, streak: number): { points: number; bonus: number } {
@@ -97,8 +138,8 @@ export function recordOpenGame(state: QuizState, quiz: OpenQuiz, items: PlayItem
   return recordQuiz(state, entry, cards, missed, now);
 }
 
-/** The best and the last game of this open quiz in the player's history. */
-export function openRecord(state: QuizState, quiz: Pick<OpenSummary, 'title' | 'code'>): { best: HistoryEntry | null; last: HistoryEntry | null; plays: number } {
+/** The best and the last game of this open quiz (this level) in the player's history. */
+export function openRecord(state: QuizState, quiz: Named): { best: HistoryEntry | null; last: HistoryEntry | null; plays: number } {
   const title = openTitle(quiz);
   const games = state.history.filter((h) => h.title === title);
   const best = games.reduce<HistoryEntry | null>((b, h) => (!b || h.score > b.score ? h : b), null);

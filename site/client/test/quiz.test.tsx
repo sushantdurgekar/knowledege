@@ -1,14 +1,14 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parentOf } from '../src/components/SiteNav';
 import { blankDoc, blankItem, fromServer, retype, toServer, toText, type QuizDoc } from '../src/lib/quiz-doc';
 import { Sortable } from '../src/pages/quiz/Sortable';
 import { Answering, WordCloud } from '../src/pages/quiz/Answering';
 import { toCsv, type QuestionView } from '../src/lib/quiz';
-import { openAsServerQuiz, openRecord, openTitle, playItems, recordOpenGame, scoreAnswer } from '../src/lib/open-quiz';
-import { bodyText, ME_SIGNED_IN, mockServer, setHint, USER } from './api-mock';
+import { levelLabel, openAsServerQuiz, openRecord, openTitle, playItems, recordOpenGame, scoreAnswer, shuffleAnswers, type PlayItem } from '../src/lib/open-quiz';
+import { bodyText, ME_SIGNED_IN, mockServer, setHint, syncHandler, USER } from './api-mock';
 import { renderApp } from './render';
 import type { DeckCard, HistoryEntry } from '../src/lib/quiz-history';
 import { progressOf, streakOf } from '../src/lib/progress-stats';
@@ -89,7 +89,7 @@ describe('Sortable', () => {
 
 import { checkLocally, type ReviewItem } from '../src/lib/quiz';
 import { fromBank } from '../src/lib/quiz-doc';
-import { cardId, dueCards, emptyState, loadState, localDay, markStudied, merge, recordQuiz, schedule } from '../src/lib/quiz-history';
+import { cardId, commit, dueCards, emptyState, forSync, loadState, SYNC_BUDGET, localDay, markStudied, merge, recordQuiz, schedule, type QuizState } from '../src/lib/quiz-history';
 
 describe('review deck (SM-2) and history', () => {
   const cards = [
@@ -494,5 +494,68 @@ describe('open quizzes (no room)', () => {
     await user.click(screen.getByRole('button', { name: 'Practise the 1 I missed' }));
     await user.click(screen.getByRole('button', { name: /Yes/ }));
     expect(screen.getByText('Got it now!')).toBeInTheDocument();
+  });
+});
+
+describe('sync size, shuffled answers, levels and the catalog Quiz button', () => {
+  const card = (n: number, interval: number): DeckCard => ({
+    id: `c${n}`, quiz: 'Q', type: 'single', front: `${'question text '.repeat(40)}${n}`, back: 'answer',
+    options: ['a', 'b'], explain: 'why '.repeat(60), ef: 2.5, interval, reps: 1, due: 0, lapses: 0, updated: n,
+  });
+  const big = (count: number): QuizState => ({
+    deck: Object.fromEntries(Array.from({ length: count }, (_, n) => [`c${n}`, card(n, n % 30)])),
+    history: [],
+  });
+
+  it('keeps the synced copy under the budget, dropping the most mature cards first', () => {
+    const state = big(300);
+    expect(JSON.stringify(state).length).toBeLessThan(SYNC_BUDGET);
+    expect(forSync(state)).toBe(state); // under the budget: sent as it is
+    const fitted = forSync(state, 100_000);
+    expect(JSON.stringify(fitted).length).toBeLessThanOrEqual(100_000);
+    const kept = Object.values(fitted.deck);
+    const dropped = Object.values(state.deck).filter((c) => !fitted.deck[c.id]);
+    expect(kept.length).toBeGreaterThan(0);
+    expect(Math.max(...kept.map((c) => c.interval))).toBeLessThanOrEqual(Math.min(...dropped.map((c) => c.interval)));
+    expect(Object.keys(state.deck)).toHaveLength(300); // this browser keeps every card
+  });
+
+  it('retries a sync the server refused as too large with a smaller copy', async () => {
+    let requests = 0;
+    const server = mockServer({ 'POST /api/sync': syncHandler(() => (requests++ === 0 ? 'rejected' : 'accepted')) });
+    vi.useFakeTimers();
+    try {
+      commit(big(450), true);
+      await vi.advanceTimersByTimeAsync(2100);
+    } finally {
+      vi.useRealTimers();
+    }
+    await waitFor(() => expect(server.to('POST /api/sync')).toHaveLength(2));
+    const [first, second] = await Promise.all(server.to('POST /api/sync').map(bodyText));
+    expect(second!.length).toBeLessThan(first!.length / 1.5);
+  });
+
+  it('shuffles each question’s answers and keeps the right one marked', () => {
+    const items: PlayItem[] = [{ q: 'Q?', o: ['w', 'x', 'right', 'z'], a: 2, topic: 'T' }];
+    const [shuffled] = shuffleAnswers(items, () => 0); // every swap with the first slot
+    expect(shuffled!.o).toHaveLength(4);
+    expect(shuffled!.o[shuffled!.a]).toBe('right');
+    expect(new Set(shuffled!.o)).toEqual(new Set(['w', 'x', 'right', 'z']));
+    expect(items[0]!.o).toEqual(['w', 'x', 'right', 'z']); // the input is not changed
+  });
+
+  it('names the levels after their topics', () => {
+    expect(openTitle({ title: 'Hub', code: 'AI-103' })).toBe('AI-103 · first 3 topics');
+    expect(openTitle({ title: 'Hub', code: 'AI-103', level: 2, firstTopic: 4, topics: [1, 2, 3] })).toBe('AI-103 · topics 4–6');
+    expect(openTitle({ title: 'Hub', code: null, level: 3, firstTopic: 7, topics: [1] })).toBe('Hub · topic 7');
+    expect(levelLabel(2)).toBe('Topics 4–6');
+  });
+
+  it('shows a Quiz button on catalog cards whose hub has an open quiz', async () => {
+    mockServer({ 'GET /api/quiz/open': { quizzes: [{ id: 'dsa-l1' }] } });
+    renderApp('/');
+    const quiz = await screen.findByRole('link', { name: /^Quiz on DSA L1/ });
+    expect(quiz).toHaveAttribute('href', '/quiz/open/dsa-l1');
+    expect(screen.queryByRole('link', { name: /^Quiz on DSA L2/ })).not.toBeInTheDocument();
   });
 });

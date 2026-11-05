@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { BusyLine, FormMessage } from '../../components/forms';
 import { useMe } from '../../context/me';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import {
   getOpen,
+  levelLabel,
   OPEN_TIME,
   openAsServerQuiz,
   openRecord,
@@ -12,6 +13,7 @@ import {
   playItems,
   recordOpenGame,
   scoreAnswer,
+  shuffleAnswers,
   type OpenQuiz,
   type PlayItem,
   type PlayResult,
@@ -25,18 +27,25 @@ import { HostOptions } from './HostOptions';
 
 type Stage = 'intro' | 'question' | 'feedback' | 'done' | 'retry';
 
-/** `/quiz/open/:id`: play a hub's first three topics solo, in the browser. No room, no host. */
+/**
+ * `/quiz/open/:id[?level=N]`: play a hub's topics solo, in the browser (level 1: the first three
+ * topics). No room, no host.
+ */
 export function OpenPlay() {
   const { id = '' } = useParams();
+  const [params] = useSearchParams();
+  const level = Math.max(1, Math.floor(Number(params.get('level'))) || 1);
   const [quiz, setQuiz] = useState<OpenQuiz | null>(null);
   const [error, setError] = useState<string | null>(null);
   useDocumentTitle(quiz ? openTitle(quiz) : 'Open quiz');
 
   useEffect(() => {
-    getOpen(id)
+    setQuiz(null);
+    setError(null);
+    getOpen(id, level)
       .then(setQuiz)
       .catch((e) => setError(apiMessage(e)));
-  }, [id]);
+  }, [id, level]);
 
   if (error) {
     return (
@@ -50,14 +59,15 @@ export function OpenPlay() {
     );
   }
   if (!quiz) return <BusyLine>Loading the quiz…</BusyLine>;
-  return <Game key={quiz.id} quiz={quiz} />;
+  return <Game key={`${quiz.id}:${quiz.level ?? 1}`} quiz={quiz} />;
 }
 
 function Game({ quiz }: { quiz: OpenQuiz }) {
   const { me } = useMe();
   const signedIn = me.status === 'signed-in';
   const admin = signedIn && me.user.admin;
-  const items = useRef<PlayItem[]>(playItems(quiz)).current;
+  // Each game gets its own answer order (see restart), so replays test knowledge, not positions.
+  const [items, setItems] = useState<PlayItem[]>(() => playItems(quiz));
   const [stage, setStage] = useState<Stage>('intro');
   const [pos, setPos] = useState(0);
   const [results, setResults] = useState<PlayResult[]>([]);
@@ -66,7 +76,7 @@ function Game({ quiz }: { quiz: OpenQuiz }) {
   const [now, setNow] = useState(() => Date.now());
   const [sound, setSound] = useState(soundPreference);
   const [saved, setSaved] = useState<{ due: number; best: boolean } | null>(null);
-  const [record] = useState(() => openRecord(loadState(), quiz));
+  const [record, setRecord] = useState(() => openRecord(loadState(), quiz));
 
   const item = items[pos];
   const left = Math.max(0, Math.ceil(OPEN_TIME - (now - startedAt) / 1000));
@@ -124,13 +134,16 @@ function Game({ quiz }: { quiz: OpenQuiz }) {
       const base = signedIn ? await pull() : loadState();
       const state = recordOpenGame(base, quiz, items, results);
       commit(state, signedIn);
+      // Compare with the best before this game, then remember this one for the next replay.
       setSaved({ due: dueCards(state).length, best: !record.best || score > record.best.score });
+      setRecord(openRecord(state, quiz));
     } catch {
       setSaved(null);
     }
   };
 
   const restart = () => {
+    setItems(shuffleAnswers(playItems(quiz)));
     setResults([]);
     setStreak(0);
     setSaved(null);
@@ -164,9 +177,24 @@ function Game({ quiz }: { quiz: OpenQuiz }) {
         {header}
         <p className="eyebrow">Open quiz · no PIN needed</p>
         <h1 id="page-title">{quiz.title}</h1>
+        {(quiz.levels ?? 1) > 1 && (
+          <nav className="open-levels" aria-label="Topic levels">
+            {Array.from({ length: quiz.levels ?? 1 }, (_, i) => i + 1).map((n) => (
+              <Link
+                key={n}
+                className={`open-levels__chip${n === (quiz.level ?? 1) ? ' is-on' : ''}`}
+                aria-current={n === (quiz.level ?? 1) ? 'page' : undefined}
+                to={n === 1 ? `/quiz/open/${encodeURIComponent(quiz.id)}` : `/quiz/open/${encodeURIComponent(quiz.id)}?level=${n}`}
+              >
+                {levelLabel(n)}
+              </Link>
+            ))}
+          </nav>
+        )}
         <p className="lede">
-          {items.length} questions from the first three topics, {OPEN_TIME} seconds each. Answer fast for more points; right
-          answers in a row add a streak bonus.
+          {items.length} questions from {(quiz.level ?? 1) > 1 ? openTitle(quiz).split(' · ')[1] : 'the first three topics'},{' '}
+          {OPEN_TIME} seconds each. Answer fast for more points; right answers in a row add a streak bonus. Answers are shuffled
+          every game.
         </p>
         <ol className="open-play__topics">
           {quiz.topics.map((t) => (

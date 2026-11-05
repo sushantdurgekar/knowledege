@@ -28,6 +28,7 @@ import {
   signIn,
   storedUpd,
   userA,
+  type TestUser,
 } from './support/sync';
 
 const hub = V2_HUB;
@@ -41,8 +42,15 @@ test.afterEach(async ({ request }) => {
 });
 
 /** A learner on the hub, signed in, with one answer synced; returns the server's main stamp. */
+/**
+ * The maintenance tests sync as their own learner. m2-account deletes userA, and a deletion still
+ * finishing on the shared server when the next test resets it can leave userA's tombstone behind
+ * (sync then answers 401 "This account was deleted"); no other spec ever deletes this account.
+ */
+const learner: TestUser = { uid: 'e2e-maintenance-learner', email: 'maintenance-learner@example.test' };
+
 async function learnerSynced(page: Page): Promise<number> {
-  await signIn(page.context(), userA);
+  await signIn(page.context(), learner);
   await openQuizModule(page, hub);
   await expectSignedInHub(page);
   await answerNext(page, hub);
@@ -124,14 +132,14 @@ test('read_only maintenance: the hub shows "Sync paused" and saves locally; off 
   expect(await chromeText(page)).toContain('Site maintenance: sync is paused');
   expect(await chromeText(page)).toContain('Upgrading the server');
   expect((await localStamps(page, hub)).main, 'the browser keeps the change').toBe(upd);
-  expect(await storedUpd(request, userA.uid, hub, 'main'), 'nothing written in read_only').toBe(first);
+  expect(await storedUpd(request, learner.uid, hub, 'main'), 'nothing written in read_only').toBe(first);
 
   await modeForm.getByRole('radio', { name: /^Off/ }).check();
   await modeForm.getByRole('button', { name: 'Set mode' }).click();
   await expect(admin.getByText('Maintenance is now Off.')).toBeVisible();
 
   await flushNow(page);
-  expect(await storedUpd(request, userA.uid, hub, 'main'), 'the outbox drained').toBe(upd);
+  expect(await storedUpd(request, learner.uid, hub, 'main'), 'the outbox drained').toBe(upd);
   await expect(pill(page)).toHaveText(PILL.cloud);
   await expect.poll(() => notices(page)).not.toContain('maintenance');
   await adminContext.close();
@@ -154,7 +162,7 @@ test('full maintenance: an open hub pauses, a reload stays local, nothing is los
   await flushNow(page);
   await expect(pill(page)).toHaveText(PILL.error);
   await expect.poll(() => notices(page)).toContain('maintenance');
-  expect(await storedUpd(request, userA.uid, hub, 'main'), 'nothing written in full').toBe(first);
+  expect(await storedUpd(request, learner.uid, hub, 'main'), 'nothing written in full').toBe(first);
 
   // A reload during full: the hub runs from this browser alone, with everything kept.
   await page.reload();
@@ -169,7 +177,7 @@ test('full maintenance: an open hub pauses, a reload stays local, nothing is los
   await page.reload();
   await expectSignedInHub(page);
   await flushNow(page);
-  await expect.poll(() => storedUpd(request, userA.uid, hub, 'main'), { message: 'every local change reached the account' }).toBe(offline);
+  await expect.poll(() => storedUpd(request, learner.uid, hub, 'main'), { message: 'every local change reached the account' }).toBe(offline);
   await expect(pill(page)).toHaveText(PILL.cloud);
   await adminContext.close();
 });
