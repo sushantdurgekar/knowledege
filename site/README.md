@@ -13,6 +13,8 @@ The hub files are **never edited**. The server adds one `<script>` (the *bridge*
 | [docs/architecture-spec.md](docs/architecture-spec.md) | Full engineering spec (M0–M4) |
 | [docs/hub-runtime-contract.md](docs/hub-runtime-contract.md) | What each hub expects at runtime, with line references |
 | [docs/bridge-prototype-findings.md](docs/bridge-prototype-findings.md), [docs/prototype/](docs/prototype/) | Prototype bridge and mock server, tested on real hubs |
+| [docs/ops/](docs/ops/README.md) | **Operations runbooks:** Firebase, Render, secrets and rotation, capacity (what the memory and Firestore meters mean), migrating to AWS or Azure, the live-quiz host guide |
+| [docs/research/kahoot-feature-research.md](docs/research/kahoot-feature-research.md) | Product research behind the live-quiz features |
 
 ## How it fits together
 
@@ -440,7 +442,9 @@ Players join with a 6-digit PIN and a nickname (no account needed). Admins build
 - **Pictures:** any item can carry one picture (JPEG, PNG, WebP or GIF). The browser scales it to at most 1280 px before upload; the server checks the type, keeps it under 400 KB and serves it at `/api/quiz/images/<id>` with a one-year cache.
 - **Draft with AI** (when `ANTHROPIC_API_KEY` is set): pick hub modules (their key points) or paste notes, choose how many and which types, and Claude drafts questions with explanations (and hints for advanced quizzes). Drafts are added after the current item for you to read and edit; nothing is hosted until you do. Every draft goes through the same checks as a hand-made question, and ones that fail are left out.
 - **New quiz:** a *quick* quiz (questions, polls, slides; fast to make) or an *advanced* quiz (adds confidence ratings, hints, teach-back and insights). You can also start from either example, import a file, or build from a **study hub**: the collector writes every hub's practice questions and key points to `quiz-bank.json` at build time. Pick modules and get the key points as slides plus the questions.
-- **Item types:** quiz (single answer), multiple choice, true/false, typed answer (text or `/regex/i`), match (drag pairs), put in order (drag), poll, slide, and *explain it* (teach-back: free text, not scored; the host sees every answer and players see a model answer).
+- **Item types:** quiz (single answer), multiple choice, true/false, typed answer (text or `/regex/i`), match (drag pairs), put in order (drag), **slider** (a number on a scale, right within ± margin), poll, **word cloud** (a word or two, grows live on the shared screen; not scored), slide, and *explain it* (teach-back: free text, not scored; the host sees every answer and players see a model answer).
+- **Game options** (in the dialog that opens a room): auto-play (results for 5–20 s, then the next item opens by itself), streak bonus (+100 per right answer in a row, up to +500), shuffled answer order, friendly names only (players pick a generated "adjective + animal" name), and emoji reactions that float up the presenter screen. Any join page also offers **Suggest a name**.
+- **Reports:** besides the results CSV, the final screen downloads a **full report** (one row per player per question: answer, result, points, streak bonus, time, confidence, hints) and lists players who **may need help** (under 50% right). The full host guide is [docs/ops/live-quiz-host-guide.md](docs/ops/live-quiz-host-guide.md).
 - **Advanced quizzes**, based on the learning-science playbook in `.claude/skills/pro-instructor/references/learning-science.md`:
   - **Confidence ratings:** players say "I'm sure" or "Not sure" before answering. They get a calibration grid at the end; *sure but wrong* is the quadrant to fix first.
   - **Hints:** up to 3 per question, each costing 25% of the points.
@@ -457,7 +461,7 @@ Players join with a 6-digit PIN and a nickname (no account needed). Admins build
   - slides, presented large
   - the final podium
 
-  It plays short synthesised **sounds** (a pop per join, ticks in the last five seconds, a chord on the reveal, a fanfare at the end) after the first click on the page, as browsers require, and the timer ring drains and pulses in the last seconds. **Sound on/off** is remembered in that browser. The presenter never receives an answer before the host reveals it; the server leaves solutions out. Its key cannot control the room.
+  It plays short synthesised **sounds** (a pop per join, ticks in the last five seconds, a chord on the reveal, a fanfare at the end) after the first click on the page, as browsers require, and the timer ring drains and pulses in the last seconds. In the lobby an optional soft music loop plays, and the podium gets confetti (none with reduced motion). **Sound on/off** and **Music on/off** are remembered in that browser. The presenter never receives an answer before the host reveals it; the server leaves solutions out. Its key cannot control the room.
 - **Public leaderboard:** `/quiz/board/<pin>`, or **Just watching?** on `/quiz`. Anyone can follow the standings and where the quiz is, playing or not. It updates after each reveal.
 - **Self-paced mode:** each player has their own pace and timer, with optional **flashcards first**. The host sees a progress dashboard and insights.
 - **After a quiz:**
